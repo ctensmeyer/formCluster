@@ -7,9 +7,11 @@ def extract_characters(node):
 	char_list = []
 	for char in node.iter(tag='*'):
 		if char.tag.endswith('charParams'):
-			attribs = {key: int(val) for (key, val) in char.attrib.iteritems()}
+			pos = (int(char.attrib['l']), int(char.attrib['t']))
+			pos2 = (int(char.attrib['r']), int(char.attrib['b']))
+			#attribs = {key: int(val) for (key, val) in char.attrib.iteritems()}
 			val = char.text
-			char_ele = Char(val, attribs)
+			char_ele = Char(val, pos, pos2)
 			char_list.append(char_ele)
 	return char_list
 	

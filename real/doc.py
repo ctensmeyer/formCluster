@@ -4,11 +4,12 @@ import Image
 import json
 import profiles
 import string
+import utils
 from components import TextLine
 
 LAZY = True
 ALLOW_PARTIAL_MATCHES = False
-DEBUG = True
+DEBUG = False
 
 class Document:
 	
@@ -35,6 +36,8 @@ class Document:
 			cpy.text_lines.append(line.copy())
 		cpy.size = self.size
 
+		cpy.char_mass = self.char_mass
+
 		return cpy
 
 	def display(self):
@@ -57,9 +60,9 @@ class Document:
 
 		# heavy operations
 		self.text_lines = ocr.clean_lines(ocr.extract_text_lines(self.ocr_path))
-		self.set_total_char_mass()
+		self._set_total_char_mass()
 
-		#profs = profiles.extract_profiles(prof_path)
+		#profs = profiles.extract_profiles(self.prof_path)
 		#self.horz_prof = profs['HorizontalLineProfile']
 		#self.vert_prof = profs['VerticalLineProfile']
 		#self.horz_prof = profs['HorizontalLineProfile']
@@ -67,11 +70,11 @@ class Document:
 		#self.size = (len(self.vert_prof), len(self.horz_prof))
 
 		# TODO: finish this
-		#self.size = profiles.get_size(prof_path)
+		self.size = profiles.get_size(self.prof_path)
 
 		# inefficient for now
-		profs = profiles.extract_profiles(prof_path)
-		self.size = (len(profs['VerticalLineProfile']), len(profs['HorizontalLineProfile']))
+		#profs = profiles.extract_profiles(self.prof_path)
+		#self.size = (len(profs['VerticalLineProfile']), len(profs['HorizontalLineProfile']))
 
 		self.loaded = True
 
@@ -83,15 +86,16 @@ class Document:
 		for line in self.text_lines:
 			if line.matched:
 				mass += line.match_value()
+		return mass
 
 	def _get_char_mass_ratio(self):
-		return self._get_matching_char_mass / self.char_mass if self.char_mass else 0.0
+		return self._get_matching_char_mass() / self.char_mass if self.char_mass else 0.0
 
 	def _find_matching_text_line(self, query_line, thresh_dist):
 		for line in self.text_lines:
 			if line.matched:
 				continue
-			match = line.matches(query_line)
+			match = line.matches(query_line, thresh_dist)
 			if match:
 				if ALLOW_PARTIAL_MATCHES and match != TextLine.COMPLETE_MATCH:
 					if match == TextLine.PREFIX_MATCH:
@@ -118,7 +122,7 @@ class Document:
 					# recurse
 					partial_match = self._find_matching_text_line(remaning_line, thresh_dist)
 					if not partial_match:
-					return None
+						return None
 
 				line.matched = True
 				query_line.matched = True
@@ -165,10 +169,10 @@ class Document:
 		for line in other.text_lines:
 			matched_line = self._find_matching_text_line(line, thresh_dist)
 			if matched_line:
-				x = (line.count * line.pos[0] + matched_line.count * matched_line.pos[0]) /
-					(line.count + matched_line.count)
-				y = (line.count * line.pos[1] + matched_line.count * matched_line.pos[1]) /
-					(line.count + matched_line.count)
+				x = (line.count * line.pos[0] + matched_line.count * matched_line.pos[0]
+					) / (line.count + matched_line.count)
+				y = (line.count * line.pos[1] + matched_line.count * matched_line.pos[1]
+					) / (line.count + matched_line.count)
 
 				# Don't worry about size for now
 				#width = (line.count * line.size[0] + matched_line.count * matched_line.size[0]) /
@@ -184,11 +188,11 @@ class Document:
 				for char in matched_line.chars:
 					new_pos = (char.pos[0] + dx, char.pos[1] + dy)
 					char.pos = new_pos
-					char.attributes['l'] += dx
-					char.attributes['r'] += dx
-					char.attributes['t'] += dy
-					char.attributes['b'] += dy
-					
+					char.pos2 = (char.pos2[0] + dx, char.pos2[1] + dy)
+					#char.attributes['l'] += dx
+					#char.attributes['r'] += dx
+					#char.attributes['t'] += dy
+					#char.attributes['b'] += dy
 
 				matched_line.count += line.count
 				matched_line.pos = (x, y)
@@ -197,4 +201,5 @@ class Document:
 				to_add.append(line)
 
 		self.text_lines += to_add
+		self._set_total_char_mass()
 			

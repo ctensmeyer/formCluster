@@ -6,7 +6,7 @@ _test_path = "/home/chris/Ancestry/Data/large/1911Wales/UnClassified/rg14_31687_
 def extract_profiles(prof_path):
 	tree = ET.parse(prof_path)
 	root = tree.getroot()
-	ele = root.find('LineProfiles')
+	ele = root.find('LineProfileData')
 	profiles = {}
 	for child in ele:
 		profile = []
@@ -18,7 +18,8 @@ def extract_profiles(prof_path):
 def get_size(prof_path):
 	tree = ET.parse(prof_path)
 	root = tree.getroot()
-    raise Exception("Not quite done yet!")
+	return (int(root.get('imageHeight')), int(root.get('imageWidth')))
+	#raise Exception("Not quite done yet!")
     
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ import compare
 from doc import Document
 import time
 import hac
-import cluster_metric as cm
+import metric
 
 
 _ocr_dir = "/home/chris/Ancestry/Data/small/1911England/OCR/"
