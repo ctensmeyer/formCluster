@@ -1,0 +1,7 @@
+
+
+# do not commit images to the repo.  They are too large
+# exclude everything except this file
+*
+!.gitignore
+
