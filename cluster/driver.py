@@ -4,13 +4,14 @@ import metric
 import cluster
 import utils
 import sys
+import doc
 
 #data_dir = "/home/chris/Ancestry/Data/wales1000/"
-data_dir = "/home/chris/Ancestry/Data/lines/1911Wales/"
+data_dir = "../data/toy40/"
 epsilon = float(sys.argv[1])
 
 def main():
-	docs = utils.get_docs(data_dir)
+	docs = doc.get_docs(data_dir)
 	organizer = cluster.TemplateSorter(docs)
 	organizer.go(epsilon)
 	clusters = organizer.get_clusters()

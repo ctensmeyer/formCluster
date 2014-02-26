@@ -22,7 +22,6 @@ def extract_text_lines(ocr_path):
 	for node in tree.iter(tag='*'):
 		if node.tag.endswith('line'):
 			char_list = extract_characters(node)
-			# filtering?
 			l = int(node.get('l'))
 			t = int(node.get('t'))
 			r = int(node.get('r'))
