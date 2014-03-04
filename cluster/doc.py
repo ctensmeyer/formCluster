@@ -47,7 +47,8 @@ def get_docs(data_dir, pr=True):
 			#	num_exceptions += 1
 	if pr:
 		print "%d Docs read" % num_loaded
-		print "%d Docs could not be read" % num_exceptions
+		if num_exceptions:
+			print "%d Docs could not be read" % num_exceptions
 	return docs
 
 

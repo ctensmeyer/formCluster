@@ -41,6 +41,25 @@ def close_match(str1, str2, threshold):
 		return ((dist <= 1) or (dist / norm) < threshold)
 	return False
 
+def apply_mat(mat, func):
+	new_mat = []
+	for row in mat:
+		new_mat.append(map(func, row))
+	return new_mat
+
+def format_as_mat(mat):
+	'''
+	:param mat: {<set x> : {<set y> : <any> } }
+	'''
+	new_mat = []
+	for x in sorted(mat.keys()):
+		row = []
+		for y in sorted(mat[x].keys()):
+			row.append(mat[x][y])
+		new_mat.append(row)
+	return new_mat
+
+
 def pairwise(args, func, symmetric=True):
 	mat = []
 	for x, arg1 in enumerate(args):
@@ -54,9 +73,10 @@ def pairwise(args, func, symmetric=True):
 		mat.append(row)
 	return mat
 
-def insert_indices(mat):
-	row0 = range(len(mat[0]) + 1)
-	for x,row in enumerate(mat, 1):
+def insert_indices(mat, row_start=0, col_start=0):
+	row0 = range(col_start, len(mat[0]) + col_start)
+	row0.insert(0, " ")
+	for x,row in enumerate(mat, row_start):
 		row.insert(0, x)
 	mat.insert(0, row0)
 
@@ -64,9 +84,23 @@ def print_mat(mat):
 	max_lens = [max([len(str(r[i])) for r in mat])
 					 for i in range(len(mat[0]))]
 
-	print "\n".join(["".join([string.ljust(str(e), l + 2)
+	print "\n".join(["".join([string.rjust(str(e), l + 2)
 							for e, l in zip(r, max_lens)]) for r in mat])
-	
+
+def split_mat(mat, row_len):
+	mats = []
+	total_row_length = len(mat[0])
+	start = 0
+	end = row_len
+	while start < total_row_length:
+		new_mat = []
+		for row in mat:
+			new_row = row[start:end]
+			new_mat.append(new_row)
+		mats.append(new_mat)
+		start += row_len
+		end += row_len
+	return mats
 	
 
 # Operations include skip or match
@@ -97,6 +131,6 @@ def edit_distance(s, t, id_cost, match_f):
 
 if __name__ == "__main__":
 	mat = pairwise(xrange(5), lambda x,y: math.sqrt(x + y))
-	insert_indices(mat)
+	insert_indices(mat, row_start=2, col_start=3)
 	print_mat(mat)
 

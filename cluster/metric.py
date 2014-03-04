@@ -18,23 +18,24 @@ class KnownClusterAnalyzer:
 		self.all_labels = self.get_all_labels()
 
 		self.num_docs = sum(map(lambda cluster: len(cluster.members), clusters))
-		self.label_conf_mats = self.calc_label_conf_mats()
-		self.label_cluster_mats = self.calc_label_cluster_counts()
+		self.label_pr_mats = self.calc_label_pr_mats()
+		self.label_cluster_mat = self.calc_label_cluster_counts()
 		self.total_counts = {count: 0 for count in _counts}
-		for label in self.label_conf_mats:
+		for label in self.label_pr_mats:
 			for count in _counts:
-				n = self.label_conf_mats[label][count]
+				n = self.label_pr_mats[label][count]
 				self.total_counts[count] += n
 		#self.print_assignments()
 
 	def sort_by_size(self):
-		self.clusters.sort(key=lambda cluster: len(cluster.members))
+		self.clusters.sort(key=lambda cluster: len(cluster.members), reverse=True)
 
 	def create_cluster_ids(self, prefix="cluster_"):
-		num = 1
+		num = 0
 		for cluster in self.clusters:
 			if cluster._id is None:
-				cluster._id = "%s%d" % (prefix, num)
+				#cluster._id = "%s%d" % (prefix, num)
+				cluster._id = num
 				num += 1
 
 	def fill_in_cluster_labels(self):
@@ -84,16 +85,55 @@ class KnownClusterAnalyzer:
 		self.print_general_info()
 		self.print_histogram_info()
 		self.print_cluster_sim_mat()
+		self.print_label_conf_mat()
+		self.print_label_cluster_mat()
 		self.print_cluster_cohesion()
 		self.print_label_info()
 		self.print_metric_info()
 		print
 
+	def print_label_conf_mat(self):
+		print "LABEL CONFUSION MATRIX:"
+		print "\tRows are actual predictions.  Columns are true labels"
+		mat = self.calc_conf_mat()
+		labels = sorted(mat.keys())
+		mat = utils.format_as_mat(mat)
+		utils.insert_indices(mat)
+		print "\tMat index\tLabel Name"
+		for x,label in enumerate(labels):
+			print "\t%d:\t%s" % (x, label)
+		print
+		utils.print_mat(mat)
+		print
+		print
+
+	def print_label_cluster_mat(self):
+		print "LABEL-CLUSTER MATRIX:"
+		print "\tSeries of matricies.  Labels are rows.  Clusters are columns."
+		mat = self.label_cluster_mat
+		labels = sorted(mat.keys())
+		mat = utils.format_as_mat(mat)
+		clusters_per_mat = 20
+		mats = utils.split_mat(mat, clusters_per_mat)  # 10 clusters per matrix
+
+		print "\tMat index\tLabel Name"
+		for x,label in enumerate(labels):
+			print "\t%d:\t%s" % (x, label)
+		print
+		for x, mat in enumerate(mats):
+			utils.insert_indices(mat, col_start=(clusters_per_mat * x))
+			utils.print_mat(mat)
+			print
+		print 
+
+
 	def print_cluster_sim_mat(self, min_size=10):
 		print "CLUSTER SIM MATRIX:"
 		clusters = filter(lambda cluster: len(cluster.members) > min_size, self.clusters)
+		print "\tOnly showing the %d clusters containing more than %d elements" % (len(clusters), min_size)
 		centers = map(lambda cluster: cluster.center, clusters)
 		mat = utils.pairwise(centers, lambda doc1, doc2: doc1.dist(doc2))
+		mat = utils.apply_mat(mat, lambda x: "%3.2f" % x)
 		utils.insert_indices(mat)
 		utils.print_mat(mat)
 		print
@@ -101,13 +141,13 @@ class KnownClusterAnalyzer:
 
 	def print_cluster_cohesion(self):
 		print "CLUSTER COHESION:"
-		print "\tAVG\tSTDDEV\tLEN"
+		print "\t\tAVG\tSTDDEV\tLEN"
 		for x, cluster in enumerate(self.clusters):
 			dists = map(lambda doc: doc.dist(cluster.center), cluster.members)
 			avg = utils.avg(dists)
 			sd = utils.stddev(dists)
 			l = len(dists)
-			print "\t%s: %3.2f\t%3.2f\t%d" % (x, avg, sd, l)
+			print "\t%s:\t%3.2f\t%3.2f\t%d" % (x, avg, sd, l)
 		print
 		print
 
@@ -116,7 +156,7 @@ class KnownClusterAnalyzer:
 		print "LABEL INFO:"
 		print "\tThere are %d true labels" % len(self.all_labels)
 		print "\tThere are %d assigned labels" % len(assigned_labels)
-		print "\t%d labels were not assigned" % (len(self.all_labels) - len(assigned_labels))
+		print "\t%d labels were not assigned to any cluster" % (len(self.all_labels) - len(assigned_labels))
 		print "\n\tAssigned Labels\n\t-------------------------"
 		for label in sorted(assigned_labels):
 			print "\t%s" % label
@@ -155,6 +195,8 @@ class KnownClusterAnalyzer:
 		print "METRIC INFO:"
 		print "\tAccuracy: ", self.accuracy()
 		print "\tV-measure: ", self.v_measure()
+		print "\t\tHomogeneity: ", self.homogeneity()
+		print "\t\tCompleteness: ", self.completeness()
 		print "\tF1 Macro: ", self.F1_macro()
 		print "\tF1 Micro: ", self.F1_micro()
 		print "\tTotal PR/RC: ", self.PR()
@@ -163,8 +205,8 @@ class KnownClusterAnalyzer:
 			print "\n\t\t%s:" % label
 			print "\t\tF1: %.3f" % self.F1()
 			print "\t\tPR: %.3f\tRC: %.3f" % (self.PR(label))
-			s = "\t".join(map(lambda count: "%s: %d (%2.1f%%)" % (count, self.label_conf_mats[label][count],
-						100.0 * self.label_conf_mats[label][count] / self.num_docs), _counts))
+			s = "\t".join(map(lambda count: "%s: %d (%2.1f%%)" % (count, self.label_pr_mats[label][count],
+						100.0 * self.label_pr_mats[label][count] / self.num_docs), _counts))
 			print "\t\t%s" % s
 		print
 		print
@@ -179,7 +221,7 @@ class KnownClusterAnalyzer:
 				counts[doc.label][cluster._id] += 1
 		return counts
 
-	def calc_label_conf_mats(self):
+	def calc_label_pr_mats(self):
 		'''
 		:return: {label : { count_type (TP, etc) : #occurances, }, }
 		'''
@@ -203,20 +245,30 @@ class KnownClusterAnalyzer:
 						counts[label]['TN'] += 1
 		return counts
 
+	def calc_conf_mat(self):
+		'''
+		:return: {predicted_label : {actual_label : #occurances, }, }
+		'''
+		counts = {label: {label: 0 for label in self.all_labels} for label in self.all_labels}
+		for cluster in self.clusters:
+			for doc in cluster.members:
+				counts[cluster.label][doc.label] += 1
+		return counts
+
 
 	def get_counts(self, label):
-		return self.label_conf_mats[label].copy()
+		return self.label_pr_mats[label].copy()
 
 	def precision(self, label=None):
 		try:
-			counts = self.label_conf_mats[label] if label else self.total_counts
+			counts = self.label_pr_mats[label] if label else self.total_counts
 			return counts['TP'] / float(counts['TP'] + counts['FP'])
 		except ZeroDivisionError:
 			return 0.0
 
 	def recall(self, label=None):
 		try:
-			counts = self.label_conf_mats[label] if label else self.total_counts
+			counts = self.label_pr_mats[label] if label else self.total_counts
 			return counts['TP'] / float(counts['TP'] + counts['FN'])
 		except ZeroDivisionError:
 			return 0.0
@@ -284,8 +336,8 @@ class KnownClusterAnalyzer:
 		label_counts = self.get_true_doc_histogram()
 		for label in self.all_labels:
 			for cluster in self.clusters:
-				one = self.label_cluster_mats[label][cluster._id] / float(self.num_docs)
-				two = self.label_cluster_mats[label][cluster._id] / float(label_counts[label])
+				one = self.label_cluster_mat[label][cluster._id] / float(self.num_docs)
+				two = self.label_cluster_mat[label][cluster._id] / float(label_counts[label])
 				num += one * math.log(two + eps)
 		num *= -1
 
@@ -299,8 +351,8 @@ class KnownClusterAnalyzer:
 		num = 0.0
 		for cluster in self.clusters:
 			for label in self.all_labels:
-				one = self.label_cluster_mats[label][cluster._id] / float(self.num_docs)
-				two = self.label_cluster_mats[label][cluster._id] / float(len(cluster.members))
+				one = self.label_cluster_mat[label][cluster._id] / float(self.num_docs)
+				two = self.label_cluster_mat[label][cluster._id] / float(len(cluster.members))
 				num += one * math.log(two + eps)
 		num *= -1
 		

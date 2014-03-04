@@ -7,7 +7,8 @@ import utils
 import sys
 import doc
 
-data_dir = "../data/lines/1911Wales/"
+#data_dir = "../data/lines/1911Wales/"
+data_dir = "../data/wales100/"
 epsilon = float(sys.argv[1])
 
 
@@ -38,4 +39,4 @@ if __name__ == "__main__":
 	end_time = time.time()
 	print "End"
 	#print "%f seconds" % (end_time - start_time)
-	print datetime.timedelta(seconds=(end_time - start_time))
+	print "Total Time elapsed: ", datetime.timedelta(seconds=(end_time - start_time))
