@@ -1,6 +1,7 @@
 
 import os
 import math
+import string
 
 def e_dist(p1, p2):
 	return math.sqrt( (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 )
@@ -8,11 +9,23 @@ def e_dist(p1, p2):
 def argmax(l):
 	return l.index(max(l))
 
-def harmonic_mean(x, y):
+def harmonic_mean(x, y, beta=1.0):
+	'''
+	beta > 1 biases mean toward y
+	beta < 1 biases mean toward x
+	'''
 	if x == y == 0:
 		return 0
-	return (2 * x * y) / float(x + y)
+	return ((1 + beta) * x * y) / float((beta * x) + y)
 
+def avg(l):
+	return float(sum(l)) / len(l) if len(l) else float('nan')
+
+def stddev(l):
+	mean = avg(l)
+	var = sum(map(lambda x: (x - mean) ** 2, l)) / len(l)
+	return math.sqrt(var)
+	
 
 def levenstein(i, j, s, t):
 	return 0 if s[i] == t[j] else 1
@@ -28,6 +41,33 @@ def close_match(str1, str2, threshold):
 		return ((dist <= 1) or (dist / norm) < threshold)
 	return False
 
+def pairwise(args, func, symmetric=True):
+	mat = []
+	for x, arg1 in enumerate(args):
+		row = []
+		for y, arg2 in enumerate(args):
+			if symmetric and y < x:
+				val = mat[y][x]
+			else:
+				val = func(arg1, arg2)
+			row.append(val)
+		mat.append(row)
+	return mat
+
+def insert_indices(mat):
+	row0 = range(len(mat[0]) + 1)
+	for x,row in enumerate(mat, 1):
+		row.insert(0, x)
+	mat.insert(0, row0)
+
+def print_mat(mat):
+	max_lens = [max([len(str(r[i])) for r in mat])
+					 for i in range(len(mat[0]))]
+
+	print "\n".join(["".join([string.ljust(str(e), l + 2)
+							for e, l in zip(r, max_lens)]) for r in mat])
+	
+	
 
 # Operations include skip or match
 # Match cost is dependent on the two extrema
@@ -55,4 +95,8 @@ def edit_distance(s, t, id_cost, match_f):
 	final_val =  d[l1 - 1][l2 - 1] 
 	return final_val
 
+if __name__ == "__main__":
+	mat = pairwise(xrange(5), lambda x,y: math.sqrt(x + y))
+	insert_indices(mat)
+	print_mat(mat)
 

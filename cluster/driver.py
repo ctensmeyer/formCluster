@@ -1,25 +1,35 @@
 
 import time
+import datetime
 import metric
 import cluster
 import utils
 import sys
 import doc
 
-#data_dir = "/home/chris/Ancestry/Data/wales1000/"
-data_dir = "../data/toy40/"
+data_dir = "../data/lines/1911Wales/"
 epsilon = float(sys.argv[1])
 
-def main():
+
+def cluster_known():
 	docs = doc.get_docs(data_dir)
 	organizer = cluster.TemplateSorter(docs)
 	organizer.go(epsilon)
 	clusters = organizer.get_clusters()
 	print
 	print
-	analyzer = metric.ClusterAnalyzer(clusters)
+	analyzer = metric.KnownClusterAnalyzer(clusters)
 	analyzer.print_all()
 
+def compare_true_templates():
+	docs = doc.get_docs(data_dir)
+	organizer = cluster.CheatingSorter(docs)
+	organizer.go()
+	
+
+
+def main():
+	cluster_known()
 
 if __name__ == "__main__":
 	print "Start"
@@ -27,5 +37,5 @@ if __name__ == "__main__":
 	main()
 	end_time = time.time()
 	print "End"
-	print "%f seconds" % (end_time - start_time)
-	
+	#print "%f seconds" % (end_time - start_time)
+	print datetime.timedelta(seconds=(end_time - start_time))

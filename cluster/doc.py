@@ -178,6 +178,8 @@ class Document:
 
 		return None
                     
+	def dist(self, other):
+		return self.text_line_distance(other)
                     
 	def text_line_distance(self, other):
 		self._load_check()
