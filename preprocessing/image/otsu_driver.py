@@ -4,7 +4,7 @@ import imageutils
 import os
 import sys
 
-IMAGE_EXT = '.png'
+IMAGE_EXT = '.pgm'
 
 
 def main(indir, outdir):
@@ -16,10 +16,10 @@ def main(indir, outdir):
 		inimage = os.path.join(indir, f)
 		im = Image.open(inimage)
 		im = im.convert('L')
-		#threshold = imageutils.global_otsu(im)
-		#print "threshold:", threshold
-		#im = imageutils.binary(im, threshold)
-		im = imageutils.local_otsu(im, 4, 4)
+		threshold = imageutils.global_otsu(im)
+		print "threshold:", threshold
+		im = imageutils.binary(im, threshold)
+		#im = imageutils.local_otsu(im, 4, 4)
 
 		outfile = os.path.join(outdir, os.path.basename(inimage))
 		im.save(outfile)

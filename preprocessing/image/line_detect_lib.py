@@ -24,6 +24,38 @@ MAX_GAP = 3
 COLOR_LABEL = (0, 255, 0)
 SMOOTH_KERNEL = 7
 
+class CC:
+	
+	def __init__(self, im, label, coords):
+		self.im = im
+		self.label = label
+		self.coords = coords
+		self.bounding_box = self.calc_bb()
+
+	def calc_bb(self):
+		maxx = 0
+		minx = 10e5
+		maxy = 0
+		miny = 10e5
+
+		for p in self.coords:
+			maxx = max(maxx, p[0])
+			minx = min(minx, p[0])
+			maxy = max(maxy, p[1])
+			miny = min(miny, p[1])
+
+		ul = (minx, miny)
+		lr = (maxx, maxy)
+
+		return (ul, lr)
+
+	def make_mask(self):
+		im = Image.new("1", 
+
+	def display(self):
+		print "CC %s: size %d\tbounding box %s" % (self.label, len(self.coords), self.bounding_box())
+		
+
 
 def label_component(x, y, pix, mask, label):
 	pix_queue = deque([(x, y)])
@@ -45,6 +77,7 @@ def label_component(x, y, pix, mask, label):
 						pix_queue.append( (__x, __y) )
 				except:
 					pass
+	return cc_coords
 
 
 def find_ccs(im):
@@ -52,13 +85,16 @@ def find_ccs(im):
 	mut = Image.new('I', im.size, color='black') # assign all 0s
 	mut_pix = mut.load()
 	cur_idx = 1
+	ccs = list()
 	for x in xrange(im.size[0]):
 		for y in xrange(im.size[1]):
 			if pix[x, y] == BLACK and mut_pix[x, y] == BLACK:
-				label_component(x, y, mut_pix, pix, cur_idx)
+				coords = label_component(x, y, mut_pix, pix, cur_idx)
+				cc = CC(mut, cur_idx, coords)
+				ccs.append(cc)
 				cur_idx += 1
 	print cur_idx
-	return mut
+	return mut, ccs
 	
 
 def color_components(orig, ccs, colors):

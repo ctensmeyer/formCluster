@@ -53,7 +53,7 @@ def otsu(distro, th_max):
 		diff_sq = diff ** 2
 
 		result = diff_sq * num_c1 * num_c2
-		result *= gauss(th, 150, 127)
+		result *= gauss(th, 150, 127)  # prior smoothing
 		# print "Threshold: %d Result: %f" % (th, result)
 		if result > max_result:
 			max_result = result

@@ -14,7 +14,7 @@ def main(indir, outdir):
 		outimage = os.path.join(outdir, f)
 		im = Image.open(inimage)
 		im = im.convert('1')
-		out = line_detect.find_ccs(im)
+		out = line_detect.find_ccs(im)[0]
 		colors = [ (255, 0, 0), (0, 255, 0), (0, 0, 255), (127, 127, 0),
 					  (127, 0, 127), (0, 127, 127), (200, 100, 100), (100, 200, 100),
 					  (100, 100, 200), (200, 50, 50), (50, 200, 50), (50, 50, 200),
