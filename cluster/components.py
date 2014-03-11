@@ -21,23 +21,28 @@ class Feature(object):
 
 class Line(Feature):
 	# These are line segments
+
+	HORIZONTAL = 0
+	VERTICAL = 1
 	
-	def __init__(self, position, size):
+	def __init__(self, orientation, pos, length, thickness):
 		'''
-		:param position: (x, y) coordinate of the upper left corner of the bounding rectangle
-		:param size: (x, y) width and height of the bounding rectangle
+		:param orientation: Line.HORIZONTAL or Line.VERTICAL
+		:param position: (x, y) coordinate of lowest endpoint (along center of line)
+		:param length: int length of the line in pixels
+		:param thickness: int line thickness
 		'''
 		Feature.__init__(self)
-		self.position = position
-		self.size = size
-		self.width = size[0]
-		self.height = size[1]
+		self.orientation = orientation
+		self.pos = pos
+		self.length = length
+		self.thickness = thickness
 
 	def is_horizontal(self):
-		return self.width > self.height
+		return self.orientation == Line.HORIZONTAL
 
 	def is_vertical(self):
-		return not self.is_horizontal
+		return self.orientation == Line.VERTICAL
 		
 
 class TextLine(Feature):
@@ -95,7 +100,6 @@ class TextLine(Feature):
 			c = self.chars[x].val
 			if not (c.isalpha() or c.isspace()):
 				self.chars[x].val = ' '
-		#self.chars = filter(lambda char: char.val.isalpha() or char.val.isspace(), self.chars)
 		self.set_text()
 
 	def has_dict_word(self, min_len=3):

@@ -9,7 +9,7 @@ eps = 10e-10
 
 class KnownClusterAnalyzer:
 
-	def __init__(self, clusters, cluster_centers=None):
+	def __init__(self, clusters):
 		self.clusters = clusters
 		self.sort_by_size()
 
@@ -25,6 +25,7 @@ class KnownClusterAnalyzer:
 			for count in _counts:
 				n = self.label_pr_mats[label][count]
 				self.total_counts[count] += n
+		print json.dumps(self.label_pr_mats, indent=4)
 		#self.print_assignments()
 
 	def sort_by_size(self):
@@ -127,12 +128,10 @@ class KnownClusterAnalyzer:
 		print 
 
 
-	def print_cluster_sim_mat(self, min_size=10):
+	def print_cluster_sim_mat(self):
 		print "CLUSTER SIM MATRIX:"
-		clusters = filter(lambda cluster: len(cluster.members) > min_size, self.clusters)
-		print "\tOnly showing the %d clusters containing more than %d elements" % (len(clusters), min_size)
-		centers = map(lambda cluster: cluster.center, clusters)
-		mat = utils.pairwise(centers, lambda doc1, doc2: doc1.dist(doc2))
+		centers = map(lambda cluster: cluster.center, self.clusters)
+		mat = utils.pairwise(centers, lambda doc1, doc2: doc1.similarity(doc2))
 		mat = utils.apply_mat(mat, lambda x: "%3.2f" % x)
 		utils.insert_indices(mat)
 		utils.print_mat(mat)
@@ -143,10 +142,10 @@ class KnownClusterAnalyzer:
 		print "CLUSTER COHESION:"
 		print "\t\tAVG\tSTDDEV\tLEN"
 		for x, cluster in enumerate(self.clusters):
-			dists = map(lambda doc: doc.dist(cluster.center), cluster.members)
-			avg = utils.avg(dists)
-			sd = utils.stddev(dists)
-			l = len(dists)
+			similarities = map(lambda doc: doc.similarity(cluster.center), cluster.members)
+			avg = utils.avg(similarities)
+			sd = utils.stddev(similarities)
+			l = len(similarities)
 			print "\t%s:\t%3.2f\t%3.2f\t%d" % (x, avg, sd, l)
 		print
 		print
@@ -203,7 +202,7 @@ class KnownClusterAnalyzer:
 		print "\tLabel break down:"
 		for label in self.all_labels:
 			print "\n\t\t%s:" % label
-			print "\t\tF1: %.3f" % self.F1()
+			print "\t\tF1: %.3f" % self.F1(label)
 			print "\t\tPR: %.3f\tRC: %.3f" % (self.PR(label))
 			s = "\t".join(map(lambda count: "%s: %d (%2.1f%%)" % (count, self.label_pr_mats[label][count],
 						100.0 * self.label_pr_mats[label][count] / self.num_docs), _counts))

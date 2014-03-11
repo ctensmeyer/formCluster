@@ -25,41 +25,61 @@ class TemplateSorter:
 	def __init__(self, docs):
 		self.docs = docs
 
-	def _add_template(self, doc):
-		template = doc.copy(len(self.templates))
+	def _add_cluster(self, doc):
+		template = doc.copy(len(self.clusters))
 		template.label = None
-		self.templates.append(template)
-		self.assignments.append([doc])
+		self.clusters.append(Cluster([doc], template))
 
 	def go(self, epsilon=0.20, templates=None):
 		if templates is None:
 			templates = list()
-		self.templates = templates
-		self.assignments = [list() for template in self.templates]
+		self.clusters = [Cluster(list(), template) for template in templates]
 
 		for x, doc in enumerate(self.docs):
-			if self.templates:
-				distances = map(lambda template: doc.text_line_distance(template), self.templates)
-				idx = utils.argmax(distances)
-				if distances[idx] < (1.0 - epsilon):
-					self._add_template(doc)
+			if self.clusters:
+				similarities = map(lambda cluster: doc.similarity(cluster.center), self.clusters)
+				idx = utils.argmax(similarities)
+				if similarities[idx] > (1.0 - epsilon):
+					cluster_match = self.clusters[idx]
+					cluster_match.center.aggregate(doc)
+					cluster_match.members.append(doc)
 				else:
-					template_match = self.templates[idx]
-					template_match.aggregate(doc)
-					self.assignments[template_match._id].append(doc)
+					self._add_cluster(doc)
 			else:
-				self._add_template(doc)
+				self._add_cluster(doc)
 
 			if x % 10 == 0:
 				print "%d documents processed" % x
 
+	def prune_clusters(self, min_size=5, isolate=False):
+		odd_docs = list()
+		clusters_to_remove = list()
+		for cluster in self.clusters:
+			if len(cluster.members) < min_size:
+				odd_docs += cluster.members
+				clusters_to_remove.append(cluster)
+		for cluster in clusters_to_remove:
+			self.clusters.remove(cluster)
+		if odd_docs:
+			if isolate:
+				# make a single cluster of the oddballs
+				template = odd_docs[0].copy(len(self.templates))
+				template.label = None
+				for doc in odd_docs[1:]:
+					template.aggregate(doc)
+				self.clusters.append(Cluster(odd_docs, template))
+			else:
+				# distribute oddballs to closest cluster
+				for doc in odd_docs:
+					similarities = map(lambda cluster: doc.similarity(cluster.center), self.clusters)
+					idx = utils.argmax(similarities)
+					cluster_match = self.clusters[idx]
+					cluster_match.center.aggregate(doc)
+					cluster_match.members.append(doc)
+			
+
 	def get_clusters(self):
-		assert len(self.templates) == len(self.assignments)
-		clusters = []
-		for x in xrange(len(self.templates)):
-			cluster = Cluster(self.assignments[x], self.templates[x])
-			clusters.append(cluster)
-		return clusters
+		return self.clusters
 
 	
 class CheatingSorter:

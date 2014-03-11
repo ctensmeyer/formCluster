@@ -8,48 +8,51 @@ import utils
 import os
 from components import TextLine
 
+_file_extensions = [".jpg", ".xml", "_line.xml", "_FormType.txt", "_linesH.pgm", "_linesV.pgm"]
 
-def get_docs(data_dir, pr=True):
+
+def get_docs(_dir, pr=True):
 	docs = []
 	num_loaded = 0
 	num_exceptions = 0
-	for _dir in os.listdir(data_dir):
-		print "Starting Dir: ", _dir
-		r_dir = os.path.join(data_dir, _dir)
+	if pr:
+		print "Loading Docs from:", _dir
 		basenames = set()
-		image_names = os.listdir(r_dir)
+		image_names = os.listdir(_dir)
 		for name in image_names:
 			if name.endswith(".jpg"):
 				basename = os.path.splitext(name)[0]
 				basenames.add(basename)
 		for basename in basenames:
-			#try:
-			ocr_name = basename + ".xml"
-			prof_name = basename + "_line.xml"
-			form_name = basename + "_FormType.txt"
-			image_name = basename + ".jpg"
-			image_path = os.path.join(r_dir, image_name)
-			ocr_path = os.path.join(r_dir, ocr_name)
-			prof_path = os.path.join(r_dir, prof_name)
-			form_path = os.path.join(r_dir, form_name)
-			#exists = map(lambda path: os.path.exists(path), [image_path, prof_path, form_path, ocr_path])
-			#if not all(exists):
-			#	for path in [image_path, prof_path, form_path, ocr_path]:
-			#		open(path)  # force exception
-			document = Document(basename, image_path, ocr_path, prof_path, form_path)
+			paths = map(lambda ext: os.path.join(_dir, basename + ext), _file_extensions)
+
+			document = Document(basename, paths)
 			docs.append(document)
 			num_loaded += 1
 			if pr and num_loaded % 10 == 0:
-				print "Loaded %d documents" % num_loaded
-			#except:
-			#	if pr:
-			#		print "Exception reading ", os.path.join(_dir, basename)
-			#	num_exceptions += 1
+				print "\tLoaded %d documents" % num_loaded
 	if pr:
-		print "%d Docs read" % num_loaded
+		print "\t%d Docs read" % num_loaded
 		if num_exceptions:
-			print "%d Docs could not be read" % num_exceptions
-	return docs
+			print "\t%d Docs could not be read" % num_exceptions
+	return docs, num_exceptions
+
+	
+
+def get_docs_nested(data_dir, pr=True):
+	all_docs = []
+	total_exceptions = 0
+	for _dir in os.listdir(data_dir):
+		r_dir = os.path.join(data_dir, _dir)
+		docs, num_exceptions = get_docs(r_dir, pr)
+		all_docs += docs
+		total_exceptions += num_exceptions
+	if pr:
+		print "Finished loading all documents"
+		print "%d Total docs read" % len(docs)
+		if total_exceptions:
+			print "%d Toal docs could not be read" % total_exceptions
+	return all_docs
 
 
 
@@ -60,13 +63,15 @@ DEBUG = False
 
 class Document:
 	
-	def __init__(self, _id, image_path, ocr_path, prof_path, form_path, original=True):
+	def __init__(self, _id, paths, original=True):
 		self._id = _id
-		self.image_path = image_path
-		self.ocr_path = ocr_path
-		self.prof_path = prof_path # path of projection profiles
-		self.image_path = image_path
-		self.form_path = form_path
+		self.paths = paths
+		self.image_path = paths[0]
+		self.ocr_path = paths[1]
+		self.prof_path = paths[2] # path of projection profiles
+		self.form_path = paths[3]
+		self.h_lines = paths[4]
+		self.v_lines = paths[5]
 
 		self.loaded = False
 		if not LAZY and original:
@@ -74,7 +79,7 @@ class Document:
 
 	def copy(self, new_id):
 		self._load_check()
-		cpy = Document(new_id, self.image_path, self.ocr_path, self.prof_path, self.form_path, original=False)
+		cpy = Document(new_id, self.paths, original=False)
 		cpy.loaded = True  # makes sure we never load data from files
 
 		cpy.label = self.label
@@ -179,10 +184,10 @@ class Document:
 
 		return None
                     
-	def dist(self, other):
-		return self.text_line_distance(other)
+	def similarity(self, other):
+		return self.text_line_similarity(other)
                     
-	def text_line_distance(self, other):
+	def text_line_similarity(self, other):
 		self._load_check()
 		other._load_check()
 		thresh_dist = 0.10 * max(max(self.size), max(other.size))  # % of largest dimension

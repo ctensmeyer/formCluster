@@ -13,9 +13,10 @@ epsilon = float(sys.argv[1])
 
 
 def cluster_known():
-	docs = doc.get_docs(data_dir)
+	docs = doc.get_docs_nested(data_dir)
 	organizer = cluster.TemplateSorter(docs)
 	organizer.go(epsilon)
+	organizer.prune_clusters()
 	clusters = organizer.get_clusters()
 	print
 	print
@@ -23,7 +24,7 @@ def cluster_known():
 	analyzer.print_all()
 
 def compare_true_templates():
-	docs = doc.get_docs(data_dir)
+	docs = doc.get_docs_nested(data_dir)
 	organizer = cluster.CheatingSorter(docs)
 	organizer.go()
 	
@@ -38,5 +39,5 @@ if __name__ == "__main__":
 	main()
 	end_time = time.time()
 	print "End"
-	#print "%f seconds" % (end_time - start_time)
 	print "Total Time elapsed: ", datetime.timedelta(seconds=(end_time - start_time))
+

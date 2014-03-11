@@ -41,6 +41,14 @@ def clean_lines(lines):
 			filtered_lines.append(line)
 	return filtered_lines
 	
+def get_bounding_boxes(ocr_path):
+	lines = extract_text_lines(ocr_path)
+	bbs = list()
+	for line in lines:
+		for char in line.chars:
+			ul, lr = char.pos, char.pos2
+			bbs.append( (ul, lr) )
+	return bbs
 
 
 _test_file = "/home/chris/Ancestry/Data/test/UnClassified/rg14_31687_0058_06.xml"
