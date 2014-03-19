@@ -4,7 +4,8 @@ import os
 import sys
 import line_extract_lib as line_lib
 
-IMAGE_EXT = '.pgm'
+IMAGE_EXT = '_linesH.pgm'
+LINE_EXT = '_endpoints.xml'
 
 def main(in_dir, out_dir):
 	try:
@@ -15,18 +16,34 @@ def main(in_dir, out_dir):
 		if not f.endswith(IMAGE_EXT):
 			continue
 		print f
-		in_image = os.path.join(in_dir, f)
-		out_image = os.path.join(out_dir, f)
+		h_name = f
+		v_name = f.replace("linesH", "linesV")
+		orig_name = f.replace(IMAGE_EXT, ".jpg")
+		ocr_name = f.replace(IMAGE_EXT, ".xml")
+		save_name = f.replace(IMAGE_EXT, "_with_lines.jpg")
 
-		im = Image.open(in_image)
-		lines = line_lib.line_extract(im)
-		im = im.convert("RGB")
-		draw = ImageDraw.Draw(im)
+		h_path = os.path.join(in_dir, h_name)
+		v_path = os.path.join(in_dir, v_name)
+		orig_path = os.path.join(in_dir, orig_name)
+		ocr_path = os.path.join(in_dir, ocr_name)
+		save_path = os.path.join(out_dir, save_name)
+		out_path = os.path.join(out_dir, f.replace(IMAGE_EXT, "")  + LINE_EXT)
 
-		for line in lines:
-			draw.line(line, fill="red", width=10)
+		h_im = Image.open(h_path)
+		v_im = Image.open(v_path)
+		#if os.path.exists(ocr_path):
+		#	line_lib.remove_ocr_chars(h_im, ocr_path)
+		#	line_lib.remove_ocr_chars(v_im, ocr_path)
+		#	h_im.save("h_removed.pgm")
+		#	v_im.save("v_removed.pgm")
+		#else:
+		#	print "Cannot find ", ocr_path
+		#orig_im = Image.open(orig_path).convert("RGB")
+		#orig_im = Image.new("RGB", h_im.size, "white")
 
-		im.save(out_image)
+		line_lib.write_line_file(h_im, v_im, out_path)
+		#line_lib.draw_lines(h_im, v_im, orig_im)
+		#orig_im.save(save_path)
 
 
 if __name__ == "__main__":

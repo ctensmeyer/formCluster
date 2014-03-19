@@ -18,7 +18,7 @@ def extract_profiles(prof_path):
 def get_size(prof_path):
 	tree = ET.parse(prof_path)
 	root = tree.getroot()
-	return (int(root.get('imageHeight')), int(root.get('imageWidth')))
+	return (int(root.get('imageWidth')), int(root.get('imageHeight')))
 	#raise Exception("Not quite done yet!")
     
 

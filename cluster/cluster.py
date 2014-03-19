@@ -92,6 +92,7 @@ class CheatingSorter:
 		self.assignments = collections.defaultdict(list)
 
 		for x, doc in enumerate(self.docs):
+			doc._load_check()
 			true_label = doc.label
 			if true_label in self.templates:
 				# now sure how dicts handle mutable objects...
@@ -108,7 +109,7 @@ class CheatingSorter:
 		assert len(self.templates) == len(self.assignments)
 		clusters = []
 		for label in sorted(self.templates):
-			cluster = Cluster(self.assignments[x], self.templates[x])
+			cluster = Cluster(self.assignments[label], self.templates[label])
 			clusters.append(cluster)
 		return clusters
 			

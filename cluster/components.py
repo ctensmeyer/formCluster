@@ -1,6 +1,7 @@
 
 import dictionary
 import utils
+import math
 
 class Feature(object):
     
@@ -17,13 +18,14 @@ class Feature(object):
 		In template matching, how much does this feature actually matter?
 		'''
 		return self.count * self.weight
-        
+			
 
 class Line(Feature):
 	# These are line segments
 
-	HORIZONTAL = 0
-	VERTICAL = 1
+	# important that these don't change
+	VERTICAL = 0
+	HORIZONTAL = 1
 	
 	def __init__(self, orientation, pos, length, thickness):
 		'''
@@ -33,17 +35,33 @@ class Line(Feature):
 		:param thickness: int line thickness
 		'''
 		Feature.__init__(self)
-		self.orientation = orientation
+		self.orien = orientation
 		self.pos = pos
 		self.length = length
 		self.thickness = thickness
 
+	def copy(self):
+		cpy = Line(self.orien, self.pos, self.length, self.thickness)
+		cpy.count = self.count
+		cpy.weight = self.weight
+		return cpy
+
+	def __str__(self):
+		return "%s pos: %s length: %d thickness %d" % \
+				 ('H' if self.orien else 'V', self.pos, self.length, self.thickness)
+
 	def is_horizontal(self):
-		return self.orientation == Line.HORIZONTAL
+		return self.orien == Line.HORIZONTAL
 
 	def is_vertical(self):
-		return self.orientation == Line.VERTICAL
+		return self.orien == Line.VERTICAL
 		
+	def match_value(self):
+		'''
+		Overides Feature.match_value
+		Gives lines value proportional to log(length)
+		'''
+		return Feature.match_value(self) * math.log(self.length)
 
 class TextLine(Feature):
 
@@ -75,6 +93,8 @@ class TextLine(Feature):
 		for char in self.chars:
 			chars_copy.append(char.copy())
 		cpy = TextLine(chars_copy, self.pos, self.size)
+		cpy.count = self.count
+		cpy.weight = self.weight
 		return cpy
 
 	def match_value(self):

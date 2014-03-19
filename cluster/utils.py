@@ -2,6 +2,7 @@
 import os
 import math
 import string
+import Levenshtein
 
 def e_dist(p1, p2):
 	return math.sqrt( (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 )
@@ -18,8 +19,22 @@ def harmonic_mean(x, y, beta=1.0):
 		return 0
 	return ((1 + beta) * x * y) / float((beta * x) + y)
 
+def harmonic_mean_list(l):
+	'''
+	:param l: list of nums
+	'''
+	if not l:
+		return 0.0
+	prod = float(reduce(lambda x, y: x * y, l))
+	if prod == 0:
+		return prod
+	denum = sum(map(lambda x: x / prod, l))
+	return len(l) * prod / denum
+
+
 def avg(l):
 	return float(sum(l)) / len(l) if len(l) else float('nan')
+
 
 def stddev(l):
 	mean = avg(l)
@@ -37,15 +52,18 @@ def close_match(str1, str2, threshold):
 	norm = float(len(str1) + len(str2))
 	min_dist = abs(len(str1) - len(str2)) / norm 
 	if min_dist < threshold:
-		dist = edit_distance(str1, str2, 1, levenstein)
+		#dist = edit_distance(str1, str2, 1, levenstein)
+		dist = Levenshtein.distance(str1, str2)
 		return ((dist <= 1) or (dist / norm) < threshold)
 	return False
+
 
 def apply_mat(mat, func):
 	new_mat = []
 	for row in mat:
 		new_mat.append(map(func, row))
 	return new_mat
+
 
 def format_as_mat(mat):
 	'''
@@ -101,20 +119,22 @@ def split_mat(mat, row_len):
 		start += row_len
 		end += row_len
 	return mats
+
+
+
 	
 
 # Operations include skip or match
-# Match cost is dependent on the two extrema
 def edit_distance(s, t, id_cost, match_f):
 	'''
-	:param s: 0 sequence 1
-	:param t: 0 sequence 2
-	:id_cost: num Cost of an Insertion or Deletion operation
-	:match_f: func (idx1, idx2, s, t) -> num  Cost of matching
+	:param s: sequence 1
+	:param t: sequence 2
+	:param id_cost: num Cost of an Insertion or Deletion operation
+	:param match_f: func (idx1, idx2, s, t) -> num  Cost of matching
 	:return: Edit distance between s and t
 	'''
-	l1 = len(s) + 1 # width
-	l2 = len(t) + 1 # height
+	l1 = len(s) + 1 # height
+	l2 = len(t) + 1 # width
 	d = [ [x * id_cost for x in xrange(l2)] ]
 
 	for i in xrange(1, l1):

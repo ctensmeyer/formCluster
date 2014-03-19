@@ -6,7 +6,7 @@ import os
 
 
 #extensions = [".xml", "_line.xml", "_FormType.txt", ".jpg", "_linesH.pgm", "_linesV.pgm"]
-extensions = [".xml", "_line.xml", "_FormType.txt", ".jpg"]
+extensions = [".xml", "_line.xml", "_FormType.txt", ".jpg", "_endpoints.xml"]
 ignore_extensions = (".db","_linesH.pgm", "_linesV.pgm")
 
 

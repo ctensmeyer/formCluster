@@ -49,11 +49,22 @@ class CC:
 
 		return (ul, lr)
 
+	def get_size(self):
+		ul, lr = self.bounding_box
+		return lr[0] - ul[0] + 1, lr[1] - ul[1] + 1
+
 	def make_mask(self):
-		im = Image.new("1", 
+		size = self.get_size()
+		ul, lr = self.bounding_box
+		im = Image.new("L", size, "black")
+		pix = im.load()
+		for p in self.coords:
+			#print p, ul, size
+			pix[p[0] - ul[0], p[1] - ul[1]] = 255
+		self.mask = im
 
 	def display(self):
-		print "CC %s: size %d\tbounding box %s" % (self.label, len(self.coords), self.bounding_box())
+		print "CC %s: size %d\tbounding box %s" % (self.label, len(self.coords), self.bounding_box)
 		
 
 
@@ -93,7 +104,6 @@ def find_ccs(im):
 				cc = CC(mut, cur_idx, coords)
 				ccs.append(cc)
 				cur_idx += 1
-	print cur_idx
 	return mut, ccs
 	
 

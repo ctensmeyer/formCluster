@@ -129,12 +129,21 @@ class KnownClusterAnalyzer:
 
 
 	def print_cluster_sim_mat(self):
-		print "CLUSTER SIM MATRIX:"
+		print "CLUSTER SIM MATRICES:"
 		centers = map(lambda cluster: cluster.center, self.clusters)
-		mat = utils.pairwise(centers, lambda doc1, doc2: doc1.similarity(doc2))
-		mat = utils.apply_mat(mat, lambda x: "%3.2f" % x)
-		utils.insert_indices(mat)
-		utils.print_mat(mat)
+		mat = utils.pairwise(centers, lambda doc1, doc2: doc1.similarities_by_name(doc2))
+		for sim_type in mat[0][0].keys():
+			print "Similarity Type:", sim_type
+			sub_mat = utils.apply_mat(mat, lambda x: x[sim_type])
+			sub_mat = utils.apply_mat(sub_mat, lambda x: "%3.2f" % x)
+			utils.insert_indices(sub_mat)
+			utils.print_mat(sub_mat)
+			print
+		print "Similarity Type: Harmonic Mean of all"
+		sub_mat = utils.apply_mat(mat, lambda x: utils.harmonic_mean_list(x.values()))
+		sub_mat = utils.apply_mat(sub_mat, lambda x: "%3.2f" % x)
+		utils.insert_indices(sub_mat)
+		utils.print_mat(sub_mat)
 		print
 		print
 
@@ -199,6 +208,10 @@ class KnownClusterAnalyzer:
 		print "\tF1 Macro: ", self.F1_macro()
 		print "\tF1 Micro: ", self.F1_micro()
 		print "\tTotal PR/RC: ", self.PR()
+		_total = sum(map(lambda count: self.total_counts[count], _counts))
+		s = "\t".join(map(lambda count: "%s: %d (%2.1f%%)" % (count, self.total_counts[count],
+					100.0 * self.total_counts[count] / _total), _counts))
+		print "\tTotal Counts:", s
 		print "\tLabel break down:"
 		for label in self.all_labels:
 			print "\n\t\t%s:" % label
@@ -340,7 +353,7 @@ class KnownClusterAnalyzer:
 				num += one * math.log(two + eps)
 		num *= -1
 
-		return num / self.cluster_entropy()
+		return 1.0 - (num / self.cluster_entropy())
 
 	def homogeneity(self):
 		if len(self.all_labels) == 1:

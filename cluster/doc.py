@@ -1,15 +1,22 @@
 
-import ocr
 import Image
 import json
-import profiles
 import string
 import utils
 import os
-from components import TextLine
 
-_file_extensions = [".jpg", ".xml", "_line.xml", "_FormType.txt", "_linesH.pgm", "_linesV.pgm"]
+import components
+import profiles
+import lines
+import ocr
 
+_file_extensions = [".jpg", ".xml", "_line.xml", "_FormType.txt", "_endpoints.xml"]
+
+def get_doc(_dir, basename):
+	paths = map(lambda ext: os.path.join(_dir, basename + ext), _file_extensions)
+
+	document = Document(basename, paths)
+	return document
 
 def get_docs(_dir, pr=True):
 	docs = []
@@ -24,13 +31,13 @@ def get_docs(_dir, pr=True):
 				basename = os.path.splitext(name)[0]
 				basenames.add(basename)
 		for basename in basenames:
-			paths = map(lambda ext: os.path.join(_dir, basename + ext), _file_extensions)
-
-			document = Document(basename, paths)
-			docs.append(document)
-			num_loaded += 1
-			if pr and num_loaded % 10 == 0:
-				print "\tLoaded %d documents" % num_loaded
+			try:
+				docs.append(get_doc(_dir, basename))
+				num_loaded += 1
+				if pr and num_loaded % 10 == 0:
+					print "\tLoaded %d documents" % num_loaded
+			except:
+				num_exceptions += 1
 	if pr:
 		print "\t%d Docs read" % num_loaded
 		if num_exceptions:
@@ -70,8 +77,7 @@ class Document:
 		self.ocr_path = paths[1]
 		self.prof_path = paths[2] # path of projection profiles
 		self.form_path = paths[3]
-		self.h_lines = paths[4]
-		self.v_lines = paths[5]
+		self.endpoints_path = paths[4]
 
 		self.loaded = False
 		if not LAZY and original:
@@ -83,12 +89,14 @@ class Document:
 		cpy.loaded = True  # makes sure we never load data from files
 
 		cpy.label = self.label
-		cpy.text_lines = list()
-		for line in self.text_lines:
-			cpy.text_lines.append(line.copy())
+		cpy.text_lines = map(lambda line: line.copy(), self.text_lines)
+		cpy.h_lines = map(lambda line: line.copy(), self.h_lines)
+		cpy.v_lines = map(lambda line: line.copy(), self.v_lines)
 		cpy.size = self.size
 
 		cpy.char_mass = self.char_mass
+		cpy.h_line_mass = self.h_line_mass
+		cpy.v_line_mass = self.v_line_mass
 
 		return cpy
 
@@ -114,6 +122,10 @@ class Document:
 		self.text_lines = ocr.clean_lines(ocr.extract_text_lines(self.ocr_path))
 		self._set_total_char_mass()
 
+		self.h_lines, self.v_lines = lines.read_lines(self.endpoints_path)
+		self._set_total_h_line_mass()
+		self._set_total_v_line_mass()
+
 		#profs = profiles.extract_profiles(self.prof_path)
 		#self.horz_prof = profs['HorizontalLineProfile']
 		#self.vert_prof = profs['VerticalLineProfile']
@@ -133,12 +145,38 @@ class Document:
 	def _set_total_char_mass(self):
 		self.char_mass = sum(map(lambda line: line.match_value(), self.text_lines))
 
+	def _set_total_h_line_mass(self):
+		self.h_line_mass = sum(map(lambda line: line.match_value(), self.h_lines))
+
+	def _set_total_v_line_mass(self):
+		self.v_line_mass = sum(map(lambda line: line.match_value(), self.v_lines))
+
 	def _get_matching_char_mass(self):
 		mass = 0.0
 		for line in self.text_lines:
 			if line.matched:
 				mass += line.match_value()
 		return mass
+
+	def _get_matching_h_line_mass(self):
+		mass = 0.0
+		for line in self.h_lines:
+			if line.matched:
+				mass += line.match_value()
+		return mass
+
+	def _get_matching_v_line_mass(self):
+		mass = 0.0
+		for line in self.v_lines:
+			if line.matched:
+				mass += line.match_value()
+		return mass
+
+	def _get_h_line_mass_ratio(self):
+		return self._get_matching_h_line_mass() / self.h_line_mass if self.h_line_mass else 0.0
+
+	def _get_v_line_mass_ratio(self):
+		return self._get_matching_v_line_mass() / self.v_line_mass if self.v_line_mass else 0.0
 
 	def _get_char_mass_ratio(self):
 		return self._get_matching_char_mass() / self.char_mass if self.char_mass else 0.0
@@ -149,8 +187,8 @@ class Document:
 				continue
 			match = line.matches(query_line, thresh_dist)
 			if match:
-				if ALLOW_PARTIAL_MATCHES and match != TextLine.COMPLETE_MATCH:
-					if match == TextLine.PREFIX_MATCH:
+				if ALLOW_PARTIAL_MATCHES and match != components.TextLine.COMPLETE_MATCH:
+					if match == components.TextLine.PREFIX_MATCH:
 						# line is a prefix of query_line
 						chars = query_line.chars[cmp_line.N:]
 					else:  
@@ -183,17 +221,34 @@ class Document:
 				return line
 
 		return None
-                    
+
 	def similarity(self, other):
-		return self.text_line_similarity(other)
+		return self.global_similarity(other)
+
+	def global_similarity(self, other):
+		sims = self.similarities_by_name(other).values()
+		return utils.harmonic_mean_list(sims)
                     
+	def similarities_by_name(self, other):
+		sims = dict()
+		for fun in self.similarity_functions():
+			sims[fun.__name__] = fun(other)
+		return sims
+
+	def similarity_functions(self):
+		funs = list()
+		funs.append(lambda other: self.text_line_similarity(other))
+		funs.append(lambda other: self.h_line_similarity(other))
+		funs.append(lambda other: self.v_line_similarity(other))
+		return funs
+
 	def text_line_similarity(self, other):
 		self._load_check()
 		other._load_check()
 		thresh_dist = 0.10 * max(max(self.size), max(other.size))  # % of largest dimension
 
-		self.clear_matches()
-		other.clear_matches()
+		self.clear_text_matches()
+		other.clear_text_matches()
 
 		# each matched line has a flag set by has_match indicating that it matches
 		for line in other.text_lines:
@@ -207,17 +262,60 @@ class Document:
 		other_ratio = other._get_char_mass_ratio()
 		return utils.harmonic_mean(my_ratio, other_ratio)
 
-	def clear_matches(self):
+	def line_similarity(self, other):
+		h_sim = self.h_line_similarity(other)
+		v_sim = self.v_line_similarity(other)
+		return utils.harmonic_mean(h_sim, v_sim)
+
+	def h_line_similarity(self, other):
+		self._load_check()
+		other._load_check()
+		self.clear_h_line_matches()
+		other.clear_h_line_matches()
+
+		h_thresh_dist = 0.10 * max(self.size[0], other.size[0]) 
+		h_matcher = lines.LineSequenceMatcher(self.h_lines, other.h_lines, h_thresh_dist)
+		h_matcher.line_edit_distance()  # builds table 
+		h_matcher.mark_matches()  # processes table
+		#print "Horizontal"
+		#h_matcher.display()
+		my_h_ratio = self._get_h_line_mass_ratio()
+		other_h_ratio = other._get_h_line_mass_ratio()
+		return utils.harmonic_mean(my_h_ratio, other_h_ratio)
+
+	def v_line_similarity(self, other):
+		self._load_check()
+		other._load_check()
+		self.clear_v_line_matches()
+		other.clear_v_line_matches()
+
+		v_thresh_dist = 0.10 * max(self.size[1], other.size[1]) 
+		v_matcher = lines.LineSequenceMatcher(self.v_lines, other.v_lines, v_thresh_dist)
+		v_dist = v_matcher.line_edit_distance()
+		v_matcher.mark_matches()  # processes table
+		#print "Vertical"
+		#v_matcher.display()
+		my_v_ratio = self._get_v_line_mass_ratio()
+		other_v_ratio = other._get_v_line_mass_ratio()
+		return utils.harmonic_mean(my_v_ratio, other_v_ratio)
+
+	def clear_text_matches(self):
 		for line in self.text_lines:
 			line.matched = False
 
-	def aggregate(self, other):
-		self._load_check()
-		other._load_check()
+	def clear_h_line_matches(self):
+		for line in self.h_lines:
+			line.matched = False
+
+	def clear_v_line_matches(self):
+		for line in self.v_lines:
+			line.matched = False
+
+	def _aggregate_text(self, other):
 		thresh_dist = 0.10 * max(max(self.size), max(other.size))  # % of largest dimension
-		
-		self.clear_matches()
-		other.clear_matches()
+
+		self.clear_text_matches()
+		other.clear_text_matches()
 
 		to_add = list()
 		for line in other.text_lines:
@@ -252,8 +350,72 @@ class Document:
 				matched_line.pos = (x, y)
 				#matched_line.size = (width, height)
 			else:
+				# TODO: should we be copying?
 				to_add.append(line)
 
 		self.text_lines += to_add
 		self._set_total_char_mass()
+	
+	def _aggregate_h_lines(self, other):
+		self.clear_h_line_matches()
+		other.clear_h_line_matches()
+		h_thresh_dist = 0.10 * max(self.size[0], other.size[0]) 
+		h_matcher = lines.LineSequenceMatcher(self.h_lines, other.h_lines, h_thresh_dist)
+		h_matcher.line_edit_distance() 
+		matches = h_matcher.get_matches() 
+
+		for my_line, other_line in matches:
+			# aggregate
+			x = (my_line.count * my_line.pos[0] + other_line.count * other_line.pos[0]
+				) / (my_line.count + other_line.count)
+			y = (my_line.count * my_line.pos[1] + other_line.count * other_line.pos[1]
+				) / (my_line.count + other_line.count)
+			l = (my_line.count * my_line.length  + other_line.count * other_line.length
+				) / (my_line.count + other_line.count)
+			my_line.count += other_line.count
+			my_line.pos = (x, y)
+			my_line.length = l
+
+		# add in the unmatched lines
+		for other_line in other.h_lines:
+			if not other_line.matched:
+				# TODO: should we be copying?
+				self.h_lines.append(other_line)
+		lines.sort_lines(self.h_lines)
+
+	def _aggregate_v_lines(self, other):
+		self.clear_v_line_matches()
+		other.clear_v_line_matches()
+		v_thresh_dist = 0.10 * max(self.size[1], other.size[1]) 
+		v_matcher = lines.LineSequenceMatcher(self.v_lines, other.v_lines, v_thresh_dist)
+		v_matcher.line_edit_distance() 
+		matches = v_matcher.get_matches() 
+
+		for my_line, other_line in matches:
+			# aggregate
+			x = (my_line.count * my_line.pos[0] + other_line.count * other_line.pos[0]
+				) / (my_line.count + other_line.count)
+			y = (my_line.count * my_line.pos[1] + other_line.count * other_line.pos[1]
+				) / (my_line.count + other_line.count)
+			l = (my_line.count * my_line.length  + other_line.count * other_line.length
+				) / (my_line.count + other_line.count)
+			my_line.count += other_line.count
+			my_line.pos = (x, y)
+			my_line.length = l
+
+		# add in the unmatched lines
+		for other_line in other.v_lines:
+			if not other_line.matched:
+				# TODO: should we be copying?
+				self.v_lines.append(other_line)
+		lines.sort_lines(self.v_lines)
+
+	def aggregate(self, other):
+		self._load_check()
+		other._load_check()
+
+		self._aggregate_text(other)
+		self._aggregate_h_lines(other)
+		self._aggregate_v_lines(other)
+		
 			
