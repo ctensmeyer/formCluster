@@ -4,6 +4,11 @@ import math
 import string
 import Levenshtein
 
+colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255),
+			 (255, 255, 0), (255, 0, 255), (0, 255, 255),
+			 (128, 0, 0), (0, 128, 0), (0, 0, 128),
+			 (128, 128, 0), (128, 0, 128), (0, 128, 128)]
+
 def e_dist(p1, p2):
 	return math.sqrt( (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 )
 
@@ -28,7 +33,7 @@ def harmonic_mean_list(l):
 	prod = float(reduce(lambda x, y: x * y, l))
 	if prod == 0:
 		return prod
-	denum = sum(map(lambda x: x / prod, l))
+	denum = sum(map(lambda x: prod / x, l))
 	return len(l) * prod / denum
 
 
@@ -52,8 +57,8 @@ def close_match(str1, str2, threshold):
 	norm = float(len(str1) + len(str2))
 	min_dist = abs(len(str1) - len(str2)) / norm 
 	if min_dist < threshold:
-		#dist = edit_distance(str1, str2, 1, levenstein)
-		dist = Levenshtein.distance(str1, str2)
+		dist = edit_distance(str1, str2, 1, levenstein)
+		#dist = Levenshtein.distance(str1, str2)
 		return ((dist <= 1) or (dist / norm) < threshold)
 	return False
 

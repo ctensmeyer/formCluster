@@ -1,5 +1,7 @@
 
 import Image
+import ImageDraw
+import ImageFont
 import json
 import string
 import utils
@@ -231,16 +233,20 @@ class Document:
                     
 	def similarities_by_name(self, other):
 		sims = dict()
-		for fun in self.similarity_functions():
-			sims[fun.__name__] = fun(other)
+		funs = self.similarity_functions()
+		for fun in funs:
+			sims[fun] = funs[fun](other)
 		return sims
 
 	def similarity_functions(self):
-		funs = list()
-		funs.append(lambda other: self.text_line_similarity(other))
-		funs.append(lambda other: self.h_line_similarity(other))
-		funs.append(lambda other: self.v_line_similarity(other))
+		funs = dict()
+		funs['text_line'] = (lambda other: self.text_line_similarity(other))
+		funs['h_line'] = (lambda other: self.h_line_similarity(other))
+		funs['v_line'] = (lambda other: self.v_line_similarity(other))
 		return funs
+
+	def similarity_function_names(self):
+		return ['text_line', 'h_line', 'v_line']
 
 	def text_line_similarity(self, other):
 		self._load_check()
@@ -351,7 +357,7 @@ class Document:
 				#matched_line.size = (width, height)
 			else:
 				# TODO: should we be copying?
-				to_add.append(line)
+				to_add.append(line.copy())
 
 		self.text_lines += to_add
 		self._set_total_char_mass()
@@ -362,6 +368,7 @@ class Document:
 		h_thresh_dist = 0.10 * max(self.size[0], other.size[0]) 
 		h_matcher = lines.LineSequenceMatcher(self.h_lines, other.h_lines, h_thresh_dist)
 		h_matcher.line_edit_distance() 
+		h_matcher.mark_matches()
 		matches = h_matcher.get_matches() 
 
 		for my_line, other_line in matches:
@@ -380,8 +387,10 @@ class Document:
 		for other_line in other.h_lines:
 			if not other_line.matched:
 				# TODO: should we be copying?
-				self.h_lines.append(other_line)
+				self.h_lines.append(other_line.copy())
 		lines.sort_lines(self.h_lines)
+
+		self._set_total_h_line_mass()
 
 	def _aggregate_v_lines(self, other):
 		self.clear_v_line_matches()
@@ -389,6 +398,7 @@ class Document:
 		v_thresh_dist = 0.10 * max(self.size[1], other.size[1]) 
 		v_matcher = lines.LineSequenceMatcher(self.v_lines, other.v_lines, v_thresh_dist)
 		v_matcher.line_edit_distance() 
+		v_matcher.mark_matches()
 		matches = v_matcher.get_matches() 
 
 		for my_line, other_line in matches:
@@ -407,15 +417,53 @@ class Document:
 		for other_line in other.v_lines:
 			if not other_line.matched:
 				# TODO: should we be copying?
-				self.v_lines.append(other_line)
+				self.v_lines.append(other_line.copy())
 		lines.sort_lines(self.v_lines)
+
+		self._set_total_v_line_mass()
 
 	def aggregate(self, other):
 		self._load_check()
 		other._load_check()
 
+		self.size = (max(self.size[0], other.size[0]), max(self.size[1], other.size[1]))
+
 		self._aggregate_text(other)
 		self._aggregate_h_lines(other)
 		self._aggregate_v_lines(other)
+
+	def draw(self, colortext=False):
+		'''
+		:return Image:
+		'''
+		self._load_check()
+		im = Image.new('RGB', self.size, 'white')
+		draw = ImageDraw.Draw(im)
+		colors = utils.colors
+		idx = 0
+		for line in self.h_lines:
+			draw.line( (line.pos, (line.pos[0] + line.length, line.pos[1]) ) , width=(line.thickness * 2), fill='red')
+		for line in self.v_lines:
+			draw.line( (line.pos, (line.pos[0],  line.pos[1] + line.length) ) , width=(line.thickness * 2), fill='blue')
+		for line in self.text_lines:
+			fill = colors[idx % len(colors)] if colortext else "black"
+			draw.text(line.pos, line.text, font=self._get_font(line.text, line.size[0]), fill=fill)
+			idx += 1
+
+		return im
+
+	def _get_font(self, text, width):
+		'''
+		For the given text/size combo returns a matching font
+		:param text: str
+		:param width: int
+		'''
+		#_font_path = "/home/chris/formCluster/cluster/LiberationMono-Bold.tff"
+		_font_path = "LiberationMono-Bold.ttf"
+		fontsize = 1
+		font = ImageFont.truetype(_font_path, fontsize)
+		while font.getsize(text)[0] < width:
+			fontsize += 1
+			font = ImageFont.truetype(_font_path, fontsize)
+		return font
 		
-			

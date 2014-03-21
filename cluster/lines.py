@@ -159,6 +159,8 @@ class LineSequenceMatcher():
 		:param l1_pi: int list 1 previous index - index into list 1 for the previous matched line
 		:param l2_pi: int list 2 previous index - index into list 2 for the previous matched line
 		'''
+		assert l1_ci > l1_pi
+		assert l2_ci > l2_pi
 		line1 = self.lines1[l1_ci]
 		line2 = self.lines2[l2_ci]
 		o = line1.orien

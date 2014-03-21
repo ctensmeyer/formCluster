@@ -149,13 +149,24 @@ class KnownClusterAnalyzer:
 
 	def print_cluster_cohesion(self):
 		print "CLUSTER COHESION:"
-		print "\t\tAVG\tSTDDEV\tLEN"
+		sim_names = self.clusters[0].members[0].similarity_function_names()
+		sim_names.append("harmonic_mean")
+		print "\t\t\t%s\tSIZE" % ("\t  ".join(sim_names))
+		#print "\t\tAVG\tSTDDEV\tSIZE"
 		for x, cluster in enumerate(self.clusters):
-			similarities = map(lambda doc: doc.similarity(cluster.center), cluster.members)
-			avg = utils.avg(similarities)
-			sd = utils.stddev(similarities)
+			# list of dictionaries
+			similarities = map(lambda doc: doc.similarities_by_name(cluster.center), cluster.members)
+			to_print = list()
+			for metric in similarities[0].keys():
+				values = map(lambda d: d[metric], similarities)
+				to_print.append(utils.avg(values))
+				to_print.append(utils.stddev(values))
+			values = map(lambda d: utils.harmonic_mean_list(d.values()), similarities)
+			to_print.append(utils.avg(values))
+			to_print.append(utils.stddev(values))
 			l = len(similarities)
-			print "\t%s:\t%3.2f\t%3.2f\t%d" % (x, avg, sd, l)
+			print "\t%s: \t%s\t%d" % (x, "\t".join(map(lambda s: "%3.2f" % s, to_print)), l)
+			#print "\t%s:\t%3.2f\t%3.2f\t%d" % (x, avg, sd, l)
 		print
 		print
 
