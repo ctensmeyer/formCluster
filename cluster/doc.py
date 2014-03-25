@@ -280,9 +280,8 @@ class Document:
 		other.clear_h_line_matches()
 
 		h_thresh_dist = 0.10 * max(self.size[0], other.size[0]) 
-		h_matcher = lines.LineSequenceMatcher(self.h_lines, other.h_lines, h_thresh_dist)
-		h_matcher.line_edit_distance()  # builds table 
-		h_matcher.mark_matches()  # processes table
+		h_matcher = lines.LineAssignmentMatcher(self.h_lines, other.h_lines, h_thresh_dist)
+		matches = h_matcher.get_matches()
 		#print "Horizontal"
 		#h_matcher.display()
 		my_h_ratio = self._get_h_line_mass_ratio()
@@ -296,9 +295,8 @@ class Document:
 		other.clear_v_line_matches()
 
 		v_thresh_dist = 0.10 * max(self.size[1], other.size[1]) 
-		v_matcher = lines.LineSequenceMatcher(self.v_lines, other.v_lines, v_thresh_dist)
-		v_dist = v_matcher.line_edit_distance()
-		v_matcher.mark_matches()  # processes table
+		v_matcher = lines.LineAssignmentMatcher(self.v_lines, other.v_lines, v_thresh_dist)
+		matches = v_matcher.get_matches()
 		#print "Vertical"
 		#v_matcher.display()
 		my_v_ratio = self._get_v_line_mass_ratio()
@@ -366,9 +364,7 @@ class Document:
 		self.clear_h_line_matches()
 		other.clear_h_line_matches()
 		h_thresh_dist = 0.10 * max(self.size[0], other.size[0]) 
-		h_matcher = lines.LineSequenceMatcher(self.h_lines, other.h_lines, h_thresh_dist)
-		h_matcher.line_edit_distance() 
-		h_matcher.mark_matches()
+		h_matcher = lines.LineAssignmentMatcher(self.h_lines, other.h_lines, h_thresh_dist)
 		matches = h_matcher.get_matches() 
 
 		for my_line, other_line in matches:
@@ -382,6 +378,7 @@ class Document:
 			my_line.count += other_line.count
 			my_line.pos = (x, y)
 			my_line.length = l
+			other_line.matched = True
 
 		# add in the unmatched lines
 		for other_line in other.h_lines:
@@ -396,9 +393,7 @@ class Document:
 		self.clear_v_line_matches()
 		other.clear_v_line_matches()
 		v_thresh_dist = 0.10 * max(self.size[1], other.size[1]) 
-		v_matcher = lines.LineSequenceMatcher(self.v_lines, other.v_lines, v_thresh_dist)
-		v_matcher.line_edit_distance() 
-		v_matcher.mark_matches()
+		v_matcher = lines.LineAssignmentMatcher(self.v_lines, other.v_lines, v_thresh_dist)
 		matches = v_matcher.get_matches() 
 
 		for my_line, other_line in matches:
@@ -412,6 +407,7 @@ class Document:
 			my_line.count += other_line.count
 			my_line.pos = (x, y)
 			my_line.length = l
+			other_line.matched = True
 
 		# add in the unmatched lines
 		for other_line in other.v_lines:

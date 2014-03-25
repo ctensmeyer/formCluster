@@ -1,7 +1,8 @@
 
-import Image
-import ImageDraw
 import xml.etree.ElementTree as ET
+import ImageDraw
+import Image
+import munkres
 import math
 
 import components
@@ -99,15 +100,9 @@ def draw_lines(h, v, image_path, size):
 	im.save(image_path)
 
 
-class LineSequenceMatcher():
-	# constants used in our back pointer table for Dynamic Programming
-	START = -1
-	MATCH = 0
-	DEL_1 = 1
-	DEL_2 = 2
-	SUB = 3
-
-	def __init__(self, lines1, lines2, dist_thresh):
+class LineMatcher():
+	
+	def __init__(self, lines1, lines2):
 		'''
 		:param lines1: list of Lines
 		:param lines2: list of Lines
@@ -116,7 +111,13 @@ class LineSequenceMatcher():
 		assert len(set(map(lambda line: line.orien, lines1 + lines2))) == 1
 		self.lines1 = lines1
 		self.lines2 = lines2
-		self.dist_thresh = dist_thresh
+
+	def get_matches(self):
+		'''
+		Performs Line matching.
+		:return: list( (line1, line2) )
+		'''
+		return zip(self.lines1, self.lines2)
 
 	def sort(self):
 		'''
@@ -125,6 +126,82 @@ class LineSequenceMatcher():
 		'''
 		self.lines1.sort(key=lambda line: line.pos[line.orien])
 		self.lines2.sort(key=lambda line: line.pos[line.orien])
+
+
+class LineAssignmentMatcher(LineMatcher):
+	'''
+	Casts the Line Matching problem as the assignment problem solvable by
+	the hungarian algorithm.  O(N^3) time
+	'''
+	NONMATCH_COST = 100000
+	
+	def __init__(self, lines1, lines2, dist_thresh):
+		LineMatcher.__init__(self, lines1, lines2)
+		self.dist_thresh = dist_thresh
+		self.max_match_val = max(map(lambda line: line.match_value(), lines1)) + max(map(lambda line: line.match_value(), lines2))
+
+	def get_matches(self):
+		'''
+		Performs Line matching.  Each line that is matched is marked by setting its matched attr to True
+		:return: list( (line1, line2) )
+		'''
+		cost_mat = self._build_mat()
+		hungarian = munkres.Munkres()
+		match_idxs = hungarian.compute(cost_mat)
+		matches = list()
+		_n = LineAssignmentMatcher.NONMATCH_COST  # optimization
+		for idx1, idx2 in match_idxs:
+			if cost_mat[idx1][idx2] != _n:
+				matches.append( (self.lines1[idx1], self.lines2[idx2]) )
+				self.lines1[idx1].matched = True
+				self.lines2[idx2].matched = True
+		return matches
+
+	def _build_mat(self):
+		'''
+		Builds the cost matrix for the assignment problem
+		'''
+		_n = LineAssignmentMatcher.NONMATCH_COST
+		mat = []
+		for line1 in self.lines1:
+			row = []
+			for line2 in self.lines2:
+				if self._match(line1, line2):
+					# puts priority on weightier lines
+					row.append(self.max_match_val - line1.match_value() - line2.match_value())
+				else:
+					row.append(_n)
+			mat.append(row)
+		self._pad(mat)
+		return mat
+
+	def _pad(self, mat):
+		'''
+		Pads a rectangular matrix to be square
+		'''
+		_n = LineAssignmentMatcher.NONMATCH_COST
+		while len(mat) < len(mat[0]):
+			mat.append([_n] * len(mat[0]))
+		while len(mat[0]) < len(mat):
+			map(lambda row: row.append(_n), mat)
+
+	def _match(self, line1, line2):
+		len_ratio = max(line1.length / float(line2.length), line2.length / float(line1.length))
+		dist = math.sqrt((line1.pos[0] - line2.pos[0]) ** 2 + (line1.pos[1] - line2.pos[1]) ** 2)
+		return len_ratio < 1.25 and dist < self.dist_thresh
+		
+		
+class LineSequenceMatcher(LineMatcher):
+	# constants used in our back pointer table for Dynamic Programming
+	START = -1
+	MATCH = 0
+	DEL_1 = 1
+	DEL_2 = 2
+	SUB = 3
+
+	def __init__(self, lines1, lines2, dist_thresh):
+		LineMatcher.__init__(self, lines1, lines2)
+		self.dist_thresh = dist_thresh
 
 	def _get_last_match_indices(self, i, j):
 		'''
@@ -149,10 +226,10 @@ class LineSequenceMatcher():
 				j -= 1
 		return i - 1, j - 1  # -1 to convert from table indicies to list indices
 
-	def line_indel_cost(self, line):
+	def _line_indel_cost(self, line):
 		return 2
 
-	def line_match_cost(self, l1_ci, l2_ci, l1_pi, l2_pi):
+	def _line_match_cost(self, l1_ci, l2_ci, l1_pi, l2_pi):
 		'''
 		:param l1_ci: int list 1 current index - index into list 1
 		:param l2_ci: int list 2 current index - index into list 2
@@ -185,7 +262,7 @@ class LineSequenceMatcher():
 			diff_offset = offset1 - offset2;
 			dist = math.sqrt(diff_dist ** 2 + diff_offset ** 2)
 
-		if len_ratio < 1.15 and dist < self.dist_thresh:
+		if len_ratio < 1.25 and dist < self.dist_thresh:
 			return 0
 		else:
 			return 3
@@ -198,7 +275,7 @@ class LineSequenceMatcher():
 		#  as if lines1 were considered the empty sequence
 		first_row = [0]
 		for j in xrange(1, len(self.lines2) + 1):
-			val = self.line_indel_cost(self.lines2[j-1]) + first_row[-1]
+			val = self._line_indel_cost(self.lines2[j-1]) + first_row[-1]
 			first_row.append(val)
 		self.cost_mat = [first_row]
 
@@ -214,7 +291,7 @@ class LineSequenceMatcher():
 		'''
 		# start each successive row with the cost as if lines2 were
 		#  an empty sequence, so the cumulative cost of deleting lines1
-		val = self.line_indel_cost(self.lines1[i-1]) + self.cost_mat[-1][0]
+		val = self._line_indel_cost(self.lines1[i-1]) + self.cost_mat[-1][0]
 		self.cost_mat.append([val])
 		self.op_mat.append([LineSequenceMatcher.DEL_1])
 		
@@ -225,16 +302,16 @@ class LineSequenceMatcher():
 		'''
 		# cost of deleting current line from lines1
 		tmp1 = (self.lines1[i-1])
-		del_line1_cost = self.cost_mat[i][j-1] + self.line_indel_cost(tmp1)
+		del_line1_cost = self.cost_mat[i][j-1] + self._line_indel_cost(tmp1)
 		# cost of deleting current line from lines2
 		tmp2 = (self.lines2[j-1])
-		del_line2_cost = self.cost_mat[i-1][j] + self.line_indel_cost(tmp2)
+		del_line2_cost = self.cost_mat[i-1][j] + self._line_indel_cost(tmp2)
 
 		# match cost depends on the relative distance of each of the two
 		#  lines in consideration and the previous set of lines set as a match
 		lines1_idx, lines2_idx = self._get_last_match_indices(i-1, j-1)
 
-		marginal_match_cost = self.line_match_cost(i-1, j-1, lines1_idx, lines2_idx)
+		marginal_match_cost = self._line_match_cost(i-1, j-1, lines1_idx, lines2_idx)
 		cum_match_cost = marginal_match_cost + self.cost_mat[i-1][j-1]
 		return del_line1_cost, del_line2_cost, cum_match_cost, marginal_match_cost
 
@@ -254,9 +331,9 @@ class LineSequenceMatcher():
 		elif _min == mc:
 			self.op_mat[-1].append(LineSequenceMatcher.MATCH if match else LineSequenceMatcher.SUB)
 		else:
-			assert False  # ???
+			assert False
 
-	def line_edit_distance(self):
+	def _build_mats(self):
 		'''
 		This is a heuristic to match two sequences of line objects based on the
 			principles of the edit distance.
@@ -275,34 +352,12 @@ class LineSequenceMatcher():
 		final_val =  self.cost_mat[-1][-1] 
 		return final_val
 
-	def mark_matches(self):
-		'''
-		Assumes self.op_mat is built
-		Backtraces the entire sequence and marks every pair of lines that match
-		'''
-		i = len(self.op_mat) - 1
-		j = len(self.op_mat[0]) - 1
-		while self.op_mat[i][j] !=  LineSequenceMatcher.START:
-			if self.op_mat[i][j] == LineSequenceMatcher.DEL_1:
-				i -= 1
-			elif self.op_mat[i][j] == LineSequenceMatcher.DEL_2:
-				j -= 1
-			elif self.op_mat[i][j] == LineSequenceMatcher.SUB:
-				i -= 1
-				j -= 1
-			elif self.op_mat[i][j] == LineSequenceMatcher.MATCH:
-				i -= 1
-				j -= 1
-				self.lines1[i].matched = True
-				self.lines2[j].matched = True
-			else:
-				assert False
-
 	def get_matches(self):
 		'''
-		Assumes self.op_mat is built
-		Backtraces the entire sequence and stores every pair of matching lines
+		Performs Line matching.  Each line that is matched is marked by setting its matched attr to True
+		:return: list( (line1, line2) )
 		'''
+		self._build_mats()
 		lines = list()
 		i = len(self.op_mat) - 1
 		j = len(self.op_mat[0]) - 1
@@ -318,9 +373,26 @@ class LineSequenceMatcher():
 				i -= 1
 				j -= 1
 				lines.append( (self.lines1[i], self.lines2[j]) )
+				self.lines1[i].matched = True
+				self.lines2[j].matched = True
 			else:
 				assert False
 		return lines
+
+	def estimate_offset(self):
+		'''
+		Assumes self.get_matches can be called
+		:return: tuple of the avg offset of the matched lines
+		'''
+		matches = self.get_matches
+		dx = 0
+		dy = 0
+		for line1, line2 in matches:
+			dx += line1.pos[0] - line2.pos[0]
+			dy += line1.pos[1] - line2.pos[1]
+		dx /= len(matches)
+		dy /= len(matches)
+		return (dx, dy)
 	
 	def display(self):
 		'''

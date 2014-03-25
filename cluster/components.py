@@ -105,7 +105,10 @@ class TextLine(Feature):
 		return Feature.match_value(self) * self.N
 
 	def set_text(self):
-		# TODO: why doesn't this update the position.  Maybe chars have been removed?
+		if self.chars:
+			ul = self.pos = self.chars[0].pos
+			br = self.chars[-1].pos2
+			self.size = (br[0] - ul[0], br[1] - ul[1])
 		self.text = "".join(map(lambda char: char.val, self.chars))
 		self.N = len(self.text)
 		

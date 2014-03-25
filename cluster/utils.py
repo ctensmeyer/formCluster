@@ -57,8 +57,8 @@ def close_match(str1, str2, threshold):
 	norm = float(len(str1) + len(str2))
 	min_dist = abs(len(str1) - len(str2)) / norm 
 	if min_dist < threshold:
-		dist = edit_distance(str1, str2, 1, levenstein)
-		#dist = Levenshtein.distance(str1, str2)
+		#dist = edit_distance(str1, str2, 1, levenstein)
+		dist = Levenshtein.distance(str1, str2)
 		return ((dist <= 1) or (dist / norm) < threshold)
 	return False
 

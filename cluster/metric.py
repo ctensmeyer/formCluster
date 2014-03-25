@@ -1,11 +1,15 @@
 
 import collections
+import datetime
 import json
 import utils
 import math
+import sys
+import os
 
 _counts = ['TP', 'TN', 'FP', 'FN']
 eps = 10e-10
+_output_dir = "output/"
 
 class KnownClusterAnalyzer:
 
@@ -31,11 +35,10 @@ class KnownClusterAnalyzer:
 	def sort_by_size(self):
 		self.clusters.sort(key=lambda cluster: len(cluster.members), reverse=True)
 
-	def create_cluster_ids(self, prefix="cluster_"):
+	def create_cluster_ids(self):
 		num = 0
 		for cluster in self.clusters:
 			if cluster._id is None:
-				#cluster._id = "%s%d" % (prefix, num)
 				cluster._id = num
 				num += 1
 
@@ -43,6 +46,27 @@ class KnownClusterAnalyzer:
 		for cluster in self.clusters:
 			if cluster.label is None:
 				cluster.label = self.majority_label(cluster)
+
+	def draw_centers(self):
+		# make the appropriate directory
+		dir_name = os.path.join(_output_dir, str(datetime.datetime.now()).replace(' ', '_'))
+		try:
+			os.mkdir(dir_name)
+		except:
+			pass
+		
+		# write the arguments so we know what we did
+		f = open(os.path.join(dir_name, "args.txt"), 'w')
+		f.write(repr(sys.argv))
+		f.close()
+
+		# draw each cluster center
+		for cluster in self.clusters:
+			im = cluster.center.draw()
+			im.save(os.path.join(dir_name, "cluster_%d.png" % cluster._id))
+			im = cluster.center.draw(colortext=True)
+			im.save(os.path.join(dir_name, "color_cluster_%d.png" % cluster._id))
+			
 
 	def print_assignments(self):
 		print "ALL DOCUMENT ASSIGNMENTS:"
@@ -157,7 +181,7 @@ class KnownClusterAnalyzer:
 			# list of dictionaries
 			similarities = map(lambda doc: doc.similarities_by_name(cluster.center), cluster.members)
 			to_print = list()
-			for metric in similarities[0].keys():
+			for metric in sim_names[:-1]:
 				values = map(lambda d: d[metric], similarities)
 				to_print.append(utils.avg(values))
 				to_print.append(utils.stddev(values))
