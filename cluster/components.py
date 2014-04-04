@@ -12,12 +12,19 @@ class Feature(object):
 		'''
 		self.count = count
 		self.weight = weight
+		self.matched = False
 
 	def match_value(self):
 		'''
 		In template matching, how much does this feature actually matter?
 		'''
 		return self.count * self.weight
+
+	def decay(self, amount):
+		'''
+		:param amount: num - decrements the count by amount
+		'''
+		self.count -= amount
 			
 
 class Line(Feature):
@@ -47,8 +54,8 @@ class Line(Feature):
 		return cpy
 
 	def __str__(self):
-		return "%s pos: %s length: %d thickness %d" % \
-				 ('H' if self.orien else 'V', self.pos, self.length, self.thickness)
+		return "%s pos: %s length: %d thickness %d count %.2f" % \
+				 ('H' if self.orien else 'V', self.pos, self.length, self.thickness, self.count)
 
 	def is_horizontal(self):
 		return self.orien == Line.HORIZONTAL
@@ -62,6 +69,10 @@ class Line(Feature):
 		Gives lines value proportional to log(length)
 		'''
 		return Feature.match_value(self) * math.log(self.length)
+
+	def length_range(self):
+		return (self.pos[1-self.orien], self.pos[1-self.orien] + self.length)
+		
 
 class TextLine(Feature):
 

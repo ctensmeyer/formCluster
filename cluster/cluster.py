@@ -76,9 +76,9 @@ class TemplateSorter:
 					cluster_match = self.clusters[idx]
 					cluster_match.center.aggregate(doc)
 					cluster_match.members.append(doc)
-			
 
 	def get_clusters(self):
+		map(lambda cluster: cluster.center.final_prune(), self.clusters)
 		return self.clusters
 
 	
@@ -109,6 +109,7 @@ class CheatingSorter:
 		assert len(self.templates) == len(self.assignments)
 		clusters = []
 		for label in sorted(self.templates):
+			self.templates[label].final_prune()
 			cluster = Cluster(self.assignments[label], self.templates[label])
 			clusters.append(cluster)
 		return clusters

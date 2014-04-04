@@ -156,7 +156,8 @@ class KnownClusterAnalyzer:
 		print "CLUSTER SIM MATRICES:"
 		centers = map(lambda cluster: cluster.center, self.clusters)
 		mat = utils.pairwise(centers, lambda doc1, doc2: doc1.similarities_by_name(doc2))
-		for sim_type in mat[0][0].keys():
+		sim_names = self.clusters[0].members[0].similarity_function_names()
+		for sim_type in sim_names:
 			print "Similarity Type:", sim_type
 			sub_mat = utils.apply_mat(mat, lambda x: x[sim_type])
 			sub_mat = utils.apply_mat(sub_mat, lambda x: "%3.2f" % x)

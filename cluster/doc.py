@@ -14,6 +14,12 @@ import ocr
 
 _file_extensions = [".jpg", ".xml", "_line.xml", "_FormType.txt", "_endpoints.xml"]
 
+DECAY = True
+
+_line_thresh_mult = 0.05
+_line_decay_amount = 1.0 / 10 if DECAY else 0
+_text_decay_amount = 1.0 / 15 if DECAY else 0
+
 def get_doc(_dir, basename):
 	paths = map(lambda ext: os.path.join(_dir, basename + ext), _file_extensions)
 
@@ -58,7 +64,7 @@ def get_docs_nested(data_dir, pr=True):
 		total_exceptions += num_exceptions
 	if pr:
 		print "Finished loading all documents"
-		print "%d Total docs read" % len(docs)
+		print "%d Total docs read" % len(all_docs)
 		if total_exceptions:
 			print "%d Toal docs could not be read" % total_exceptions
 	return all_docs
@@ -97,8 +103,8 @@ class Document:
 		cpy.size = self.size
 
 		cpy.char_mass = self.char_mass
-		cpy.h_line_mass = self.h_line_mass
-		cpy.v_line_mass = self.v_line_mass
+		#cpy.h_line_mass = self.h_line_mass
+		#cpy.v_line_mass = self.v_line_mass
 
 		return cpy
 
@@ -125,8 +131,8 @@ class Document:
 		self._set_total_char_mass()
 
 		self.h_lines, self.v_lines = lines.read_lines(self.endpoints_path)
-		self._set_total_h_line_mass()
-		self._set_total_v_line_mass()
+		assert self.h_lines
+		assert self.v_lines
 
 		#profs = profiles.extract_profiles(self.prof_path)
 		#self.horz_prof = profs['HorizontalLineProfile']
@@ -147,38 +153,12 @@ class Document:
 	def _set_total_char_mass(self):
 		self.char_mass = sum(map(lambda line: line.match_value(), self.text_lines))
 
-	def _set_total_h_line_mass(self):
-		self.h_line_mass = sum(map(lambda line: line.match_value(), self.h_lines))
-
-	def _set_total_v_line_mass(self):
-		self.v_line_mass = sum(map(lambda line: line.match_value(), self.v_lines))
-
 	def _get_matching_char_mass(self):
 		mass = 0.0
 		for line in self.text_lines:
 			if line.matched:
 				mass += line.match_value()
 		return mass
-
-	def _get_matching_h_line_mass(self):
-		mass = 0.0
-		for line in self.h_lines:
-			if line.matched:
-				mass += line.match_value()
-		return mass
-
-	def _get_matching_v_line_mass(self):
-		mass = 0.0
-		for line in self.v_lines:
-			if line.matched:
-				mass += line.match_value()
-		return mass
-
-	def _get_h_line_mass_ratio(self):
-		return self._get_matching_h_line_mass() / self.h_line_mass if self.h_line_mass else 0.0
-
-	def _get_v_line_mass_ratio(self):
-		return self._get_matching_v_line_mass() / self.v_line_mass if self.v_line_mass else 0.0
 
 	def _get_char_mass_ratio(self):
 		return self._get_matching_char_mass() / self.char_mass if self.char_mass else 0.0
@@ -276,43 +256,32 @@ class Document:
 	def h_line_similarity(self, other):
 		self._load_check()
 		other._load_check()
-		self.clear_h_line_matches()
-		other.clear_h_line_matches()
 
-		h_thresh_dist = 0.10 * max(self.size[0], other.size[0]) 
-		h_matcher = lines.LineAssignmentMatcher(self.h_lines, other.h_lines, h_thresh_dist)
+		h_thresh_dist = _line_thresh_mult * max(self.size[0], other.size[0]) 
+		h_matcher = lines.LMatcher(self.h_lines, other.h_lines, h_thresh_dist)
 		matches = h_matcher.get_matches()
-		#print "Horizontal"
+		#print "Horizontal Matricies:"
 		#h_matcher.display()
-		my_h_ratio = self._get_h_line_mass_ratio()
-		other_h_ratio = other._get_h_line_mass_ratio()
-		return utils.harmonic_mean(my_h_ratio, other_h_ratio)
+		#ops = h_matcher.get_operations()
+		#h_matcher.print_ops(ops)
+
+		return h_matcher.get_similarity()
 
 	def v_line_similarity(self, other):
 		self._load_check()
 		other._load_check()
-		self.clear_v_line_matches()
-		other.clear_v_line_matches()
+		#self.clear_v_line_matches()
+		#other.clear_v_line_matches()
 
-		v_thresh_dist = 0.10 * max(self.size[1], other.size[1]) 
-		v_matcher = lines.LineAssignmentMatcher(self.v_lines, other.v_lines, v_thresh_dist)
-		matches = v_matcher.get_matches()
+		v_thresh_dist = _line_thresh_mult * max(self.size[1], other.size[1]) 
+		v_matcher = lines.LMatcher(self.v_lines, other.v_lines, v_thresh_dist)
+		return v_matcher.get_similarity()
+		#matches = v_matcher.get_matches()
 		#print "Vertical"
 		#v_matcher.display()
-		my_v_ratio = self._get_v_line_mass_ratio()
-		other_v_ratio = other._get_v_line_mass_ratio()
-		return utils.harmonic_mean(my_v_ratio, other_v_ratio)
 
 	def clear_text_matches(self):
 		for line in self.text_lines:
-			line.matched = False
-
-	def clear_h_line_matches(self):
-		for line in self.h_lines:
-			line.matched = False
-
-	def clear_v_line_matches(self):
-		for line in self.v_lines:
 			line.matched = False
 
 	def _aggregate_text(self, other):
@@ -359,65 +328,19 @@ class Document:
 
 		self.text_lines += to_add
 		self._set_total_char_mass()
-	
+
 	def _aggregate_h_lines(self, other):
-		self.clear_h_line_matches()
-		other.clear_h_line_matches()
-		h_thresh_dist = 0.10 * max(self.size[0], other.size[0]) 
-		h_matcher = lines.LineAssignmentMatcher(self.h_lines, other.h_lines, h_thresh_dist)
-		matches = h_matcher.get_matches() 
-
-		for my_line, other_line in matches:
-			# aggregate
-			x = (my_line.count * my_line.pos[0] + other_line.count * other_line.pos[0]
-				) / (my_line.count + other_line.count)
-			y = (my_line.count * my_line.pos[1] + other_line.count * other_line.pos[1]
-				) / (my_line.count + other_line.count)
-			l = (my_line.count * my_line.length  + other_line.count * other_line.length
-				) / (my_line.count + other_line.count)
-			my_line.count += other_line.count
-			my_line.pos = (x, y)
-			my_line.length = l
-			other_line.matched = True
-
-		# add in the unmatched lines
-		for other_line in other.h_lines:
-			if not other_line.matched:
-				# TODO: should we be copying?
-				self.h_lines.append(other_line.copy())
-		lines.sort_lines(self.h_lines)
-
-		self._set_total_h_line_mass()
+		h_thresh_dist = _line_thresh_mult * max(self.size[0], other.size[0]) 
+		h_matcher = lines.LMatcher(self.h_lines, other.h_lines, h_thresh_dist)
+		#ops = h_matcher.get_operations()
+		#h_matcher.print_ops(ops)
+		self.h_lines = h_matcher.get_merged_lines()
 
 	def _aggregate_v_lines(self, other):
-		self.clear_v_line_matches()
-		other.clear_v_line_matches()
-		v_thresh_dist = 0.10 * max(self.size[1], other.size[1]) 
-		v_matcher = lines.LineAssignmentMatcher(self.v_lines, other.v_lines, v_thresh_dist)
-		matches = v_matcher.get_matches() 
-
-		for my_line, other_line in matches:
-			# aggregate
-			x = (my_line.count * my_line.pos[0] + other_line.count * other_line.pos[0]
-				) / (my_line.count + other_line.count)
-			y = (my_line.count * my_line.pos[1] + other_line.count * other_line.pos[1]
-				) / (my_line.count + other_line.count)
-			l = (my_line.count * my_line.length  + other_line.count * other_line.length
-				) / (my_line.count + other_line.count)
-			my_line.count += other_line.count
-			my_line.pos = (x, y)
-			my_line.length = l
-			other_line.matched = True
-
-		# add in the unmatched lines
-		for other_line in other.v_lines:
-			if not other_line.matched:
-				# TODO: should we be copying?
-				self.v_lines.append(other_line.copy())
-		lines.sort_lines(self.v_lines)
-
-		self._set_total_v_line_mass()
-
+		v_thresh_dist = _line_thresh_mult * max(self.size[1], other.size[1]) 
+		v_matcher = lines.LMatcher(self.v_lines, other.v_lines, v_thresh_dist)
+		self.v_lines = v_matcher.get_merged_lines()
+		
 	def aggregate(self, other):
 		self._load_check()
 		other._load_check()
@@ -428,8 +351,43 @@ class Document:
 		self._aggregate_h_lines(other)
 		self._aggregate_v_lines(other)
 
+		self.prune()
+
+	def prune(self):
+		self._prune_text(0, _text_decay_amount)
+		self._prune_h_lines(0, _line_decay_amount)
+		self._prune_v_lines(0, _line_decay_amount)
+
+	def final_prune(self):
+		get_prune_val = lambda lines: max(map(lambda line: line.count, lines)) / 10.0
+		if self.text_lines:
+			self._prune_text(get_prune_val(self.text_lines), _text_decay_amount)
+		if self.h_lines:
+			self._prune_h_lines(get_prune_val(self.h_lines), _line_decay_amount)
+		if self.v_lines:
+			self._prune_v_lines(get_prune_val(self.v_lines), _line_decay_amount)
+
+	def _prune_text(self, thresh, amount):
+		map(lambda line: line.decay(amount), self.text_lines)
+		self.text_lines = filter(lambda line: line.count > thresh, self.text_lines)
+
+	def _prune_h_lines(self, thresh, amount):
+		map(lambda line: line.decay(amount), self.h_lines)
+		tmp = filter(lambda line: line.count > thresh, self.h_lines)
+		if not tmp:
+			print self.h_lines
+		self.h_lines = tmp
+
+	def _prune_v_lines(self, thresh, amount):
+		map(lambda line: line.decay(amount), self.v_lines)
+		tmp = filter(lambda line: line.count > thresh, self.v_lines)
+		if not tmp:
+			print self.v_lines
+		self.v_lines = tmp
+
 	def draw(self, colortext=False):
 		'''
+		:param colortext: True for drawing each text line a different color, False for all black
 		:return Image:
 		'''
 		self._load_check()
@@ -438,28 +396,18 @@ class Document:
 		colors = utils.colors
 		idx = 0
 		for line in self.h_lines:
-			draw.line( (line.pos, (line.pos[0] + line.length, line.pos[1]) ) , width=(line.thickness * 2), fill='red')
+			color = 'orange' if line.matched else 'red'
+			draw.line( (utils.tup_int(line.pos), utils.tup_int( (line.pos[0] + line.length, line.pos[1]) )) , width=int(line.thickness * 2), fill=color)
+			draw.text( utils.tup_int(line.pos), "%.2f" % line.count, fill="black")
 		for line in self.v_lines:
-			draw.line( (line.pos, (line.pos[0],  line.pos[1] + line.length) ) , width=(line.thickness * 2), fill='blue')
+			color = 'purple' if line.matched else 'blue'
+			draw.line( (utils.tup_int(line.pos), utils.tup_int( (line.pos[0], line.pos[1] + line.length) )) , width=int(line.thickness * 2), fill=color)
+			draw.text( utils.tup_int(line.pos), "%.2f" % line.count, fill="black")
 		for line in self.text_lines:
 			fill = colors[idx % len(colors)] if colortext else "black"
-			draw.text(line.pos, line.text, font=self._get_font(line.text, line.size[0]), fill=fill)
+			draw.text(line.pos, line.text, font=utils.get_font(line.text, line.size[0]), fill=fill)
+			draw.text( line.pos, "%.2f" % line.count, fill="blue")
 			idx += 1
 
 		return im
-
-	def _get_font(self, text, width):
-		'''
-		For the given text/size combo returns a matching font
-		:param text: str
-		:param width: int
-		'''
-		#_font_path = "/home/chris/formCluster/cluster/LiberationMono-Bold.tff"
-		_font_path = "LiberationMono-Bold.ttf"
-		fontsize = 1
-		font = ImageFont.truetype(_font_path, fontsize)
-		while font.getsize(text)[0] < width:
-			fontsize += 1
-			font = ImageFont.truetype(_font_path, fontsize)
-		return font
 		
