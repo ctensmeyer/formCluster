@@ -6,7 +6,7 @@ import ImageDraw
 import imageutils
 import line_detect_lib as ld
 
-LOW_THRESH = 40
+LOW_THRESH = 30
 HIGH_THRESH = 120
 
 MIN_LINE_LENGTH = 0.01
@@ -100,7 +100,7 @@ def get_line_ccs(im):
 
 	return low_ccs
 
-def write_line_file(horz_im, vert_im, outfile):
+def write_line_file(horz_im, vert_im, outfile, get_image=False):
 	horz_ccs = get_line_ccs(horz_im)
 	vert_ccs = get_line_ccs(vert_im)
 	horz_lines = map(extract_line_from_cc, horz_ccs)
@@ -118,12 +118,12 @@ def write_line_file(horz_im, vert_im, outfile):
 			out.write("\t\t<Line x=\"%s\" y=\"%s\" length=\"%s\" thickness=\"%s\"/>\n" % (c, s, l, t) )
 		out.write("\t</VerticalLines>\n")
 		out.write("</Lines>\n")
+	if get_image:
+		im = Image.new("RGB", horz_im.size, "white")
+		draw_lines(horz_lines, vert_lines, im)
+		return im
 
-def draw_lines(horz_im, vert_im, im):
-	horz_ccs = get_line_ccs(horz_im)
-	vert_ccs = get_line_ccs(vert_im)
-	horz_lines = map(extract_line_from_cc, horz_ccs)
-	vert_lines = map(extract_line_from_cc, vert_ccs)
+def draw_lines(horz_lines, vert_lines, im):
 	draw = ImageDraw.Draw(im)
 	for o, l, t, c, s in horz_lines:
 		x, y = s, c

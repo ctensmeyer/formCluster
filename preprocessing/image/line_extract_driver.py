@@ -28,6 +28,7 @@ def main(in_dir, out_dir):
 		ocr_path = os.path.join(in_dir, ocr_name)
 		save_path = os.path.join(out_dir, save_name)
 		out_path = os.path.join(out_dir, f.replace(IMAGE_EXT, "")  + LINE_EXT)
+		verify_path = os.path.join(out_dir, f.replace(IMAGE_EXT, "")  + "_verify.png")
 
 		h_im = Image.open(h_path)
 		v_im = Image.open(v_path)
@@ -39,11 +40,10 @@ def main(in_dir, out_dir):
 		#else:
 		#	print "Cannot find ", ocr_path
 		#orig_im = Image.open(orig_path).convert("RGB")
-		#orig_im = Image.new("RGB", h_im.size, "white")
+		#verify_im = Image.new("RGB", h_im.size, "white")
 
-		line_lib.write_line_file(h_im, v_im, out_path)
-		#line_lib.draw_lines(h_im, v_im, orig_im)
-		#orig_im.save(save_path)
+		verify_im = line_lib.write_line_file(h_im, v_im, out_path, get_image=True)
+		verify_im.save(verify_path)
 
 
 if __name__ == "__main__":
