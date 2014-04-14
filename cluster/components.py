@@ -70,8 +70,8 @@ class Line(Feature):
 		'''
 		return Feature.match_value(self) * math.log(self.length)
 
-	def length_range(self):
-		return (self.pos[1-self.orien], self.pos[1-self.orien] + self.length)
+	def length_range(self, offset=0):
+		return (self.pos[1-self.orien] + offset, self.pos[1-self.orien] + self.length + offset)
 		
 
 class TextLine(Feature):
@@ -132,7 +132,7 @@ class TextLine(Feature):
 	def filter_nonalpha(self):
 		for x in xrange(self.N):
 			c = self.chars[x].val
-			if not (c.isalpha() or c.isspace()):
+			if ord(c) > 127 or not (c.isalpha() or c.isspace()):
 				self.chars[x].val = ' '
 		self.set_text()
 

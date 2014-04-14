@@ -59,6 +59,13 @@ def gap_len(r1, r2):
 	return max(0, r2[0] - r1[1]) 
 
 
+def tup_scale(tup, scale):
+	'''
+	:param tup: tuple of num
+	:param scale: num to scale tup by
+	'''
+	return tuple(t * scale for t in tup)
+
 def tup_int(tup):
 	return tuple(int(t) for t in tup)
 
@@ -81,11 +88,10 @@ def tup_avg(tups, weights=None):
 	:param tups: list of tuple - all tuples must be same length
 	:param weights: list of int - optional weights for the average
 	'''
-	l = len(tups[0])
 	if weights is None:
-		weights = [1] * l
+		weights = [1] * len(tups)
 	total_weight = float(sum(weights))
-	return tuple(sum(map(lambda val, w: val * w, t, weights))  / total_weight for t in zip(*tups))
+	return tuple(sum(map(lambda val, w: val * w, t, weights)) / total_weight for t in zip(*tups))
 
 
 def e_dist(p1, p2):

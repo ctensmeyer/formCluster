@@ -14,15 +14,17 @@ import doc
 #data_dir = "../data/lines/1911Wales/"
 data_dir = "../data/wales100/"
 single_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
-single_basename = "rg14_31703_0073_03"
+single_basename = "rg14_31702_0085_03"
 second_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
-second_basename = "rg14_31703_0259_03"
-aggregate_dir = "../data/wales1000/UK1911Census_EnglandWales_Household15Names_03_01"
+second_basename = "rg14_31708_0089_03"
+aggregate_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
+#aggregate_dir = "../data/lines/1911Wales/UnClassified"
 
 
 def get_data_dir(descrip):
 	if descrip == "big":
-		return "../data/lines/1911Wales"
+		#return "../data/lines/1911Wales"
+		return "../data/lines/WashStatePassLists"
 	if descrip == "medium":
 		return "../data/wales1000/"
 	if descrip == "small":
