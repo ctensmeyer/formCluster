@@ -1,0 +1,1620 @@
+
+Sept 17
+	I need to get my hands on the raw image data to properly play around with
+		things.
+	Lets model a document as a graph on it's atomic line segments
+		From the raw data, we need to chop up the segments into atomic units
+		Features
+			Number of boxes
+				This can differentiate well between grid, census like documents
+			Number of intersections
+			Number of segments
+				Horizontal vs vertical
+
+	We can also model a graph based on the regions identified in the OCR
+		Vertices are blocks.  Define the edges as overlapping blocks.
+		Advantage here is that the OCR text is associated with vertices
+			Documents that have very similar graphs are likely the same
+				Find nodes of matching text if any
+				Find similar nodes in terms of position/neighbors
+
+		
+Sept 19
+	Meeting Prep
+		I want to get the Preprocessed images
+		What is the preprocessing that is done?
+		How is the line data calculated?
+			Some of the data represent text areas and some lines are omitted
+			Is it a generalized process that will work for any document?
+				or just on census like data?
+		Establish a unified view of the problem
+			What does an input to the problem look like?
+				Aren't similar documents digitalized at the same time?
+				Preprocessing steps
+			Are we trying to train a classifier that generalizes
+				or the best clustering of the inputs?  They are similar.
+			How will this algorithm be used in practice?
+			What are you expecting as output?
+
+Sept 24
+	Post Meeting
+		They plan on having lots more data in our hands in 8 weeks
+		Problem definition
+			They are okay with more buckets and combining later
+				Recognize that even human opinion will differ on what should
+					be combined
+			Each "Project" will be processed separately
+				The projects are sometimes homogenous with nuances between the forms
+				Other projects may contain many types of forms
+			Use cases for the output
+				Divide into sets for people to index
+					This cares about data semantics
+					For instance, new editions of the same form will look different
+						but contain the same information and should be clustered
+				Input for creating form template - for field highlighting, etc
+					This cares about data layout
+					Forms with the same information, but different layout should
+						be in different buckets
+			Use of oracles
+				They do not mind if someone spends 5 minutes glancing at the images
+					to provide some high level hints.  For instance, "this is mostly
+					tabular data"  or "this is mostly free-form"  or "Titles are
+					important"
+		Preprocessing
+			OCR has their own processing step.  Don't worry about that
+			The "raw images" are already cleaned up quite a bit
+			Our cropping capabilities are limited
+				When documents are bound like a book, sometimes the left page image
+					will contain a small margin of the right page.  Ideally, we
+					need to learn to ignore that part
+				Normally images are left with black around them to indicate that
+					the entire document was imaged
+				They have offered to crop them closer for us, but we can't depend
+					at all on absolute coordinates.  As well, (x, y) -> (%x, %y)
+					conversion is likely to not to be accurate.  We can do some
+					discrete matching.  For instance, with (%x, %y), we could say it
+					matches if it is within 5%.
+		Feature extraction
+			For the census data, they reverse engineered the templates they had
+			They are working to generalize the line extraction process to all
+				images
+			Perhaps they can detect where the handwritten parts are
+			I think we need to rely a lot on the OCR data and use that as the
+				primary matching criteria
+
+Oct 1
+	Data has been seperated into ground truth clusters
+		Exactly the same form type
+		10 clusters total
+	Efforts will focus on Cluster 1
+
+	Graphing the smoothed horizontal profiles of each image in Cluster 1
+		Problems - from photography:
+			X-axis translation - document location in image
+			Sometimes the peaks of one image overlap the valleys of another
+				2 v 7
+			Y-axis translation because some images are darker on average
+				Lighting issues
+				The sum is not normalized between images of different dimensions
+				2 v 5
+		Solutions:
+			X-axis translations
+				Compare Fourier Transform magnitudes, ignoring phase
+				Compare N shifted copies of each signal, take the max similarity
+				Compare the extrema based on support and delta
+			Y-axis translaions
+				Perform binarization on the images as preprocessing
+					and use average pixel value of row/col, not absoulute sum
+
+		Problem - What is a good similarity metric?
+			We mainly want to compare peaks and valleys
+			We need some kind of matching.
+				Let's try nearest peak or nearest valley
+					Exponential penalty with threshold for differences in x
+						Solving x-translation allows this
+					Quadratic penalty with threshold for differences in y
+						Binarization should make similar things similar
+						
+		Implementations -
+			Binarization
+				Do a bilateral filter, then a threshold
+			Metric
+				Try shifted copies of the profiles, take best
+				metric = 0
+				for peak in one:
+					match = find_closest_peak(two)
+					metric += penalty(peak, match)
+				for peak in two:
+					match = find_closest_peak(one)
+					metric += penalty(peak, match)
+				# repeat for valleys
+				return metric /  (2 * (len(one) + len(two)))
+
+		Try drawing the graphs on top of the images,
+			including the pairwise comparisons
+					
+
+Oct 3
+	Implemented new metric
+		Do an edit distance of two sequences of extrema
+			extrema are filtered based on support and delta thresholds
+		Indel_cost is 1,
+		Match_cost is a function of the following:
+			Given e1 and e2
+				support is measured in x%
+				deltas are normalized to multiples of the average delta
+				Calculate support_ratio, delta_ratio, x%_delta
+					Ratios are max(e1/e2, e2/e1) > 1
+					Penalty is the log base 2 of the ratio
+				Fixed additional penalty for peak to valley matching
+				x%_delta incurs a linear penalty after a threshold
+	Todo:
+		Parameter tune the metric
+		Incorporate normalization based on len(extrema)
+
+Oct 8
+	Checking results of the HAC clustering
+		We have 26 images in our test set right now
+		Examine the sequence of merges
+			At HAC 20, there is a merge of a non-exact form type
+				It is a main census page with a total footer that is put with
+					main census pages that don't have the small footer
+				Probably something we can live with
+			At HAC 17, the same thing occurs with a secondary census page
+			At HAC 15, we merge a 2-cluster with a 3-cluster
+				The 3-cluster is the one mentioned above in HAC 20
+				The other, is a census main page, but with signature space at
+					the bottom, so they have space for 15 names, instead of 20
+			At HAC 12, we merge a 2-cluster with a 1-cluster
+				The 1-cluster is different because the signature box is larger
+				All three images are last pages of the census
+			At HAC 11, we have a bigger error
+				One page is a last page with a large signature area
+				The other is a middle page with 30 data rows
+				We can probably parameter adjust for this
+			At HAC 10, we merge to form a 10-cluster of the front pages
+				Errors from HAC 15 are propogated
+			At HAC 9, we merge HAC 12 with a singleton that has a ship vessel
+				signature page (signature area very different)
+				Note that before this merge, there are two vessel signature pages
+					in singleton clusters, but one is filled and the other mostly
+					blank. These two should be merged at some point.
+			At HAC 7, the mostly blank vessel page is merged with the empty
+				middle census page.  Probably because both are blank
+			At HAC 6, we merge HAC 11 and HAC 17
+			At HAC 5 and beyond, we combine unlike clusters.
+			At HAC 2, the suriving small cluster is HAC 7 - the blank ones
+				so the profiles are probably sensitive to that
+	Normalizing the metric by number of extrema
+		Mostly changes the order of operations
+		I think one minor problem is avoided, but all of the major ones are not
+	The cluster comparison metric
+		Seems that Farthest does best
+
+	Tried clustering based on only the horizontal profile and only on the
+		vertical profile
+		The Horizontal clustering isn't too different from the combined
+		The Vertical clustering is different
+			Makes more errors in general
+			Did better for the mostly blank forms
+
+	Wrote script to graph the vertical and horizontal profiles on top of the
+		original images.  Compared smoothed vs original
+		Observations
+			Where documents are folded, there is a sudden shift in the lighting
+				This creates a large extrema on the vertical profile
+					This can be solved by a median filter and binarization
+				Sometimes, the folds occur deterministically as if the documents
+					were stored folded together
+				Other places where the document is crinckled also can affect it
+					The smoothing generally takes care of this unless it is strong
+				
+			Handwritten text:
+				Differences caused in the extrema:
+					profile value
+						the row/col sums are darker on average
+					absolute deltas
+						More constast between peaks and valleys
+					location in smoothing
+						For instance, the black handwritten ink is darker than the
+							red grid lines...
+				Is concentrated towards the bottom of the box
+				The width of the pen stroke also affects the profiles
+				
+	Where to next?
+		Possible
+			Improved Preprocessing
+				Work on median filter to bolster lines
+				Binarization to clean up the profiles
+			Revisit line data
+				Create your own line detection based on the median filter
+					Time consuming
+					The given line data isn't the best because it omits several
+						important lines, including the bounding box
+				Instead of doing just graph edge counts, do a position comparison
+				Is there an edit distance-like algorithm that uses 2-d signals?
+			Start examining the text data
+				Where to start with this?
+					
+Oct 11
+	
+	Let's try to first fix our vertical profiles
+	Our problem is that we are using uniform bluring.  Thus the proper amount
+		cannot be adjusted locally.
+	Implemented a gaussian bluring filter
+		Problem is that we have really short spiky impulses that are
+			really cut in size
+	Implemented a gaussian bluring filter
+		Problem is that we have to do a lot of parameter setting to fiddle
+			with it. We want to eliminate very small extrema, but because there
+			are so many, we can't really trust doing so based on extrema
+			statistics
+		This isn't bluring it very much...
+		This will not remove the desirability of binarized images
+
+	Because we are not smoothing out the spikes, they are failing the
+		support minimum requirement for filtering extrema... bad
+				
+	Okay, so I found the bug.  I was applying the filter before normalizing,
+		so the value sigma was in sum space, not 8-byte space
+	
+	Repeated Bilateral filtering is the way to go.  The question, is, how much
+		I played a lot with parameter settings and such
+		Value sigma is going to effect how large of extrema we tend to keep
+		Spacial sigma effects how much blurring goes on
+
+	What we need is a better way to filter out insignificant extrema
+		An extrema is significant if the delta on either side is large
+		Or is the support on both sides is large
+
+	An extrema is insignificant if it occurs right next to another and the
+		delta between them is really small
+
+Oct 15
+
+	A good parameter setting for smoothing the profile seems to be
+		2 bilateral filters
+		10 value sigma
+			This can be fixed because all images are in the range 0-255
+			If images tend to be faint (low contrast), use histogram equalization
+		30 spacial sigma
+			This setting is dependent on signal length.  It seems that len / 200
+				produces about this ratio
+
+	Essentially, we want to smooth out the handwritten text, but that seems
+		impossible to do without smoothing out the typed text as well
+
+	These parameters worked well for the first image, but there are others
+		for which is smooths out real extrema
+
+	Sometimes the handwriting when aligned can make very distinct vertical
+		spikes.
+
+	Do the profiles tell us any information other than the lines?
+		Besides noise?
+
+	We definately need to do something to increase contrast of the light lines.
+		A median filter should do it.
+
+	I agree with Dr. Martinez that it is important to visualize 
+		what the algorithm is doing.  I propose that for the pairwise comparison
+		between any two signals, the two signals be drawn on both images,
+		with lines connecting matching extrema, with the associated cost written
+		out.
+
+	I'm renaming images now to im1.jpg, etc
+
+	Change Edit Distance to also return a list of triples (idx1, idx2, cost)
+
+Oct 17
+
+	Finished mataching pictures.  The matching is pretty terrible...
+
+	Trying to binarize
+		A simple greyscale thresholding seems to work pretty well.
+		We are loosing a lot of the very faint lines...
+		
+	Okay, now we have good smoothing
+		The extrema are a bit of a mess
+		The matching is still terrible.  About half of the extrema are just
+			deleted
+			Some matches are about 10% of the image off from each other
+
+	Take a look into the MatLab Image toolkit and computer vision toolkit
+		They can pull out "interesting" features of the images
+
+	I need to redo the matching algorithm
+
+
+Oct 22
+
+	Using binary images
+	Increasing indel cost to 2 allows profiles of the same form to be matched
+		well (6 & 7), even though their vertical profiles are quite offset.
+		This is one of the original aims.
+	If the two form types are not the same, then it is very noisy...
+		For instance, the horizontal profile of im2 is washed out and 
+			the bilateral filter is too strong for it.
+
+	Computing pairwise correspondance on the binary images...
+		Takes a while to calculate profiles 
+
+	Literature search on document clustering
+
+		On Binarization:
+			Use local thresholding
+				On a local neighborhood, do a 2-means clustering on grayscale
+					values.  Threshold on the mean of the two clusters means.
+
+		On document segment representation
+			Use interval encoding on a fixed spacial segmentation
+			Then use a manhatten distance metric (possibly do k-means)
+
+		On page segmentation
+			X-Y cut
+				Recursively split the page in 2 based on local projection profiles
+				Remove noise regions
+
+			Smearing
+				Start with binary image
+				Turn all white pixels with few white neighbors black
+				Do connected component analysis
+		
+
+	Trying clustering on binary images using 2x bilateral filter with
+		increased indel cost
+
+		It does well until #14
+			Then it sticks front pages with 20 names with front pages with 15 names
+
+		#10
+			Sticks 2-cluster of large signature end pages with 2-cluster of
+				30 name pages
+
+		About as good as the uniform filtering one...
+	
+	
+	What I want from Ancestry is well binarized images
+	Let's try text document clustering based on a sanitized OCR document
+
+	Meeting
+		Pairwise stuff
+		Binarization stuff
+		Literature Review
+			Local binarization
+
+	Oct 24
+
+	Proposed Method
+		Pros:
+			Robust to noise
+			Robust to forms filled out vs not filled out
+			Framework accomodates active learning to identify regions of
+				interest.
+		Cons:
+			Computationally expensive
+			Complex
+			Matching element by element is hard
+				We can probably be smarter about this
+			Depends heavily on proper element classification
+		Preprocess image
+			Local binarization
+			Cropping - this will be important for Otsu's method
+			Skew detection (if neccessary) (not for stuff we already have)
+		Do pixel classification for entire document 
+			Background
+				As determined by the binarization
+			Line
+				Figure this out
+			Handwriting/Noise
+				Things that aren't strongly lines, text, or background
+			Text
+				Connected Component analysis of binarized image
+				Then do glyph detection - is this a letter, number, puncuation?
+				Perform belief propogation to correct segmentation errors
+					If a handwriting/noise labeled connected component is closely
+					between two text glyphs, rerun inference on it with a strong
+					text prior.
+
+		Use this information to classify the document
+			Perform matching on the lines/text
+					
+
+	Otsu's method implemented
+		Global yields thresholds ranging 111-141 on the images.  Visually,
+			the difference seems to be minimal.  What we really care about is
+			catching all those faint lines.
+
+		Local 100 uniform sized neighborhoods
+			Does a little worse on im2.  The lines are just so faint that they
+				get pulled into white pixels.
+
+		Local 2500 unifrom sized neighborhoods
+			Significant noise when applies to wholly background areas
+			Most lines for im2 come through nicely, though not all
+			Using a midrange number of neighborhoods just changes where
+				the tradeoff is between noise and lines.
+			In other words, the original image is just too faint to easily
+				fix without having image specific knowledge
+			
+
+	Binarization of im2
+		At 200, we get all the lines, but lots of noise.  Other images are
+			unreadable because it's so dark
+		At 180, we still have significant noise, and some of the lines are
+			not filled in.  How are we to distinguish that these are lines?
+			And generalize?
+		At 160, we are missing many lines...
+		This is an issue, but not a show stopper right now.  Let's ignore it
+			and proceed.  That step can be worked on independently
+				
+
+Oct 29
+
+	Going to try line detection
+		Goal:
+			Find pixels belonging to horizontal and vertical lines
+			Be robust to handwriting crossing lines
+		Label every pixel with the number of consecutive black pixels it is
+			a part of.  Do so for vertical and horizontal.
+		Allow for a small amount of noise (there needs to be >3 white pixels
+			to interrupt the black ones)
+		Threshold the labels.  Then do a belief propagation step.  Any non-line
+			pixel that has a line pixel on one side and white on the other (perhaps
+			extend this to allow for thicker bands), label it as a line
+		
+	Results
+		It works pretty good
+		Smoothing needs to be improved.  I think that a 7x7 median filter over the
+			masked pixels should work.
+		How will this work on dashed lines?
+			Use smearing
+	
+	Onto filling in text
+		Let's leverage the OCR report's bounding boxes to fill this part in
+			Throw out the suspicious characters
+
+	Todo:
+		Use the Ancestry OCR to identify typed text
+			Eventually we want to have a better single glyph classifier
+				Talk to Robby about this
+			Try using tesserac with single glyph images...
+			We want to have confidence intervals
+		Fill in the lines better
+			Use neighbor propogation
+				Median filtering
+			Smearing
+
+Oct 31
+	
+	Local Binarization errors on some images, where the local part only covers
+		background or background and some faded lines
+		Interesting that the lowest local threshold is 106 with the prior, yet
+			there are still errors on im10.  It does have a very large gradient
+			on the fold lines, so the problem isn't the threshold, it's the image
+		Lowest local is 85 without prior...
+	Trying to incorporate a prior on the thresholds
+
+	Lets try to propogate line data
+
+	Wrote parser for the OCR to get bounding boxes for non-suspicious characters
+	Wrote algorithm to partition pixels into connection components
+		Labels an 'I' image with cc id
+
+	Note that when binarized jpgs are saved, they are lossy, so they don't stay
+		binarized
+		Lets convert everything over to .png
+
+	My txt/xml files for the ocr are mislabled...
+		This will take a little bit to figure out...
+		Writing a script to renumber things sorting on the filename this time
+			instead of defaulting to file system ordering...
+
+Nov 5
+
+	Cleaning up image directories
+		Redoing images as .png
+	Even Otsu(4, 4) yields some errors
+
+	Using Ancestry's OCR, fill in the letters on the images
+		new im14 seems to be offset
+		There are errors, not a lot, but not a few
+
+	Investigated Computer Vision techniques
+		Nothing that looks promising
+		Set up appointment with Dr. Farrell
+
+	Tesseract doesn't seem like an awesome option...
+
+	Question of the day is, once you have everything marked, how do you
+		use that information to start comparing?
+		We can try possible alignments based on location of text.  If the text
+			doesn't overlap well, then try lines.  If neither of those overlap
+			well, then we know that they are different form types, and we create
+			a new bucket for it.
+
+	So we go two levels of clustering
+		Assumptions
+			Same form types have consistent:
+				aspect ratio (not always a good indicator)
+					Same form, different printing?
+				Printed text
+					If the printed text is different, then it is a different form
+					This is not true of the manifest lists, the names of
+						passengers are typed.
+					When data is to be filled in, it is part of a table or has
+						a blank line underneath it, but not all typed text in
+						a table or over a line is filled in after printing the
+						blank form.
+				Lines
+					If the lines are different, then it is a different form
+					These generally aren't made after a form is created anew
+					
+		The course grain clustering, we use broad features
+			aspect ratio - if this is significantly different,
+				then we have two different forms (or one form is rotated)
+			document similarity - based on the text of the OCR (throwing out
+				not dictionary words as junk)
+			# of text characters - based on the CC analysis and the OCR
+				A document with 500 letters on it is a different form from a
+					document with 100 or 1000 letters.
+			Connected Components - based on the CC analysis
+			% significant overlap
+				Find alignements based on identified components
+				See how much overlaps and how much doesn't
+	
+		Image Representation
+			Need a way to combine line image, CCs and character data
+				Attach predicted letter to CC
+				Do more preprocessing to fill in broken lines
+				Remove extraneious lines
+
+
+Nov 8
+	
+	Talked to Dr. Ringger today
+		Said that he doesn't know of anything off the shelf to do 
+			machine printed text classification.  He also mentioned that
+			making the classifier shouldn't be too difficult.
+		I'm not sure that I should focus on this sub problem at this point,
+			but proceed with the OCR bounding boxes data as a base line
+		The other thing he said was to just compare areas of machine text
+			on documents
+
+	Preparing to speak with Dr. Farrel
+		Show the data
+		Show my attempts to capture the line data
+			Show where it succeeds and where it does not
+		What would be better, handle this in preprocess or after?
+			Or both?
+		Does computer vision have some techniques to help with this?
+
+	Wrote script to merge the char info and the line info
+	Wrote script to "xor" two of the merged images
+		For this to be useful, we need to solve the alignment problem
+
+	I think that this point, I need more infrastructure around an image to
+		associate relavent meta data
+		Eventually, I want to calculate minimum and maximum bounding boxes for
+			machine printed text to use for the alignment.  Minimum bounding
+			boxes will be quite accurate for machine text that is statically
+			fixed.  Maximal bounding boxes will work better when for the dynamic
+			machine text like the vessel records
+		The easy way to compute alignment is to crop based on the upper most
+			machine printed letter and on the left most
+			Using this heuristic, we find that printers of the early 1900s were
+				terrible.  Things don't perfectly align.
+
+	Take away from meeting with Dr. Farrel
+		Hough transform will detect lines pretty well
+			Use the gray scale image
+			OpenCV will do it for you
+		Use color information from the original image to detect some of the
+			handwritten parts
+		Self-convolution of the profiles will reveal periodicity at the peaks
+		Use polar histograms in neighborhoods around pixels to find
+			disjoint line segments
+		Send him some of the data
+			Couple images - originals and binary
+			Include the plotted profiles
+		Check out Radon transform
+
+
+Nov 12
+	
+	Meeting with Dr. Martinez
+		He is starting to dig into the problem
+		We need a succient way to represent a document
+			A way to compare two documents
+
+Nov 13
+	
+	Lets try to assemble global features and see how they do
+		Title and sub title
+			Just search the OCR data for the tallest line
+				Check for a sub title directly below it
+		Total line length
+		# line intersections
+			This can be tricky unless we interpolate lines
+
+Nov 14
+	
+	Implementing Title finder
+		Looks for the largest text line
+			Pulls all of them and filters out junk (all non-words, too short)
+			Uses average line height of each character
+				Bounding box height from OCR data
+			
+		If that text line is significantly larger than the next largest one,
+			declare it as the title.  If not, then we say there is no title
+
+		We then categorize the title location into one of 9 partitions of the
+			document (upper-left, middle-right, etc)
+
+	Problems
+		Multi-line titles are a problem
+		OCR errors can impact this heuristic
+			Filtering out bad titles can be difficult...
+		Seems like a sloppy, not robust process
+			
+	Thoughts
+		Would it be better to pull the top N tallest text lines?
+			Maybe not.  The census text line heights are conjoint after the
+				first one
+		Is this just redundant once we do text areas to see if they match?
+		We still need a good document representation
+
+
+Nov 15
+	
+	Thought a lot about document layout representation
+		At the lowest level (before pixels), we have typed characters,
+			handwritting, lines, noise, and images
+		A hierarchical structure is difficult to extract from the image
+			and a small error at a high level of the parsing could lead to
+			disasterous results. 
+			As well, different parses are equally valid.  
+				For instance, in a table grid, are all cells children of the
+					table directly, a box contianing itself and the neighbor,
+					or of the containing row?
+		Hierarchical structure elements
+			Root
+				Region - whitespace or line boundaries
+					Text Blocks
+						Text Line
+							Characters
+					Lines
+					Noise/Image/Handwriting
+				Table
+					Headers
+						Cols
+							Region
+					Body
+						Rows
+							Cols
+								Region?
+
+		The above can describe any document, but the difficulty is recovering
+			that structure from the image without making any errors if some
+			small component is missing
+
+		The other idea that came to mind is to represent it as a collection of
+			slightly abstracted components
+			Use:
+				Min-boxes
+					Boxes that are not partitioned by a contained line
+					Contains other elements
+				Text Lines
+					Straight from the OCR
+					Maybe use text blocks
+				Noise/Handwriting/Image
+			Components will store their location
+
+		In anycase, we need to be able to match elements between two document
+			representations.
+
+			The best way to compare elements by location.
+			We need some kind of close alignment so that (x, y) locations
+				from one image can be compares to (x, y) locations in
+				another image assuming that they are a close, but not perfect match
+
+			One way to do so is to take the common words from both documents.
+				Let W = set of common words
+				Deltas = []
+				For w in W:
+					For p1 in I1(w):
+						For p2 in I2(w):
+							Deltas.append(p1 - p2)
+
+				We then cluster on Deltas and see where the tightest cluster
+					ended up
+					Use K-means
+					Then we have a good idea of the mean and variance of the offset
+					If we look at element e1 in Image 1, and try to find
+						a match e2 in Image 2, we know where to center our search
+						and how far to search.
+					If no cluster indicates a probable offset, then the two images
+						are probably very different.
+
+				The calculation for Delta can be modified to account for non-box
+					lines or complete text lines.  Exact text line matching alone
+					is sensitive to any OCR errors...  Perhaps if the edit distance
+					of two lines were less than a certain threshold...
+
+				This process can also help when a smaller document is placed
+					on top of a larger one because we do not assume that
+					the offset is close to (0, 0)
+
+			Then we can do greedy matching of close elements
+				Keep track of regions that match.  This we can represent
+					with an NxM grid.  Elements belong to the bin by pixel majority.
+					Bins are assigned scores based on percent matching elements.
+					Then globally we can compare comparisons across clusters
+						to identify regions of high uniformity and regions of
+						variability within a cluster.
+		
+		Idea:
+			Not sure what to use it for
+			When ordering components, order them by distance from their
+				center to the origin. 
+				This way, if an element is in a slightly different x or y
+					position, then it is still in the same approximate place
+
+		Other idea:
+			We need to infer some global properties of documents
+				Ink colors for further detecting handwriting
+					What if some typed text is crossed out?
+				Is the typed text fixed or variable on a given form type?
+					In census records, the typed text is all fixed (table headers)
+					On airline manifests, the typed text can be variable
+						(passenger names)
+						Other text on the page is fixed
+				Are there regions that are mutilated?
+					Ignore them
+					British war records
+				Is there a table?
+					Knowing that some components are in a table, may clue us
+						into how to handle matching
+
+
+Nov 19
+	
+	Meeting with Dr. Martinez
+		Tuition will be paid for
+		A stipend of 4k is offered (more after MS proposal)
+		Caveat, you must be full time for school with no outside work
+			Pretty generous, all things considered
+		He encourages to take more than just two classes at a time
+			If you have classes, you don't focus on research so
+				you might as well clump all the classes together, so you have
+				later semesters free for doing research
+			I would prefer to take classes more dispersed because I really don't
+				like being squeezed by my classes.
+		I drew up a list of classes I want to take
+			Basically 67*, 6/750, and 611
+
+	Looked over the MS program requirements
+		24 hours of class 6 hours of thesis
+		After 1 year, you must have taken 9 hours in the previous year
+			So take on average one class per semester
+		Must propose by the end of your fourth semester
+		Complete program in three years time
+
+	Proposal
+		At most 10 pages of meat (excluding bib, abstracts, title, etc)
+			Single spaced
+		What problem?
+		Who cares?
+		What's been done?
+		What are you wanting to do?
+		What's your metric?
+
+	Thesis
+		Essentially, a single publication
+			BYU makes you format it a special way
+
+	On my todo list:
+		Write a document class that encapsulates the medium grain
+			representation - min-boxes, text lines, lines, noise, etc
+			Text lines can come from OCR
+			Min-box finding is going to be tricky though
+		Read the papers you picked out
+
+Dec 19
+
+	It's been awhile, but I'm done with my undergrad, so I can concentrate on
+		research now.  I'm going to start coding up what I logged on Nov 15.
+		I will start with just using the text lines of documents to cluster them
+		and see how far that will get me.  The clustering technique will be to
+		get distance metrics based on how many of the connected components match
+
+	Steps:
+		Parse the OCR and extract the Text Lines
+		Compute the scale difference between two documents
+		Compute the offset difference
+			Using letter matching to determine this
+		Count how many text lines match between the two documents
+
+	What I've done:
+		Implement K-means over n-dimensional numerical data
+		Parser for OCR data to extract textLines and characters
+	
+	What I've found:
+		Taking the offsets found on a character basis is no good.  There is more
+			noise than real data.
+		Let's try it on a word basis
+		Word differences work a little better, but kMeans is the wrong tool to
+			try to find the most concentrated region.
+		Text Line differences do form a nice cluster.  However, we run into the
+			problem of how many clusters is best when using KMeans.  Perhaps
+			a better way would be to do a HAC and note at what iterations
+			the cluster distances spike so know which cluster to take.
+			spike 
+		For right now, I'm going to just take the largest cluster of the KMeans
+			as the offset
+
+Dec 20
+
+	Let's try for the similarity score based on text lines
+	Fixed a bug regarding offset meaning
+	The clustering is pretty good, but not perfect
+		I have yet to do analysis about why it is performing how it is
+
+Jan 6
+	
+	Start of the semester
+	Let's analyze why text line matching performs relatively well
+		Scale in this data set always comes out to be 1, or negligibly close to 1
+		For checking how good the offset is, I can lable the corner of the
+			bounding box of each image
+			Done
+		The computed offset is much larger than it should be in many cases.
+			It is computed by clustering the diffs.  Outliers are probably
+				shifting cluster means because we don't have a good number
+				of clusters
+			In general, the real offsets range ~+-150, with some close to 0
+				Computed ones can range up to +-900 or larger...
+				This is a problem and the reason why we need to check for text lines
+					within 5% of the image size
+			Let's try running the matching with the true offsets.
+
+	Turns out that the results examined on Dec 20 were faulty.  Previous results
+		were not deleted and an error was occuring preventing the new results
+		from being written
+
+	Analysis
+		1 & 4 are rated as similar, but they are not
+			Most matching lines are number lables like '2.' or '30'
+		16 & 17 are rated as similar, but they are not
+			All of the text of 17 matches 16, but not vice versa
+			Line data should be able to counter this
+			Seems like the noise of bad text lines are diluting things
+		21 & 8 should be rated more similar
+			21 is so diluted with junk lines
+		9 & 16 ""
+			9 is diluated with junk
+		18 & 19 ""
+			both diluted with junk
+		25 & 26 ""
+		22 should be placed with 21 & 8, not 9, 16, 17
+
+		We don't differentiate between the two similar types of front pages
+			That's subtle though...
+	My first guess is that our criteria of exact text line matching is not 
+		counting many actual matches because of slight OCR errors.  Non-matching
+		junk text lines should not matter unless there are many of them.
+
+	Conclusion after lookng at the text lines of each document
+		Handwriting is causing too much junk.
+		Current parsing does include suspicious lines
+
+	Removing all lines with any suspicious chars seems to improve things
+	Analysis
+		17 & 22 are lumped together erroneously
+			Many of the true lines of 22 are ommitted because they are
+				marked as suspicious.
+		1 is put with 4, 6, & 24 erroneously
+			Should be closer to 8 & 21
+
+		Nevermind 1 & 8 are slightly different.  Still, some true text of 1 is
+			omitted.
+
+	Smarter filter on the text lines:
+		Remove digits and punctuation
+			Perhaps removing digits is too strong
+		All lines must contain a dictionary word of at least three characters
+
+	Running the HAC clustering on this filtered set of text lines...
+		Better
+		9 is clumped with 17, 24
+
+	Still, we have some forms of the same type that are scoring less than .3
+		We should investigate this
+
+Jan 8
+
+	I analyzed documents 9, 16, 17.  9 is an exact match of 16, and matches the
+		headers of 17 (which has no text on the bottom).  Currently, 9 is paired
+		with 17 more closely than with 16
+		The culprit is OCR errors
+			A single indel (could be fixed by doing almost exact matching)
+				Low edit distance
+			Two header lines for different columns are lumped into the same
+				text line in one document, and not the other.  Or the reverse,
+				a single text line is split into two halves in one document. Also,
+				in a combined line, an entire word was missed in doc 16.
+				Instead of doing text lines, we could do word matching, which would
+					take care of these issues.  That could introduce more random
+					error for common words that occur close together, so we could
+					not operate with a large xy% allowance, causing a greater
+					reliance on calculating good global offsets and on deskewing, etc
+				Another approach would be to heuristically detect these
+					situations and then fix them.  For instance, when evaluating
+					potential matches, if one is a proper substring of the other,
+					look for neighboring text lines that combine with it to form
+					the match.  This either won't be robust to OCR Indels, or be
+					very inefficient.
+				Or fix the OCR to not do that...
+	
+	Doing the substring matching does well.
+	Currently testing using the edit distance instead of string equality
+		Runs slow as junk...
+		Needs some optimization
+			Check position before check string matching...
+
+	Okay, lets look at results
+		Looks better than before.  There aren't any major mismatches until we
+			get to less clusters.  However, those mismatches occur before other
+			real matches form.  We still have some digging to do.
+					
+
+Jan 13
+
+	Okay, things are looking pretty good for doing text line matching.
+	The only step here that we don't have is computing relative offsets,
+		but this is relatively unimportant because with text lines, having a
+		wide window for matching shouldn't produce very many false matches.
+
+	We need a way to work with the line data.
+		One way would be to ignore line position and match documents based on
+			similar line content. Are the number of lines of a certain width,
+			length, style (solid vs dashed) and orientation the same between
+			two documents?
+		Another way is to come up with some matching between the lines
+			Split by orientation into two sequences
+			Do the edit distance
+				Fails to capture any notion of a box
+					May or may not add information
+				Can be sensitive to noise.  If a line was split in one document
+					and not in another.  Perhaps if the distance between lines is
+					pretty close, and one is shorter than the other and another
+					line comprises the other distance...
+
+	My line detection algorithm pretty accurately labels pixels that are part
+		of lines, but currently does not aggregate the pixel data into abstract
+		line space: (dimensions, position, style?).
+	I could have it do so, but it would be an investment of time.  I want to
+		know if Ancestry can just do that part for me accurately.
+
+	Things to talk over:
+		For NN, how to go about selecting papers.  I don't have the background
+			for the majority of them.
+		Let's get synced up with Ancestry
+		Text Line matching works pretty well
+			Doesn't apply to all documents
+		I think that the project will end up being pretty ad hoc for the 
+			different kinds of documents and ways of dealing with noise.  I
+			don't see a good way to have any sort of meaningful model.
+		LLNL reference
+		Still not sure how to cluster together generic letters.  They are of
+			variable length, format, don't have any lines, and no text lines
+			match between them.
+
+
+	Things photographed together have the same raw aspect ratio.  This might
+		not be reliable because they really should trim the edges.
+
+Jan 16
+
+	Got reply back from Spencer.  He is wondering about the line data that I
+		have.  He is also wanting specifications for the data I am requesting
+
+	Data I want:
+		Updated Line data for the 1911 English Census.
+		OCR/Line Data for both the naturalization records and the Manifests
+			datasets
+		Dataset (or two) similar to the Census documents (pretty clean),
+			but with larger and fewer true clusters.  Ideally, 5-6 true clusters
+			with perhaps ~10 documents in each cluster.  The clusters need not
+			all be very distinct, but not all should be similar.
+		A decreped dataset like the British War Records
+			To test how well the algorithm performs when parts of the documents
+				are destroyed or noisy.
+		Any dataset with novel structure or visual features
+			Perhaps ones with large insignia pictures
+			Light text on dark background
+
+Jan 17
+
+	Started Presentation
+	Look into why the main pages of the census are not differentiated by the
+		text lines.  Maybe they are small and have high errors?
+	Figure out what level of clustering to show.
+
+Jan 22
+
+	Finished Presentation
+	Meeting with Ancestry is Mon Jan 27 at 1pm.
+
+	Turns out that some of the main census form types have different looking
+		signature spots, but the text is the same down there in slightly
+		different locations.  One sentence is split differently, but it is
+		very similar and is picked up by the large allowable % difference.
+
+	Implement text line weightings:
+		First error occurs on merge 12
+			Puts different main page census pages together
+				Differentiates the main pages early on, but not later
+			Take another look at 9 & 16
+			Works better than before
+			7 clusters seems optimal
+			
+
+Jan 27
+
+	Meeting with Ancestry
+		Shane (boss)
+		Ron (was silent most of presentation)
+		Jack (Image Processing Guy)
+		Spencer
+		??? one more I can't remember the name of
+
+	Got lots of data including:
+		4 datasets of several form types each.
+			Label of true cluster (kind of, they are kind of coarse)
+			Projection Profile data (on processed image)
+				Remove handwritting, skew?, binarization?
+			OCR report
+				More character-level metadata
+
+
+	The presentation went well and we have some good ideas to pursue
+		Image processing isn't quite there yet with all of the line 
+			extraction process.
+		Right now we have projection profiles with text removed.
+		Very interested in the idea of hierarchical clustering 
+			This project
+			Application to handwriting clustering
+				Related to Robbie's Work
+		First pass we do more coarse grained clustering, then we do
+			cluster dependent feature selection.
+
+	TODO:
+		Do quality analysis on the data
+			Why didn't some of the data copy (only a few)
+				Throw out the incomplete info
+			How well does it match the image?
+			Projection profile graphs
+				Smoothness, etc
+			OCR
+				Is it on skew corrected images?
+		Follow up with Jack about getting the current line extraction
+			The black and white images
+			How far off is getting position, size, orientation represenation?
+		OCR segmentation correction
+			Follow up Spencer on what he has done with this
+		How well does the current implementation do on all of the Wales
+			Census Data?
+		Come up with something more efficient than pairwise comparisons
+			O(NK) is better than O(N^2)
+		Incorporate a priori knowledge about the number of form types
+
+Jan 30
+
+	Can now parse the profile information given
+	Working on a parsing scheme for the added OCR character-level data
+
+Feb 7
+
+	The code has now been converted over to handle the new formated data
+	Line data should be coming soon
+	Spencer is going to work on fixing OCR segmentation errors by using
+		the line data.  Need to follow up on this in a little while.
+	Successfully ran the code on ~1100 documents
+		Took ~6 hours.  That won't scale well to 12,000 documents
+			That would be about 600 hours.  Yikes!
+			We can manage that by using a faster language and multi threading,
+				but the biggest bottleneck is the pairwise comparison of docs.
+				We need to eliminate that so it can run. But as we add more
+				kinds of comparisons, it will slow it down again.
+	Currently running on ~5500 documents
+		It takes about ~25 minutes to load them all
+		They take up 27G of RAM
+			Python has a lot of memory overhead compared to C++, so the
+				final code should be in C++ to handle the large datasets
+		Estimated time to process is about a 100 hours
+			We will see if it finishes this weekend
+		~26 minutes to load the documents: 3.6 docs/second
+		It is heavy to parse all of the XML
+
+Feb 10
+
+	Thoughts on template based clustering
+		
+Feb 20
+
+	Got data with the raw line extraction.  Not very feature friendly.
+		Jack will get to it when he can to get end points
+
+	Refactored component/document representation to allow for templates
+	Wrote linear-time templating algorithm
+	Need to run code
+
+Feb 21
+
+	Talked to Andrew White about the Ancestry project.  He is likely to
+		work on the project with me.
+
+	Things seem to be running.  We will see how good the results are.
+
+Feb 24
+	
+	Worked over metrics.py to print things out nicely
+		How to handle when a label is never assigned (PR undefined?)
+	
+	Dr. Martinez wants to bring Logan onto the project as well
+		Think of ways to work together
+
+	Lets have Andrew work on OCR segmentation correction
+
+	Paper from Dr. Ringger:
+		Uses only lines as features
+			Extracted using Hough Transform
+			No notion of end points/colinear lines, etc
+		Line gap ratios binned into 20 bins
+		Edit distance between the sequence of bin membership
+		Pairwise comparisons
+		Classification using knn
+
+Feb 26
+	
+	Yesterday, reorganized project directory structure and got it up on
+		GitHub.  Will make it easier for multiple people to work on the
+		project.
+	
+	Areas of the project.  Dr. Martinez wants me to organize it so that
+		multiple people can work on things without stepping on each other.
+		Areas
+
+			Feature Extraction/Filtering/Noise removal, etc
+				OCR
+					Skew correction?
+					Correct character mistakes
+					Correct segmentation errors
+					Better filtering of noise
+					Use lines to decide if it is tabular data
+						As in passengers list dataset
+				Line Endpoints
+					Detection
+						Use the OCR to remove printed text
+						Remove Handwritten stuff?
+						Binarization
+							How to handle very faint lines?
+						Hough Transform for ballpark, then narrow focus?
+				Other useful features
+					Perhaps there is a way the line profiles can be used
+					Fourier Transform coeffs?
+					Blocks of handwriting
+						For documents with all handwriting
+					Line Intersections
+				Recognizing Document degradation
+					Passenger's List has punch holes, often through the title
+						Allow unpenalized indels on the edit distance comparison
+					In general, have matching be aware that the true information
+						has been lost, so discount those areas.
+				Use this to determine offset between two documents
+					Allows matching to use a much smaller distance allowance
+						Some similar form types have the same text in the same place
+				Perhaps some bag of words representation?
+
+			Distance Metrics
+				Very tied to Feature Extraction
+
+				Feature Weighting
+					Very important for recursion over an initial cluster to
+						differentiate similar form types
+					By global frequency
+					Adaptive as clustering progresses
+						Find out which features are decisive in template assignment
+					By relative instrict importance
+						Text Line
+							Words vs numbers
+							Length
+								linear
+								log?
+							Font size/style
+							Location
+								Absolute location
+									Top, middle
+								Proximity of other features
+						Lines
+							Length
+							Thickness
+							Location
+
+				Fine tune Text Line matching
+					Not just by absolute location
+						Estimate offset
+						Use neighboring features for relative
+					Ignore tabular data text lines
+
+				Lines
+					Current idea is to do an edit distance on the horz and vert
+						sequences of lines.
+					How to order colinear segments?
+						Exact ordering is not robust to skew or noise
+						Probably best to create bins using large gaps as delimeters
+					How to handle partial matching?
+						segmentation issues?
+
+			Clustering Algorithm
+				
+				Beating fully quadradic is necessary for large collections
+					of documents
+					O(NK) is probably the best we can do
+
+				Be smarter about the decision to create a new template
+					Active learning?
+				Outliers/DeferLow confidence
+				Better document aggregation
+					?
+				Do feature weighting within a template
+				As a template gets more documents, re-evaluates them
+					Leave one-out style
+					Kicks out those that don't fit
+				Do a pairwise comparison of a subset of the data to make
+					a smarter initial template seeding
+				Incorporate a priori information about number of templates
+				Recursive application
+
+				When aggregating a document to a template, how distant is the
+					template after to the template before?
+
+				Formalize a bit more on what features compose a template
+
+			Active Learning
+				Outlier document detection
+				Difficult Decisions
+				Feature weighting
+					Learning to ignore certain kinds of features
+						Do this if a feature is not strongly correlated with
+							Other sets of features
+						By Text Line content
+							Specific characters/classes
+							By location
+							other attributes
+						Lines
+							In Vessel lists, tabular data is manually underlined
+								It would be impossible to automatically detect this and
+								remove it.
+								We could say, any horz line within this area is ignored
+
+			Cluster Metrics
+				ARI
+				V-measure
+
+			Tuning Metrics
+				Using true average templates
+					Compare every document to its template
+					Pairwise compare every template
+								
+
+
+	Examining Line data:
+		We depend on good skew correction
+		Horizontal and Vertical are separate
+		Lines on the page aren't actually very straight
+		This is on the raw image, no text or handwriting has been removed
+			Possible improvement would be to use OCR to remove
+				high confidence printed text
+			How do we handle when the type text overwrites the line?
+		Actual lines are much brighter than the noise
+		Veritcal lines are more subject to noise
+			Alphabet characters have a strong vertical component
+				Printed text is more noisy than the hand written stuff
+				Some HEAVY SET text really shows up like a line
+			Creases show up on the vertical component
+				May interfer, maybe not
+		When there are small interuptions in the real line, the
+			extracted image is just weaker at that point, but still
+			connected
+		Probably will have trouble with very faded lines
+
+
+Feb 28
+
+	What would be a good area for Logan to do?
+		The details of the distance metrics/feature extraction seem to be large
+		The other area is how the algorithm itself works
+			Template creation decision
+			Undo previous wrong decisions in presence of more data
+			Semi-supervised/active learning stuff
+		
+March 3
+
+	Read paper on using local line shape features
+		Supervised 
+		Good for degraded documents
+			Depends on good Binarization though
+		Distributed representation of form lines
+			Hard to do individual feature weighting
+			Harder to differentiate very similar forms
+		Tuning parameters
+			Size of codebook
+			Size of sampling windows
+
+	I'm still building metrics/useful analysis tools
+	Lets take a first crack at the line end point extraction next
+		First without OCR
+
+March 4
+
+	Metric stuff is pretty well done
+		Maybe some more bells and whistles like auto gnu plotting
+
+	Time to explore line data
+
+
+March 5
+
+	Explored line data + binarization
+	General algorithm:
+		Binarize on a low threshold and on a high threshold
+		Do cc analysis on high threshold image
+		Remove insignificant ccs as noise
+		Remove ccs according to OCR
+			If text line bounding boxes span over 90% of the cc and
+				if the cc is near the center of the text line
+		Find corresponding ccs in the low threshold image
+		Length of line is length of cc
+		Width of line is average width along the cc
+		Line is centered on the center of mass length wise
+	
+	Well, the rudimentary part of it is working.  Right now it is returning
+		the bounding box of the line, which won't cut it.
+
+March 10
+	
+	Lets refine the line extraction process to not just give bounding
+		boxes of the cc that is a line.
+		Also, let's put in the ability to prune really small clusters.
+			Done
+
+	Okay, we can grab the lines very nicely
+		Filtering by the OCR is a bit of a pain. 
+			The real solution to this problem should removed OCRed characters
+				before applying the morphological operators to generate line stuff.
+			Need to use CCs plus the bounding boxes to make good choices
+				about when to remove.  Sometimes machine printed text is sitting
+				on top of a line, which makes it hard to differentiate the two.
+			Texts lines most often show up as straight lines when they are printed
+				badly, which means that the OCR for them is error prone.  We need to
+				do some filtering of the text lines before deciding which ones
+				to remove (handwriting noise in OCR)
+
+	Finished overview with Logan
+
+March 12
+	
+	Let's run the line extraction on all of the census data
+		Then come up with a parser and a distance metric
+
+	So the edit distance when applied to lines doesn't work quite the
+		same as with strings.
+		In particular, if we want to use relative positioning in a line
+			sequence, where the reference line is depends on the previous
+			choices made in the subproblems, which might not lead to optimal
+			solutions.
+		In absolute positioning, we could just do the same distance threshold
+			as in our lines.  That would probalby be much simpler and work
+			just as well.
+
+March 17
+	
+	XML line parser done.  Debugging now
+
+March 18
+	
+	It runs, just gives very low scores for two matching sequences
+		Fixed a bug.  DEL1/DEL2 entries in the op_mat were swapped.
+
+	Added in explicit substitution (as opposed to matching with a non-zero cost)
+		Perhaps it would be better to only allow substitutions (at a cost lower
+			than indels) if the lengths do not match, but the positions do.
+
+	Because we are imposing an absolute sequence on the lines, the skew of
+		the page may influence the ordering of lines that are intended to be
+		colinear
+
+	We can detect approximate colinearity using a distant threshold based on
+		the image size.  Then if the two lines do not overlap, then we can set
+		their start positions to line up.
+
+	On the two documents I tuned on, both had one horizontal line that was
+		broken into 2.  We might need to do some preprocessing to correct those
+		kinds of errors.
+	
+March 19
+	
+	Lets get the line similarities into the algorithm
+		Things are running really really slow now
+		20 minutes on the dataset of 100 and it still isn't finished
+		After 40 minutes, it failed an assert...
+			Line distance ordering
+			But this only occurs on cluster to cluster comparison,
+				not cluster to document...
+				Copying features on aggregation seemed to fix the problem
+
+	Found a python c module for the Levenshtein distance, so it should
+		run a lot faster.  We'll see about that.
+		It is a lot faster
+		However, the line comparisons/aggregation are really slow
+			It shouldn't be cause they are infrequent
+			Checking for the last match frequently is slow
+			Maybe we could cache that
+		We can also build transpositions into the algorithm
+	
+March 21
+
+	Adding in method to draw a faithful representation of a document
+		Well, getting the font size correct is kind of hard, but it draws
+			all the letters in the right place.
+
+	Line sequence merging was not happening because of a bug.  That is
+		now fixed.
+	Currently investigating behavior of line metrics
+
+	Text line matching scores seem very low.  I wonder why that is
+		I didn't touch that code at all.
+
+March 24
+
+	Added in cluster center rendering as part of the metrics pipeline
+		Shell scripts for running stuff.
+		Stuff crashed over the weekend, not good
+
+	Looking at the produced drawings for small perfect clustering.
+		It's bad for most of it.
+		The naive merging process is the culprit.  As well, not handling
+			out of order lines well.  And they just get multiplied as more
+			mergine occurs.  We could continue with the edit distance, but add
+			in transpositions, but that might not be the best.
+
+	Can we cast line matching as the assignment minimization problem?
+		The cost of matching two lines is based on position and length
+		Potential matches have little cost
+		Non matches have high cost
+		The sequence with fewer lines is padded with place holder lines
+			that have high matching values to all lines in the other sequence
+
+	The line extraction process is too imprecise for faded lines. In some
+		documents, over half of the grid lines are either missing or broken.
+		Broken lines we could detect and fix, but the missing lines are hard to
+		fix.
+
+	Let's try running the extraction with different thresholds.
+
+
+March 25
+
+	Let's redesign the dynamic programming line matching
+
+March 26
+
+	Still working on the line matching/merging algorithm
+	
+April 3
+	
+	The line matching is going well.  Need to fix a bug in the merging
+		portion. Bug found.  CoFrags were being labled as Overlaps.
+	Possible extensions
+		Ensure that changes are incremental.  For instance, what do we do
+			with two overlapping lines.  Is the result line the sum of the two?
+			The same with a containment. 
+			I think it makes a difference to distinguish between
+			equal merging (symmetric operation) and updating.
+		Needs regularization
+			Count decay - Every 5 merges, decay all lines by 1
+			When counts are low, treat them differently
+			Incremental changes
+			Make extraction process with fewer false positives, and make
+				the matching/merging process robust to missing lines
+	Count decay seems to work well.  More work needs to be done on the
+		extraction side of things.
+
+	Final pruning also helps because the last few documents added persist
+		because they do not have time to decay.  Final pruning can also
+		destroy small clusters as is.
+
+	Now we need to handle the case of no perfect matches and documents that
+		have no lines.
+
+April 4
+
+	Well, running perfect over 1000 documents only takes 5 minutes.  Most of that
+		has got to be loading the documents into memory.
+
+	Okay, so estimating document offsets based on only the last line pair can
+		be problematic because two noise lines might match at some point and throw
+		the whole thing off.  Perhaps a better way to do it is to keep
+		the last match
+		schema for table building, then use the perfect matches to calculate a
+		relative offset between the two docs.  Then we could just use that in the
+		merging process.
+
+	Vertical lines grow crazily.
+		
+April 7
+	
+	Changed edit distance part to use the global offset between the first
+		pair of perfect matching.  Debugged it a bit and it seems to work pretty
+		well.
+
+April 8
+	
+	Lets add in a transpose operation.
+	Running medium perfect produced pretty good cluster centers.  Some of the
+		clusters were obviously lesser quality, but this is because most of
+		the documents are faded.
+	Running the whole dataset on perfect
+		The unclassified cluster has some lines that run off the normal page
+			boundary.  I'm not sure what is causing them.
+		Vertical lines are migrating significantly in some clusters.  I thought
+			that I had accounted for that in the incremental growth pattern.
+
+April 9
+
+	Aggregating over all the "UnClassifieds" reveals some interesting things.
+	About 1% of the documents are a different form type and look like the
+		main census pages with a large table.  These table lines are being
+		combined with shorter lines.  Because this happens when the count is
+		large, adding in more instances of the shorter lines does not bring it
+		back down very well.  I think the merging on CONTAINS2 needs to be 
+		treated differently.  Perhaps if we considered it to be two overlaps or
+		contains and we don't merge together those two lines.  I think that will
+		help preserve the incremental changes paradigm.
+	That fixed the problem with the Unclassifieds.  The biggest problem we have
+		are that the two largest classes are being put into the same cluster.
+
+	Ideas for Improved Text Line matching/mergine
+		Use (smart) partial matching.  Not just prefix/suffix exact matching.
+			When comparing two strings of different length, check that the edit
+			distance between the smaller string and the prefix (suffix) of the
+			longer string.  It goes quick enough to make it feasable.
+		The same goes for the merging process.  Just keep the segmentation of
+			the template. 
+			Perhaps we can keep track of segmentation counts
+				For a template line that is found in two or more fragments,
+					put a count on the splitting characters.  If the template line
+					is found to be a fragment (another template line completes it),
+					then update a count pointing to that line.  If the relative
+					frequency of either of those counts gets high enough, we 
+					combine/split the template lines.
+			Another idea for fixing character errors is to take an approach
+				similar to the line matching.  When characters are matched, their
+				count goes up (use weight decay).  Or use a distribution over
+				characters at each position.  This is probably not essential, but
+				it would be nice to slowly converge on the actual character content
+				instead of just keeping the first one.
+
+Immediate TODO:
+
+Distant TODO:
+	Tune up the text line matching/merging process
+	Unsupervised cluster metrics
+		ARI cluster metric
+		RAND
+		etc
+	Graphing new profile data to see how it can be used
+
+
