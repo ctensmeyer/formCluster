@@ -53,7 +53,7 @@ def get_basenames(in_dir):
 
 def transfer(basenames, N, in_dir, out_dir):
 	num_transfer = min(N, len(basenames))
-	print "Moving %d documents", num_transfer
+	print "Moving %d documents" % num_transfer
 	samples = random.sample(basenames, num_transfer)
 	N = len(samples)
 	for x, name in enumerate(samples):
