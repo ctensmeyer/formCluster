@@ -2,7 +2,6 @@
 import xml.etree.ElementTree as ET
 import ImageDraw
 import Image
-import munkres
 import math
 
 import components
