@@ -98,6 +98,13 @@ def e_dist(p1, p2):
 	return math.sqrt( (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 )
 
 
+def ratio(num1, num2):
+	'''
+	Returns the ratio of two numbers, giving the smaller ratio
+	'''
+	return min(float(num1) / num2, float(num2) / num1)
+
+
 def argmax(l):
 	return l.index(max(l))
 
@@ -130,6 +137,10 @@ def avg(l):
 
 
 def wavg(l, w):
+	'''
+	:param l: list of num to be averaged
+	:param w: list of num weights
+	'''
 	return float(sum(map(lambda val, w: val * w, l, w))) / sum(w) if len(l) else float('nan')
 
 

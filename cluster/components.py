@@ -2,6 +2,7 @@
 import dictionary
 import utils
 import math
+import Levenshtein
 
 class Feature(object):
     
@@ -98,6 +99,25 @@ class TextLine(Feature):
 		#self.width = size[0]
 		#self.height = size[1]
 		self.N = len(self.text)
+		self.members = list()  # for template string medians
+
+	def aggregate(self, other):
+		if not self.members:
+			self.members.append(self.text)
+		self.members.append(other.text)
+		weights = [self.count, other.count]
+		x = utils.wavg([self.pos[0], other.pos[0]], weights)
+		y = utils.wavg([self.pos[1], other.pos[1]], weights)
+		w = utils.wavg([self.size[0], other.size[0]], weights)
+		h = utils.wavg([self.size[0], other.size[0]], weights)
+		self.pos = (x, y)
+		self.size = (w, h)
+		self.text = Levenshtein.median(self.members)
+		self.N = len(self.text)
+		self.count += other.count
+		# because we are taking the median string, the chars no longer matter
+		if hasattr(self, "chars"):
+			del self.chars
 
 	def copy(self):
 		chars_copy = list()
@@ -106,6 +126,7 @@ class TextLine(Feature):
 		cpy = TextLine(chars_copy, self.pos, self.size)
 		cpy.count = self.count
 		cpy.weight = self.weight
+		cpy.members = list(self.members)
 		return cpy
 
 	def match_value(self):
@@ -158,6 +179,12 @@ class TextLine(Feature):
 			prev_space = self.chars[x].val.isspace()
 		self.chars = new_chars
 		self.set_text()
+
+	def end_pos(self):
+		return (self.pos[0] + self.size[0], self.pos[1])
+
+	def char_width(self):
+		return float(self.size[0]) / self.N
 
 	def matches(self, other, dist_thresh):
 		if utils.e_dist(self.pos, other.pos) > dist_thresh:

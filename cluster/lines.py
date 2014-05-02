@@ -81,17 +81,6 @@ def line_up_colinears(lines):
 				tmp[o] = val
 				cur_line.pos = tuple(tmp)
 
-def draw_lines(h, v, image_path, size):
-	im = Image.new('RGB', size, 'white')
-	draw = ImageDraw.Draw(im)
-	for line in h:
-		draw.line( (line.pos, (line.pos[0] + line.length, line.pos[1]) ) , width=(line.thickness * 2),
-					fill=('purple' if line.matched else 'red'))
-	for line in v:
-		draw.line( (line.pos, (line.pos[0],  line.pos[1] + line.length) ) , width=(line.thickness * 2),
-					fill=('orange' if line.matched else 'blue'))
-	im.save(image_path)
-
 
 class LineMatcher():
 	
@@ -100,7 +89,7 @@ class LineMatcher():
 		:param lines1: list of Lines
 		:param lines2: list of Lines
 		'''
-		# makes sure that we only have one orientation between both lists
+		# makes sure that we have at most one orientation in both lists
 		assert len(set(map(lambda line: line.orien, lines1 + lines2))) <= 1
 		self.lines1 = lines1
 		self.lines2 = lines2
@@ -115,10 +104,9 @@ class LineMatcher():
 	def sort(self):
 		'''
 		Sorts the sequence of lines
-		TODO: handle cases where lines are really close together
 		'''
-		self.lines1.sort(key=lambda line: line.pos[line.orien])
-		self.lines2.sort(key=lambda line: line.pos[line.orien])
+		sort_lines(self.lines1)
+		sort_lines(self.lines2)
 
 
 class LMatcher(LineMatcher):
@@ -129,6 +117,7 @@ class LMatcher(LineMatcher):
 	as reference points for dealing with the coordinate offset problem.  Then we
 	fine tune and match as many things as possible.  Also this class allows for
 	line sequence merging based on partial matches.
+	Merging is asymmetrical; lines1 is perturbed by lines2
 	'''
 	EMPTY = -2               # initialized value
 	START = -1               # value at the start corner of the table
@@ -157,6 +146,9 @@ class LMatcher(LineMatcher):
 		self.tables_built = False
 
 	def _table_check(self):
+		'''
+		For lazy operations
+		'''
 		if not self.tables_built:
 			self.build_tables()
 		self.tables_built = True
@@ -404,7 +396,7 @@ class LMatcher(LineMatcher):
 			self.op_mat[0][j] = self.DEL2
 			self.cost_mat[0][j] = self.cost_mat[0][j-1] + self.indel_cost(self.lines2[j-1])
 
-	def get_similarity(self):
+	def similarity(self):
 		self._table_check()
 		total1 = sum(map(lambda line: line.length * line.count, self.lines1))
 		total2 = sum(map(lambda line: line.length * line.count, self.lines2))

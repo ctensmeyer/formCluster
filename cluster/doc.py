@@ -265,7 +265,7 @@ class Document:
 		#ops = h_matcher.get_operations()
 		#h_matcher.print_ops(ops)
 
-		return h_matcher.get_similarity()
+		return h_matcher.similarity()
 
 	def v_line_similarity(self, other):
 		self._load_check()
@@ -275,7 +275,7 @@ class Document:
 
 		v_thresh_dist = _line_thresh_mult * max(self.size[1], other.size[1]) 
 		v_matcher = lines.LMatcher(self.v_lines, other.v_lines, v_thresh_dist)
-		return v_matcher.get_similarity()
+		return v_matcher.similarity()
 		#matches = v_matcher.get_matches()
 		#print "Vertical"
 		#v_matcher.display()
@@ -294,36 +294,36 @@ class Document:
 		for line in other.text_lines:
 			matched_line = self._find_matching_text_line(line, thresh_dist)
 			if matched_line:
-				x = (line.count * line.pos[0] + matched_line.count * matched_line.pos[0]
-					) / (line.count + matched_line.count)
-				y = (line.count * line.pos[1] + matched_line.count * matched_line.pos[1]
-					) / (line.count + matched_line.count)
+				matched_line.aggregate(line)
+				#x = (line.count * line.pos[0] + matched_line.count * matched_line.pos[0]
+				#	) / (line.count + matched_line.count)
+				#y = (line.count * line.pos[1] + matched_line.count * matched_line.pos[1]
+				#	) / (line.count + matched_line.count)
 
-				# Don't worry about size for now
-				#width = (line.count * line.size[0] + matched_line.count * matched_line.size[0]) /
-				#	(line.count + matched_line.count)
-				#height = (line.count * line.size[1] + matched_line.count * matched_line.size[1]) /
-				#	(line.count + matched_line.count)
-				# hmmm, what if the text is not an exact match...
-				# partial matches?
+				## Don't worry about size for now
+				##width = (line.count * line.size[0] + matched_line.count * matched_line.size[0]) /
+				##	(line.count + matched_line.count)
+				##height = (line.count * line.size[1] + matched_line.count * matched_line.size[1]) /
+				##	(line.count + matched_line.count)
+				## hmmm, what if the text is not an exact match...
+				## partial matches?
 
-				# translations
-				dx = x - matched_line.pos[0]
-				dy = y - matched_line.pos[1]
-				for char in matched_line.chars:
-					new_pos = (char.pos[0] + dx, char.pos[1] + dy)
-					char.pos = new_pos
-					char.pos2 = (char.pos2[0] + dx, char.pos2[1] + dy)
-					#char.attributes['l'] += dx
-					#char.attributes['r'] += dx
-					#char.attributes['t'] += dy
-					#char.attributes['b'] += dy
+				## translations
+				#dx = x - matched_line.pos[0]
+				#dy = y - matched_line.pos[1]
+				#for char in matched_line.chars:
+				#	new_pos = (char.pos[0] + dx, char.pos[1] + dy)
+				#	char.pos = new_pos
+				#	char.pos2 = (char.pos2[0] + dx, char.pos2[1] + dy)
+				#	#char.attributes['l'] += dx
+				#	#char.attributes['r'] += dx
+				#	#char.attributes['t'] += dy
+				#	#char.attributes['b'] += dy
 
-				matched_line.count += line.count
-				matched_line.pos = (x, y)
-				#matched_line.size = (width, height)
+				#matched_line.count += line.count
+				#matched_line.pos = (x, y)
+				##matched_line.size = (width, height)
 			else:
-				# TODO: should we be copying?
 				to_add.append(line.copy())
 
 		self.text_lines += to_add
@@ -397,11 +397,13 @@ class Document:
 		idx = 0
 		for line in self.h_lines:
 			color = 'orange' if line.matched else 'red'
-			draw.line( (utils.tup_int(line.pos), utils.tup_int( (line.pos[0] + line.length, line.pos[1]) )) , width=int(line.thickness * 2), fill=color)
+			draw.line( (utils.tup_int(line.pos), utils.tup_int( (line.pos[0] + line.length, line.pos[1]) )) ,
+						width=int(line.thickness * 2), fill=color)
 			draw.text( utils.tup_int(line.pos), "%.2f" % line.count, fill="black")
 		for line in self.v_lines:
 			color = 'purple' if line.matched else 'blue'
-			draw.line( (utils.tup_int(line.pos), utils.tup_int( (line.pos[0], line.pos[1] + line.length) )) , width=int(line.thickness * 2), fill=color)
+			draw.line( (utils.tup_int(line.pos), utils.tup_int( (line.pos[0], line.pos[1] + line.length) )) ,
+						width=int(line.thickness * 2), fill=color)
 			draw.text( utils.tup_int(line.pos), "%.2f" % line.count, fill="black")
 		for line in self.text_lines:
 			fill = colors[idx % len(colors)] if colortext else "black"
