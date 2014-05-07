@@ -23,8 +23,8 @@ aggregate_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_
 
 def get_data_dir(descrip):
 	if descrip == "big":
-		#return "../data/full/1911Wales"
-		return "../data/full/WashStatePassLists"
+		return "../data/full/1911Wales"
+		#return "../data/full/WashStatePassLists"
 	if descrip == "medium":
 		return "../data/wales1000/"
 	if descrip == "small":
