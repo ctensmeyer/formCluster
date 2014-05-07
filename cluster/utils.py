@@ -5,6 +5,7 @@ import string
 import operator
 import ImageFont
 import Levenshtein
+import cPickle
 
 colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255),
 			 (255, 255, 0), (255, 0, 255), (0, 255, 255),
@@ -269,6 +270,39 @@ def get_font(text, width):
 		fontsize += 1
 		font = ImageFont.truetype(_font_path, fontsize)
 	return font
+
+
+def save_obj(obj, path):
+	'''
+	Use Pickle to write obj
+	:param obj: object to be saved
+	:param path: the path to save obj to
+	'''
+	try:
+		saveFile = open(path, "w")
+	except Exception as e:
+		print "Error opening save file: %s" % repr(e)
+		return
+ 
+	cPickle.dump(obj, saveFile, -1)	
+
+	saveFile.close()
+
+def load_obj(path):
+	'''
+	Use Pickle to load obj
+	:param path: location of the file to load
+	'''
+	try:
+		loadFile = open(path, 'r')
+	except Exception as e:
+		print "Error opening file: %s" % repr(e)
+		return None
+
+	obj = cPickle.load(loadFile)
+
+	loadFile.close()
+	return obj
 
 if __name__ == "__main__":
 	mat = pairwise(xrange(5), lambda x,y: math.sqrt(x + y))
