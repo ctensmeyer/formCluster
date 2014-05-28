@@ -5,7 +5,7 @@ import sys
 import utils
 import doc
 from sklearn.manifold import MDS
-
+from sklearn.metrics import euclidean_distances as dist
 
 class shapeArray:
 
@@ -13,28 +13,28 @@ class shapeArray:
         self.array=data
         self.shape=[len(data), len(data[0])]
 
-def dimensionalityReduction(similarities):
-    mds = MDS(n_components=2)
 
-    shape = (len(similarities), len(similarities[0]))
+def docReduction(docs,N=2):
+    similarities = utils.pairwise(docs, lambda x,y: x.similarity(y))
+    return reduction(similarities, N)
 
-    sim = np.array(similarities)
 
+def reduction(simMat,N=2):
+
+    #change similarity matrix into dissimilarity matrix
+    dis = map(lambda x: map(lambda y: 1-y, x), simMat)
+    #dis = dist(simMat)
+    #dis = simMat
+
+    #configure MDS to run 10 times. Also specify that data will be a dissimilarity matrix
+    mds = MDS(n_components=N, n_init=10,max_iter=500, metric=False, dissimilarity="precomputed")
+    mat = np.array(dis)
     
-    fit = mds.fit(sim)
-    bestFit = fit.embedding_
-    bestStress = fit.stress_
-    print "initial stress:", bestStress  
-    for i in range(10):
-        fit = mds.fit(sim)
-        if (fit.stress_ < bestStress):
-            bestFit = fit.embedding_
-            bestStress = fit.stress_
-            print "updating MDS"
+    #Run MDS
+    fit = mds.fit(mat)
+    print "Stress:", fit.stress_
 
-
-    print "final stress:", bestStress
-    return bestFit
+    return fit.embedding_
 
 def main(args):
     if(len(args) != 3):
@@ -45,16 +45,17 @@ def main(args):
     C = int(args[1])
     path = args[2]
     
+    print "Loading"
     clustering = utils.load_obj(path)
 
-    cluster = clustering[C]
+    print "Calculating Pairwise Similarities"
+    similarities = utils.pairwise(clustering[C].members, lambda x,y: x.similarity(y))
 
-    similarities = utils.pairwise(cluster.members, lambda x,y: x.similarity(y))
+    #print "INITIAL SIMILARITIES:"
+    #utils.print_mat(similarities)
 
-    print "INITIAL SIMILARITIES:"
-    utils.print_mat(similarities)
-
-    pos = dimensionalityReduction(similarities)
+    print "Starting MDS"
+    pos = reduction(similarities)
 
     print "MDS:"
     utils.print_mat(pos)
