@@ -4,6 +4,7 @@ import numpy as np
 import sys
 import utils
 import doc
+import driver
 from sklearn.manifold import MDS
 from sklearn.metrics import euclidean_distances as dist
 
@@ -37,19 +38,22 @@ def reduction(simMat,N=2):
     return fit.embedding_
 
 def main(args):
-    if(len(args) != 3):
+    if(len(args) != 1):
         print "Usage: mds.py C clustering.pkl"
         print "     C is the cluster in clustering.pkl to display"
         sys.exit(0)
 
-    C = int(args[1])
-    path = args[2]
+    #C = int(args[1])
+    #path = args[2]
     
     print "Loading"
-    clustering = utils.load_obj(path)
+    #clustering = utils.load_obj(path)
+
+    #docs = clustering[C].members
+    docs = doc.get_docs_nested(driver.get_data_dir("very_small"))
 
     print "Calculating Pairwise Similarities"
-    similarities = utils.pairwise(clustering[C].members, lambda x,y: x.similarity(y))
+    similarities = utils.pairwise(docs, lambda x,y: x.similarity(y))
 
     #print "INITIAL SIMILARITIES:"
     #utils.print_mat(similarities)
