@@ -28,7 +28,7 @@ def reduction(simMat,N=2):
     #dis = simMat
 
     #configure MDS to run 10 times. Also specify that data will be a dissimilarity matrix
-    mds = MDS(n_components=N, n_init=10,max_iter=500, metric=False, dissimilarity="precomputed")
+    mds = MDS(n_components=N, n_init=10,max_iter=3000, metric=False, dissimilarity="precomputed")
     mat = np.array(dis)
     
     #Run MDS

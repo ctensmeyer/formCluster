@@ -12,6 +12,36 @@ from ttk import Style
 from PIL import Image, ImageTk
 
 
+class Point:
+    def __init__(self, point, canvas=None):
+        self.point = point
+
+        if(canvas != None):
+            self.drawfunction = canvas.create_oval
+
+    def setCanvas(self, canvas):
+        self.drawfunction = canvas.create_oval
+
+    def draw(*params):
+        self.drawfunction(params)
+
+    def __getitem__(self, index):
+        return self.point[index]
+
+    def __setitem__(self, key, value):
+        self.point[key] = value
+
+    def __add__(self, other):
+        return self.point + other
+
+    def __sub__(self, other):
+        return self.point - other
+
+    def __mul__(self, other):
+        return self.point * other
+
+    def __div__(self,other):
+        return self.point.__div__(other)
 
 class GraphFrame(Frame):
     def __init__(self, parent, docs):
@@ -53,13 +83,13 @@ class GraphFrame(Frame):
 
 
     def clickPoint(self, event):
-        print "Click:", event.x, event.y
+        #print "Click:", event.x, event.y
 
         self.lastTags = self.canvas.itemcget(event.widget.find_closest(event.x, event.y), "tags").split(" ")[1]
         self.lastPos = (event.x,event.y)
 
         self.canvas.tag_raise(self.lastTags)
-        print "Tags:", self.lastTags
+        #print "Tags:", self.lastTags
 
     def dragPoint(self, event):
         
@@ -71,9 +101,27 @@ class GraphFrame(Frame):
 
     #Find point double clicked, Load Image in a new window.
     def doubleClickPoint(self,event):
-        print "Double Click:", event.x, event.y
-        print self.canvas.itemcget(event.widget.find_closest(event.x,event.y),"tags")
-        #TODO: Load image in new window.
+        #print "Double Click:", event.x, event.y
+
+        allTags = self.canvas.itemcget(event.widget.find_closest(event.x,event.y), "tags").split(" ")
+
+        docTag = filter(lambda x: x[:4] == "doc_", allTags)
+        idx = docTag[0][4:]
+        
+        _doc = self.docs[int(idx)]
+
+        im = _doc.draw()
+
+        im = ImageTk.PhotoImage(resizeImage(im, 800))
+
+        popup = Toplevel(self)
+        popup.title(docTag[0])
+    
+
+        lbl = Label(popup, image=im)
+        lbl.image = im
+        lbl.pack()
+
 
     #Recalculates and displays points using MDS
     def displayPoints(self, event=None):
@@ -116,6 +164,7 @@ class GraphFrame(Frame):
         for i,p in enumerate(points):
             #Tag for each point
             t = ("point","doc_"+str(i))
+
             #Bounding box containing the Oval
             bbox = (self.origin[0] + p[0],self.origin[1] + p[1], self.origin[0] + p[0]+radius, self.origin[1] + p[1]+radius)
             self.canvas.create_oval(bbox, tags=t)

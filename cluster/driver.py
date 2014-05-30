@@ -45,6 +45,22 @@ def cluster_known():
 	analyzer.draw_centers()
 	analyzer.print_all()
 
+def double_cluster_known():
+        docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
+        epsilon = float(sys.argv[3])
+        organizer = cluster.TemplateSorter(docs)
+        organizer.go(epsilon)
+        organizer.prune_clusters()
+        clusters = organizer.get_clusters()
+        print "Initial Clustering Complete"
+        print "Reclustering..."
+        organizer.go(epsilon,templates=clusters)
+        print
+        print
+        analyzer = metric.KnownClusterAnalyzer(clusters)
+        analyzer.draw_centers()
+        analyzer.print_all()
+
 def compare_true_templates():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
 	organizer = cluster.CheatingSorter(docs)
@@ -129,6 +145,8 @@ def cmp_test():
 def main(arg):
 	if arg == "cluster":
 		cluster_known()
+        if arg == "twice":
+                double_cluster_known()
 	if arg == "perfect":
 		compare_true_templates()
 	if arg == "single":
