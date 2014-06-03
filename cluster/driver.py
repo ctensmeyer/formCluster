@@ -54,7 +54,10 @@ def double_cluster_known():
         clusters = organizer.get_clusters()
         print "Initial Clustering Complete"
         print "Reclustering..."
-        organizer.go(epsilon,templates=clusters)
+        centers = map(lambda x: x.center, clusters)
+        organizer.go(epsilon,templates=centers)
+        organizer.prune_clusters()
+        clusters = organizer.get_clusters()
         print
         print
         analyzer = metric.KnownClusterAnalyzer(clusters)
