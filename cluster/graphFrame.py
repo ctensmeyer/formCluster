@@ -21,6 +21,9 @@ class Point:
 
     def setCanvas(self, canvas):
         self.drawfunction = canvas.create_oval
+    
+    def setDrawFunction(self, func):
+        self.drawfunction = func
 
     def draw(*params):
         self.drawfunction(params)
@@ -55,6 +58,10 @@ class GraphFrame(Frame):
         self.pointRadius=18
 
         self.docs = docs.members
+        self.centerMask = [False] * len(self.docs)
+        
+        self.docs.append(docs.center)
+        self.centerMask.append(True)
 
         #precompute similarity matrix. Does not change.
         self.similarities = utils.pairwise(self.docs, lambda x,y: x.similarity(y))
@@ -167,7 +174,11 @@ class GraphFrame(Frame):
 
             #Bounding box containing the Oval
             bbox = (self.origin[0] + p[0],self.origin[1] + p[1], self.origin[0] + p[0]+radius, self.origin[1] + p[1]+radius)
-            self.canvas.create_oval(bbox, tags=t)
+
+            if(self.centerMask[i]):
+                self.canvas.create_rectangle(bbox, tags=t)
+            else:
+                self.canvas.create_oval(bbox, tags=t)
             #Place text in center of Oval
             center = ((bbox[0]+bbox[2])/2,(bbox[1]+bbox[3])/2)
             self.canvas.create_text(center, tags=t, text=str(i))
