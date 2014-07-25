@@ -20,6 +20,9 @@ def docReduction(docs,N=2):
     return reduction(similarities, N)
 
 
+def classicMDS(simMat):
+    return None
+
 def reduction(simMat,N=2):
 
     #change similarity matrix into dissimilarity matrix
@@ -28,7 +31,7 @@ def reduction(simMat,N=2):
     #dis = simMat
 
     #configure MDS to run 10 times. Also specify that data will be a dissimilarity matrix
-    mds = MDS(n_components=N, n_init=10,max_iter=3000, metric=False, dissimilarity="precomputed")
+    mds = MDS(n_components=N, n_init=10,max_iter=3000, metric=True, dissimilarity="precomputed")
     mat = np.array(dis)
     
     #Run MDS
