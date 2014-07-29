@@ -6,6 +6,7 @@ import math
 
 import components
 import utils
+#from profilehooks import profile
 
 def create_pos(dist, offset, o):
 	pos = [0] * 2
@@ -144,6 +145,7 @@ class LMatcher(LineMatcher):
 		self.offset_thresh = dist_thresh / 2
 		self.colinear_thresh = dist_thresh / 5.0
 		self.tables_built = False
+		self.match_cost_table = [[None] * (len(self.lines2)+1) for i in range(len(self.lines1)+1)]
 
 	def _table_check(self):
 		'''
@@ -225,8 +227,19 @@ class LMatcher(LineMatcher):
 		o_len = utils.overlap_len(line1_range, line2_range)
 		return avg_count * (line1.length + line2.length - 2 * o_len)
 
+
+	def cached_match_cost_type(self,i,j):
+		if (self.match_cost_table[i][j] == None):
+			tmp = self.match_cost_type(i,j)
+			self.match_cost_table[i][j] = tmp
+			return tmp	
+		
+		return self.match_cost_table[i][j]
+			
+
 	LEN_RATIO_THRESH = 1.20
 	def match_cost_type(self, i, j):
+			
 		line1 = self.lines1[i-1]
 		line2 = self.lines2[j-1]
 		o = line1.orien
@@ -253,6 +266,7 @@ class LMatcher(LineMatcher):
 		if offset < self.offset_thresh and len_ratio < self.LEN_RATIO_THRESH:
 			return 0, self.PERFECT
 
+
 		line1_range = line1.length_range()
 		line2_range = line2.length_range(offset=pos_offset[1-o])
 		if utils.range_contains(line1_range, line2_range):
@@ -266,6 +280,7 @@ class LMatcher(LineMatcher):
 
 		# in the case of similarly spaced lines, slight bias toward COFRAG over DEL1/DEL2 pair
 		return self.cofrag_cost(line1, line2), self.COFRAG
+
 
 	def connect1_cost(self, i, j):
 		'''
@@ -319,13 +334,14 @@ class LMatcher(LineMatcher):
 		# make sure that we don't make inconsistent perfect matches
 		if i < 2 or j < 2 or self.global_offsets[i-2][j-1] is None or self.global_offsets[i-1][j-2] is None:
 			return self.NO_MATCH_COST, self.NO_MATCH
-		cost1, type1 = self.match_cost_type(i, j-1)
-		cost2, type2 = self.match_cost_type(i-1, j)
+		cost1, type1 = self.cached_match_cost_type(i, j-1)
+		cost2, type2 = self.cached_match_cost_type(i-1, j)
 		if type1 == self.PERFECT and type2 == self.PERFECT:
-			return self.TRANSPOSE, 0
+			return 0, self.TRANSPOSE
 		else:
 			return self.NO_MATCH_COST, self.NO_MATCH
-		
+
+	#@profile	
 	def build_tables(self):
 		self.init_tables()
 		for i in xrange(1, len(self.lines1) + 1):
@@ -335,7 +351,7 @@ class LMatcher(LineMatcher):
 				# marginal costs
 				del1_marg_cost = self.indel_cost(self.lines1[i-1])
 				del2_marg_cost = self.indel_cost(self.lines2[j-1])
-				match_marg_cost, match_type = self.match_cost_type(i, j)
+				match_marg_cost, match_type = self.cached_match_cost_type(i, j)
 				conn1_marg_cost, conn1_type = self.connect1_cost(i, j) if match_type in [self.OVERLAP, self.CONTAINS1] else (self.NO_MATCH_COST, self.NO_MATCH)
 				conn2_marg_cost, conn2_type = self.connect2_cost(i, j) if match_type in [self.OVERLAP, self.CONTAINS2] else (self.NO_MATCH_COST, self.NO_MATCH)
 				transpose_marg_cost, transpose_type = self.transpose_cost(i, j)
