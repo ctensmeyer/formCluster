@@ -10,6 +10,7 @@ import os
 import components
 import profiles
 import lines
+import text
 import ocr
 
 _file_extensions = [".jpg", ".xml", "_line.xml", "_FormType.txt", "_endpoints.xml"]
@@ -229,6 +230,16 @@ class Document:
 		return ['text_line', 'h_line', 'v_line']
 
 	def text_line_similarity(self, other):
+		self._load_check()
+		other._load_check()
+		thresh_dist = 0.10 * max(max(self.size), max(other.size))  # % of largest dimension
+
+		text_matcher = text.TextLineMatcher(self.text_lines, other.text_lines, thresh_dist, True)
+		matches = text_matcher.get_matches()
+		text_matcher.print_matches(matches)
+		return text_matcher.similarity()
+
+	def _text_line_similarity(self, other):
 		self._load_check()
 		other._load_check()
 		thresh_dist = 0.10 * max(max(self.size), max(other.size))  # % of largest dimension
