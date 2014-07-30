@@ -87,7 +87,7 @@ class Document:
 		self.prof_path = paths[2] # path of projection profiles
 		self.form_path = paths[3]
 		self.endpoints_path = paths[4]
-
+                
 		self.loaded = False
 		if not LAZY and original:
 			self.load()
@@ -115,8 +115,8 @@ class Document:
 		for line in self.textLines:
 			print line
 		print
-
-	def _load_check(self):
+	
+        def _load_check(self):
 		if not self.loaded:
 			self.load()
 

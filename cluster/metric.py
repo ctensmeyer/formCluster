@@ -60,6 +60,9 @@ class KnownClusterAnalyzer:
 		f.write(repr(sys.argv))
 		f.close()
 
+		# save clusters to file
+		utils.save_obj(self.clusters, os.path.join(dir_name, "clusters.pkl"))		
+
 		# draw each cluster center
 		for cluster in self.clusters:
 			im = cluster.center.draw()

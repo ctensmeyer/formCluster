@@ -23,8 +23,8 @@ aggregate_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_
 
 def get_data_dir(descrip):
 	if descrip == "big":
-		#return "../data/full/1911Wales"
-		return "../data/full/WashStatePassLists"
+		return "../data/lines/1911Wales"
+		#return "../data/full/WashStatePassLists"
 	if descrip == "medium":
 		return "../data/wales1000/"
 	if descrip == "small":
@@ -44,6 +44,25 @@ def cluster_known():
 	analyzer = metric.KnownClusterAnalyzer(clusters)
 	analyzer.draw_centers()
 	analyzer.print_all()
+
+def double_cluster_known():
+        docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
+        epsilon = float(sys.argv[3])
+        organizer = cluster.TemplateSorter(docs)
+        organizer.go(epsilon)
+        organizer.prune_clusters()
+        clusters = organizer.get_clusters()
+        print "Initial Clustering Complete"
+        print "Reclustering..."
+        centers = map(lambda x: x.center, clusters)
+        organizer.go(epsilon,templates=centers)
+        organizer.prune_clusters()
+        clusters = organizer.get_clusters()
+        print
+        print
+        analyzer = metric.KnownClusterAnalyzer(clusters)
+        analyzer.draw_centers()
+        analyzer.print_all()
 
 def compare_true_templates():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
@@ -144,6 +163,8 @@ def cmp_test():
 def main(arg):
 	if arg == "cluster":
 		cluster_known()
+        if arg == "twice":
+                double_cluster_known()
 	if arg == "perfect":
 		compare_true_templates()
 	if arg == "single":
