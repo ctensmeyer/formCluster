@@ -14,9 +14,9 @@ import doc
 #data_dir = "../data/full/1911Wales/"
 data_dir = "../data/wales100/"
 single_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
-single_basename = "rg14_31702_0085_03"
+single_basename = "rg14_31707_0073_03"
 second_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
-second_basename = "rg14_31708_0089_03"
+second_basename = "rg14_31707_0213_03"
 aggregate_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
 #aggregate_dir = "../data/full/1911Wales/UnClassified"
 
@@ -105,13 +105,13 @@ def cmp_test():
 	doc1._load_check()
 	doc2._load_check()
 
-	print "DOC1 H-lines:"
-	for line in doc1.h_lines:
+	print "DOC1 text-lines:"
+	for line in doc1.text_lines:
 		print "\t%s" % line
 	print
 
-	print "DOC2 H-lines:"
-	for line in doc2.h_lines:
+	print "DOC2 text-lines:"
+	for line in doc2.text_lines:
 		print "\t%s" % line
 	print
 
@@ -119,7 +119,22 @@ def cmp_test():
 	doc1.draw().save("output/doc1.png")
 	doc2.draw().save("output/doc2.png")
 	print sims
-	print len(doc1.h_lines), len(doc1.v_lines)
+
+	print "DOC2 Unmatched text-lines:"
+	for line in doc1.text_lines:
+		if not line.matched:
+			print "\t%s" % line
+	print
+
+	print "DOC2 Unmatched text-lines:"
+	for line in doc2.text_lines:
+		if not line.matched:
+			print "\t%s" % line
+	print
+
+	exit()
+
+	print len(doc1.text_lines), len(doc1.text_lines)
 	print len(doc2.h_lines), len(doc2.v_lines)
 	doc1.aggregate(doc2)
 	doc1.draw().save("output/combined.png")
