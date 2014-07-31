@@ -341,7 +341,7 @@ class LMatcher(LineMatcher):
 		else:
 			return self.NO_MATCH_COST, self.NO_MATCH
 
-	#@profile	
+	#@profile(sort='tottime')
 	def build_tables(self):
 		self.init_tables()
 		for i in xrange(1, len(self.lines1) + 1):

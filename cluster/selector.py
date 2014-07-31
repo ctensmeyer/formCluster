@@ -113,15 +113,6 @@ def streamSelector(clustering):
     return selection
 
 
-def euclideanDistande(x,y):
-    assert(len(x) == len(y))
-    
-    total = 0.0
-    for i in range(len(x)):
-        tmp = (x[i] - y[i])
-        total += tmp*tmp
-        
-    return math.sqrt(total)
 
 
 def pseudoDistance(clustering):
@@ -145,7 +136,7 @@ def pseudoDistance(clustering):
         
         namedSims = map(lambda x: x.similarities_by_name(cluster.center).items(), cluster.members)
         distToCenter = map(lambda x: [1-i[1] for i in x], namedSims)
-        euclid = utils.pairwise(distToCenter, lambda x,y: euclideanDistande(x,y))
+        euclid = utils.pairwise(distToCenter, lambda x,y: utils.euclideanDistance(x,y))
         
         distances.append(euclid)
         

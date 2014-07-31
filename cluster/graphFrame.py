@@ -66,7 +66,7 @@ class GraphFrame(Frame):
         #precompute similarity matrix. Does not change.
         self.similarities = utils.pairwise(self.docs, lambda x,y: x.similarity(y))
 
-
+        self.classic = False
 
         self.canvas = Canvas(self,width=self.width, height=self.height, offset="5,5", bg="white")
 
@@ -188,7 +188,16 @@ class GraphFrame(Frame):
         if(docs != None):
             return mds.docReduction(docs)
         else:
-            return mds.reduction(self.similarities)
+            points = None
+            if (self.classic):
+                print "Classic:"
+                points = mds.classicMDS(self.similarities)
+            else:
+                print "Approx:"
+                points = mds.reduction(self.similarities)
+                
+            self.classic = not self.classic
+            return points
 
 def main(args):
 

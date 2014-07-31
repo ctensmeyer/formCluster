@@ -271,6 +271,15 @@ def get_font(text, width):
 		font = ImageFont.truetype(_font_path, fontsize)
 	return font
 
+def euclideanDistance(x,y):
+    assert(len(x) == len(y))
+    
+    total = 0.0
+    for i in range(len(x)):
+        tmp = (x[i] - y[i])
+        total += tmp*tmp
+        
+    return math.sqrt(total)
 
 def save_obj(obj, path):
 	'''
