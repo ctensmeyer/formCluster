@@ -7,6 +7,7 @@ import doc
 import utils
 import sys
 import mds
+import driver
 from Tkinter import *
 from ttk import Style
 from PIL import Image, ImageTk
@@ -57,11 +58,13 @@ class GraphFrame(Frame):
         #Radius of Ovals
         self.pointRadius=18
 
-        self.docs = docs.members
+        #self.docs = docs.members
+        self.docs = docs
         self.centerMask = [False] * len(self.docs)
         
-        self.docs.append(docs.center)
-        self.centerMask.append(True)
+        
+        #self.docs.append(docs.center)
+        #self.centerMask.append(True)
 
         #precompute similarity matrix. Does not change.
         self.similarities = utils.pairwise(self.docs, lambda x,y: x.similarity(y))
@@ -210,11 +213,12 @@ def main(args):
     path = args[2]
 
     print "Loading"
-    clustering = utils.load_obj(path)
+    #clustering = utils.load_obj(path)
+    clustering  = doc.get_docs_nested(driver.get_data_dir("medium"))
 
     print "Starting GUI"
     root = Tk()
-    frame = GraphFrame(root, clustering[C])
+    frame = GraphFrame(root, clustering)
     frame.pack(fill=BOTH,expand=1)
     root.mainloop()  
 
