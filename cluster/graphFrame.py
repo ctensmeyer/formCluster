@@ -8,6 +8,7 @@ import utils
 import sys
 import mds
 import driver
+from hierarchy import Hierarchy
 from Tkinter import *
 from ttk import Style
 from PIL import Image, ImageTk
@@ -48,7 +49,7 @@ class Point:
         return self.point.__div__(other)
 
 class GraphFrame(Frame):
-    def __init__(self, parent, docs):
+    def __init__(self, parent, hierarchy):
         
         self.width = 800
         self.height = 800
@@ -59,19 +60,14 @@ class GraphFrame(Frame):
         self.pointRadius=18
 
         #self.docs = docs.members
-        self.docs = docs
-        self.centerMask = [False] * len(self.docs)
+        self.hierarchy = hierarchy
         
-        
-        #self.docs.append(docs.center)
-        #self.centerMask.append(True)
-
         #precompute similarity matrix. Does not change.
-        self.similarities = utils.pairwise(self.docs, lambda x,y: x.similarity(y))
+        #self.similarities = utils.pairwise(self.docs, lambda x,y: x.similarity(y))
 
         self.classic = False
 
-        self.canvas = Canvas(self,width=self.width, height=self.height, offset="5,5", bg="white")
+        self.canvas = Canvas(self,width=self.width, height=self.height, offset="5,5", bg="white", highlightthickness=0)
 
         #Draw axis lines
         self.canvas.create_line(0,self.height/2, self.width, self.height/2, fill="light grey")
@@ -90,7 +86,30 @@ class GraphFrame(Frame):
 
         #Press r to refresh the MDS points
         parent.bind("r",self.displayPoints)
+        self.bind("<Configure>", self.on_resize)
 
+
+    #resize canvas to fit into window on resize
+    def on_resize(self, event):
+        dim = min(event.width, event.height)
+        scale = float(dim)/min(self.width,self.height)
+        #wscale = float(event.width)/self.width
+        #hscale = float(event.height)/self.height
+        
+        #self.width = event.width
+        #self.height = event.height
+        
+        self.width = dim
+        self.height = dim
+        
+        self.canvas.width = dim
+        self.canvas.height = dim
+        
+        
+        self.config(width=self.width, height=self.height)
+        self.canvas.config(width=self.canvas.width, height=self.canvas.height)
+        
+        self.canvas.scale("all",0,0,scale,scale)        
 
     def clickPoint(self, event):
         #print "Click:", event.x, event.y
@@ -138,30 +157,41 @@ class GraphFrame(Frame):
         print "Displaying Points"
 
         #Calculate MDS
-        self.points = self.getPoints()
+        hierarchy = self.getPoints()
 
         #normalize points to fit in view
-        self.normalizePoints(self.points)
+        self.points = self.normalizeHierarchy(hierarchy)
         self.drawPoints(self.points)
 
 
-    def normalizePoints(self, points):
-        xcoord = map(lambda x: x[0],points)
-        ycoord = map(lambda y: y[1],points)
+    def normalizePoint(self, point, high, low, maximum=1, minimum=0):
+        for i in range(len(point)):
+            point[i] = ((point[i] - low)/(high-low))*(maximum-minimum) + minimum
+
+    def normalizeHierarchy(self, hierarchy):
+        xcoord = map(lambda x: x[0],hierarchy.mdsPos)
+        ycoord = map(lambda y: y[1],hierarchy.mdsPos)
 
         wMax = max(xcoord)
         hMax = max(ycoord)
         wMin = min(xcoord)
         hMin = min(ycoord)
 
-        maximum = max(wMax,hMax)
-        minimum = min(wMin,hMin)
+        low = max(wMax,hMax)
+        high = min(wMin,hMin)
 
+        dim = min(self.width, self.height)
+
+        for point in hierarchy.mdsPos:
+            self.normalizePoint(point, high,low, 0.4*dim, -0.4*dim)
+        
+
+        return hierarchy.mdsPos
         #newX = map(lambda v: (((v-wMin)/(wMax-wMin))-.5)*(.9*self.w), xcoord)
         #newY = map(lambda v: (((v-hMin)/(hMax-hMin))-.5)*(.9*self.h), ycoord)
 
-        for i in range(len(self.points)):
-            self.points[i] = (((self.points[i]-minimum)/(maximum-minimum))-.5)*(.9*self.width)
+        #for i in range(len(self.points)):
+        #   self.points[i] = (((self.points[i]-minimum)/(maximum-minimum))-.5)*(.9*self.width)
 
 
     def drawPoints(self, points):
@@ -178,29 +208,20 @@ class GraphFrame(Frame):
             #Bounding box containing the Oval
             bbox = (self.origin[0] + p[0],self.origin[1] + p[1], self.origin[0] + p[0]+radius, self.origin[1] + p[1]+radius)
 
-            if(self.centerMask[i]):
-                self.canvas.create_rectangle(bbox, tags=t)
-            else:
-                self.canvas.create_oval(bbox, tags=t)
+            #if(self.centerMask[i]):
+            #    self.canvas.create_rectangle(bbox, tags=t)
+            #else:
+            self.canvas.create_oval(bbox, tags=t)
             #Place text in center of Oval
             center = ((bbox[0]+bbox[2])/2,(bbox[1]+bbox[3])/2)
             self.canvas.create_text(center, tags=t, text=str(i))
 
 
     def getPoints(self,docs=None):
-        if(docs != None):
-            return mds.docReduction(docs)
-        else:
-            points = None
-            if (self.classic):
-                print "Classic:"
-                points = mds.classicMDS(self.similarities)
-            else:
-                print "Approx:"
-                points = mds.reduction(self.similarities)
-                
-            self.classic = not self.classic
-            return points
+        
+        self.hierarchy.reduce(classic=self.classic)        
+        self.classic = not self.classic
+        return self.hierarchy
 
 def main(args):
 
@@ -213,12 +234,14 @@ def main(args):
     path = args[2]
 
     print "Loading"
-    #clustering = utils.load_obj(path)
-    clustering  = doc.get_docs_nested(driver.get_data_dir("medium"))
+    clustering = utils.load_obj(path)
+    #clustering  = doc.get_docs_nested(driver.get_data_dir("very_small"))
+    
+    hierarchy = Hierarchy.createHierarchy(clustering)
 
     print "Starting GUI"
     root = Tk()
-    frame = GraphFrame(root, clustering)
+    frame = GraphFrame(root, hierarchy)
     frame.pack(fill=BOTH,expand=1)
     root.mainloop()  
 

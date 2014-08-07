@@ -15,9 +15,36 @@ class shapeArray:
         self.shape=[len(data), len(data[0])]
 
 
-def docReduction(docs,N=2):
+def docReduction(docs,dim=2):
     similarities = utils.pairwise(docs, lambda x,y: x.similarity(y))
-    return reduction(similarities, N)
+    return reduction(similarities, dim)
+
+def hierarchyReduction(hierarchy, dim = 2, classic=False):
+    
+    if(hierarchy.representatives == None):
+        return
+    
+    docs = map(lambda x: x.center, hierarchy.representatives)
+
+    if (hierarchy.center != None):
+        docs.append(hierarchy.center)
+    
+    if (hierarchy.simMat == None):
+        hierarchy.simMat = utils.pairwise(docs, lambda x,y: x.similarity(y))
+    
+    points = []
+    if(classic):
+        points = classicMDS(hierarchy.simMat,dim)
+    else:
+        points = reduction(hierarchy.simMat,dim)
+        
+    if (hierarchy.center != None):    
+        hierarchy.centerPos = points[-1]
+        hierarchy.mdsPos = points[:-1]
+    else:
+        hierarchy.mdsPos = points[:]
+        
+    map(lambda x: hierarchyReduction(x,dim), hierarchy.representatives)
 
 
 def getMat(value, n):

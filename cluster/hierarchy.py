@@ -3,7 +3,7 @@ import cluster
 import selector
 import utils
 import sys
-
+import mds
 
 class Hierarchy:
 
@@ -24,6 +24,9 @@ class Hierarchy:
     def __init__(self, center = None, representatives = None):
 	self.center = center
 	self.representatives = representatives
+	self.centerPos = None
+	self.mdsPos = None
+	self.simMat = None
 	
     def addRepresentative(self, child):
 	if(self.representatives == None):
@@ -40,11 +43,39 @@ class Hierarchy:
     def setCenter(self, center):
 	self.center = center
 	
+	
+    def reduce(self, classic=False, dim=2):
+	if(self.representatives == None):
+	    return
+	
+	docs = map(lambda x: x.center, self.representatives)
+    
+	if (self.center != None):
+	    docs.append(self.center)
+	
+	if (self.simMat == None):
+	    self.simMat = utils.pairwise(docs, lambda x,y: x.similarity(y))
+	
+	points = []
+	if(classic):
+	    points = mds.classicMDS(self.simMat,dim)
+	else:
+	    points = mds.reduction(self.simMat,dim)
+	    
+	if (self.center != None):    
+	    self.centerPos = points[-1]
+	    self.mdsPos = points[:-1]
+	else:
+	    self.mdsPos = points[:]
+	    
+	map(lambda x: x.reduce(classic,dim), self.representatives)
+    
+	
     def __repr__(self):
 	children = None
 	if (self.representatives != None):
 	    children = map(str, self.representatives)
-	return repr(self.center) + "   " + repr(children)
+	return repr(self.centerPos) + "   " + repr(self.mdsPos) + "          " + str(children)
     
     
 def main(args):
@@ -60,7 +91,11 @@ def main(args):
     clustering = utils.load_obj(path)
 
     print "Creating Hierarchy"
-    repr(Hierarchy.createHierarchy(clustering))
+    h = Hierarchy.createHierarchy(clustering)
+    
+    mds.hierarchyReduction(h)
+    
+    print repr(h)
 
 
 if __name__ == '__main__':
