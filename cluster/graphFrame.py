@@ -15,20 +15,12 @@ from PIL import Image, ImageTk
 
 
 class Point:
-    def __init__(self, point, canvas=None):
+    def __init__(self, point, center=False, doc=None, color=None):
         self.point = point
-
-        if(canvas != None):
-            self.drawfunction = canvas.create_oval
-
-    def setCanvas(self, canvas):
-        self.drawfunction = canvas.create_oval
-    
-    def setDrawFunction(self, func):
-        self.drawfunction = func
-
-    def draw(*params):
-        self.drawfunction(params)
+        self.isCenter = center
+        self.doc = doc
+        self.color = color
+        
 
     def __getitem__(self, index):
         return self.point[index]
@@ -137,7 +129,7 @@ class GraphFrame(Frame):
         docTag = filter(lambda x: x[:4] == "doc_", allTags)
         idx = docTag[0][4:]
         
-        _doc = self.docs[int(idx)]
+        _doc = self.points[int(idx)].doc
 
         im = _doc.draw()
 
@@ -165,10 +157,19 @@ class GraphFrame(Frame):
 
 
     def normalizePoint(self, point, high, low, maximum=1, minimum=0):
+        p = [0]*len(point)
         for i in range(len(point)):
-            point[i] = ((point[i] - low)/(high-low))*(maximum-minimum) + minimum
+            p[i] = ((point[i] - low)/(high-low))*(maximum-minimum) + minimum
+            
+        return p
 
-    def normalizeHierarchy(self, hierarchy):
+    def getRandomColor(self):
+        return "#%03x%03x%03x" % (random.getrandbits(12), random.getrandbits(12), random.getrandbits(12))
+
+    def normalizeHierarchy(self, hierarchy ):
+        
+        points=[]
+        
         xcoord = map(lambda x: x[0],hierarchy.mdsPos)
         ycoord = map(lambda y: y[1],hierarchy.mdsPos)
 
@@ -179,14 +180,53 @@ class GraphFrame(Frame):
 
         low = max(wMax,hMax)
         high = min(wMin,hMin)
-
         dim = min(self.width, self.height)
-
-        for point in hierarchy.mdsPos:
-            self.normalizePoint(point, high,low, 0.4*dim, -0.4*dim)
         
+        lBound = -0.4*dim
+        hBound = 0.4*dim
 
-        return hierarchy.mdsPos
+        Q = []   
+        
+        #Doc Centers
+        for i,point in enumerate(hierarchy.mdsPos):
+            color = self.getRandomColor()
+            p = Point(self.normalizePoint(point, high,low, hBound, lBound), center=True, doc = hierarchy.representatives[i].center, color = color)
+            points.append(p)
+            Q.append((p, hierarchy.representatives[i]))
+
+        dim = 200
+        #handle representatives
+        while(len(Q) > 0):
+            cPoint, rep = Q.pop(0)
+            
+            if(rep.representatives == None):
+                continue
+            
+            xcoord = map(lambda x: x[0],rep.mdsPos)
+            ycoord = map(lambda y: y[1],rep.mdsPos)
+
+            wMax = max(xcoord)
+            hMax = max(ycoord)
+            wMin = min(xcoord)
+            hMin = min(ycoord)
+    
+            low = max(wMax,hMax)
+            high = min(wMin,hMin)
+            
+            
+            lBound = -0.4*dim
+            hBound = 0.4*dim
+            
+            for i,point in enumerate(rep.mdsPos):
+                p = Point(self.normalizePoint(point, high,low, hBound, lBound), doc = rep.representatives[i].center, color = cPoint.color)
+                
+                p[0] += cPoint[0]
+                p[1] += cPoint[1]
+                
+                points.append(p)
+                Q.append((p,rep.representatives[i]))
+
+        return points
         #newX = map(lambda v: (((v-wMin)/(wMax-wMin))-.5)*(.9*self.w), xcoord)
         #newY = map(lambda v: (((v-hMin)/(hMax-hMin))-.5)*(.9*self.h), ycoord)
 
@@ -206,12 +246,15 @@ class GraphFrame(Frame):
             t = ("point","doc_"+str(i))
 
             #Bounding box containing the Oval
+            
             bbox = (self.origin[0] + p[0],self.origin[1] + p[1], self.origin[0] + p[0]+radius, self.origin[1] + p[1]+radius)
 
-            #if(self.centerMask[i]):
-            #    self.canvas.create_rectangle(bbox, tags=t)
-            #else:
-            self.canvas.create_oval(bbox, tags=t)
+            if(p.isCenter):
+                self.canvas.create_rectangle(bbox, tags=t, fill=p.color)
+            else:
+                pass
+                self.canvas.create_oval(bbox, tags=t, fill=p.color)
+                
             #Place text in center of Oval
             center = ((bbox[0]+bbox[2])/2,(bbox[1]+bbox[3])/2)
             self.canvas.create_text(center, tags=t, text=str(i))
