@@ -7,6 +7,8 @@ import mds
 
 class Hierarchy:
 
+    nextId = [0]
+    
     @classmethod
     def createHierarchy(cls, clustering):
 	
@@ -21,12 +23,18 @@ class Hierarchy:
 	
 	return root
 	
-    def __init__(self, center = None, representatives = None):
+    def __init__(self, center = None, representatives = None, uId = None):
 	self.center = center
 	self.representatives = representatives
 	self.centerPos = None
 	self.mdsPos = None
 	self.simMat = None
+	
+	if(uId == None):
+	    self.uId = self.nextId[0]
+	    self.nextId[0] += 1
+	else:
+	    self.uId = uId
 	
     def addRepresentative(self, child):
 	if(self.representatives == None):

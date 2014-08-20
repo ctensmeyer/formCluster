@@ -15,11 +15,11 @@ from PIL import Image, ImageTk
 
 
 class Point:
-    def __init__(self, point, center=False, doc=None, color=None):
+    def __init__(self, point, hierarchy, center=False, color=None):
         self.point = point
         self.isCenter = center
-        self.doc = doc
         self.color = color
+        self.hierarchy = hierarchy
         
 
     def __getitem__(self, index):
@@ -41,7 +41,7 @@ class Point:
         return self.point.__div__(other)
 
 class GraphFrame(Frame):
-    def __init__(self, parent, hierarchy):
+    def __init__(self, parent, hierarchy, showReps=False):
         
         self.width = 800
         self.height = 800
@@ -53,6 +53,7 @@ class GraphFrame(Frame):
 
         #self.docs = docs.members
         self.hierarchy = hierarchy
+        self.displayRepresentatives = showReps
         
         #precompute similarity matrix. Does not change.
         #self.similarities = utils.pairwise(self.docs, lambda x,y: x.similarity(y))
@@ -67,19 +68,36 @@ class GraphFrame(Frame):
 
         #compute and display MDS points
         self.displayPoints()
+        
+        
+        self.selected = []
+
+        
 
         #Bind text and ovals to clickPoint
         self.canvas.tag_bind("point", "<Double-Button-1>",self.doubleClickPoint)
         self.canvas.tag_bind("point", "<ButtonPress-1>", self.clickPoint)
         self.canvas.tag_bind("point", "<B1-Motion>", self.dragPoint)
+        
+        self.canvas.tag_bind("point", "<Shift-ButtonPress-1>", self.shiftClickPoint)
+        self.canvas.tag_bind("point", "<Shift-B1-Motion>", self.shiftDragPoint)
+        self.canvas.tag_bind("point", "<Shift-Double-Button-1>",self.shiftDoubleClickPoint)
+
+
+        self.canvas.bind("<ButtonPress-1>", self.mouseDown)
 
         self.canvas.pack(fill=BOTH, expand=1)
 
 
         #Press r to refresh the MDS points
+        parent.bind("t", self.toggleReps)
         parent.bind("r",self.displayPoints)
+        parent.bind("<Return>", self.newWindow)
         self.bind("<Configure>", self.on_resize)
-
+        
+    def mouseDown(self, event):
+        #print "Mouse Down on Canvas", CURRENT
+        pass
 
     #resize canvas to fit into window on resize
     def on_resize(self, event):
@@ -103,14 +121,51 @@ class GraphFrame(Frame):
         
         self.canvas.scale("all",0,0,scale,scale)        
 
+
+    def newWindow(self, event=None):
+        #TODO: Pass off a subset of hierarchy to other graphFrame.
+        popup = Toplevel(self)
+        
+        hierarchy = Hierarchy(representatives=map(lambda s: self.findHierarchy(s).hierarchy, self.selected))
+        
+        frame = GraphFrame(popup, hierarchy, showReps=True)
+        frame.pack(fill=BOTH,expand=1)
+
+    def shiftDoubleClickPoint(self,event):
+        pass
+    
+    def shiftDragPoint(self, event):
+        vector = (event.x-self.lastPos[0], event.y-self.lastPos[1])
+
+        self.lastPos= (event.x, event.y)
+
+        map(lambda tag: self.canvas.move(tag,vector[0], vector[1]), self.selected)
+
+    
+    def shiftClickPoint(self, event):
+        self.lastTags = self.canvas.itemcget(event.widget.find_closest(event.x, event.y), "tags").split(" ")[1]
+        self.lastPos = (event.x,event.y)
+        
+        self.togglePoint(self.lastTags)
+        if(self.lastTags in self.selected):
+            self.selected.remove(self.lastTags)
+        else:
+            self.selected.append(self.lastTags)
+        self.canvas.tag_raise(self.lastTags)
+
     def clickPoint(self, event):
         #print "Click:", event.x, event.y
 
         self.lastTags = self.canvas.itemcget(event.widget.find_closest(event.x, event.y), "tags").split(" ")[1]
         self.lastPos = (event.x,event.y)
 
+
+        self.togglePoints(self.selected)
+        self.selected = []
+        
+        self.togglePoint(self.lastTags)
+        self.selected.append(self.lastTags)
         self.canvas.tag_raise(self.lastTags)
-        #print "Tags:", self.lastTags
 
     def dragPoint(self, event):
         
@@ -119,29 +174,58 @@ class GraphFrame(Frame):
         self.lastPos= (event.x, event.y)
 
         self.canvas.move(self.lastTags,vector[0], vector[1])
-
+        
+        #print "Drag:", self.lastPos
+        
+        
     #Find point double clicked, Load Image in a new window.
     def doubleClickPoint(self,event):
         #print "Double Click:", event.x, event.y
 
-        allTags = self.canvas.itemcget(event.widget.find_closest(event.x,event.y), "tags").split(" ")
+        docTag = self.canvas.itemcget(event.widget.find_closest(event.x,event.y), "tags").split(" ")[1]
 
-        docTag = filter(lambda x: x[:4] == "doc_", allTags)
-        idx = docTag[0][4:]
-        
-        _doc = self.points[int(idx)].doc
+        point = self.findHierarchy(docTag)
+
+        _doc = point.hierarchy.center
 
         im = _doc.draw()
 
         im = ImageTk.PhotoImage(resizeImage(im, 800))
 
         popup = Toplevel(self)
-        popup.title(docTag[0])
+        popup.title("Doc " + str(point.hierarchy.uId))
     
 
         lbl = Label(popup, image=im)
         lbl.image = im
         lbl.pack()
+
+    def findHierarchy(self, docTag):
+        idx = docTag[4:]
+        return self.points[int(idx)]
+    
+    def toggleReps(self,event):
+        self.displayRepresentatives = not self.displayRepresentatives
+        self.points = self.normalizeHierarchy(self.hierarchy)
+        self.drawPoints(self.points)
+
+    def togglePoints(self, tags):
+        map(self.togglePoint, tags)
+        
+    def togglePoint(self, tag):
+        color = self.canvas.itemcget(tag, "fill")
+        outline = self.canvas.itemcget(tag, "outline")
+        
+        options = {}
+        if(outline == "black"):
+            options = {'outline': color}
+        else:
+            options = {'outline': "black"}
+        
+        try:
+            self.canvas.itemconfigure(tag,options)
+        except:
+            pass
 
 
     #Recalculates and displays points using MDS
@@ -163,8 +247,19 @@ class GraphFrame(Frame):
             
         return p
 
-    def getRandomColor(self):
-        return "#%03x%03x%03x" % (random.getrandbits(12), random.getrandbits(12), random.getrandbits(12))
+    def getRandomColor(self,seed = None):
+        random.seed(seed)
+        
+        #ensure color is sufficiently bright.
+        colorSum = 0
+        while (colorSum < 2**12):
+            red = random.getrandbits(12)
+            green = random.getrandbits(12)
+            blue = random.getrandbits(12)
+            
+            colorSum = red + green + blue
+        
+        return "#%03x%03x%03x" % (red, green, blue)
 
     def normalizeHierarchy(self, hierarchy ):
         
@@ -189,10 +284,11 @@ class GraphFrame(Frame):
         
         #Doc Centers
         for i,point in enumerate(hierarchy.mdsPos):
-            color = self.getRandomColor()
-            p = Point(self.normalizePoint(point, high,low, hBound, lBound), center=True, doc = hierarchy.representatives[i].center, color = color)
+            color = self.getRandomColor(hierarchy.representatives[i].uId)
+            p = Point(self.normalizePoint(point, high,low, hBound, lBound), hierarchy.representatives[i],center=True, color = color)
             points.append(p)
-            Q.append((p, hierarchy.representatives[i]))
+            if (self.displayRepresentatives):
+                Q.append((p, hierarchy.representatives[i]))
 
         dim = 200
         #handle representatives
@@ -218,7 +314,7 @@ class GraphFrame(Frame):
             hBound = 0.4*dim
             
             for i,point in enumerate(rep.mdsPos):
-                p = Point(self.normalizePoint(point, high,low, hBound, lBound), doc = rep.representatives[i].center, color = cPoint.color)
+                p = Point(self.normalizePoint(point, high,low, hBound, lBound),rep.representatives[i], color = cPoint.color)
                 
                 p[0] += cPoint[0]
                 p[1] += cPoint[1]
@@ -252,12 +348,11 @@ class GraphFrame(Frame):
             if(p.isCenter):
                 self.canvas.create_rectangle(bbox, tags=t, fill=p.color)
             else:
-                pass
                 self.canvas.create_oval(bbox, tags=t, fill=p.color)
                 
             #Place text in center of Oval
             center = ((bbox[0]+bbox[2])/2,(bbox[1]+bbox[3])/2)
-            self.canvas.create_text(center, tags=t, text=str(i))
+            self.canvas.create_text(center, tags=t, text=str(p.hierarchy.uId))
 
 
     def getPoints(self,docs=None):
