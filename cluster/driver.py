@@ -148,8 +148,8 @@ def cmp_test():
 def main(arg):
 	if arg == "cluster":
 		cluster_known()
-        if arg == "twice":
-                double_cluster_known()
+	if arg == "twice":
+		double_cluster_known()
 	if arg == "perfect":
 		compare_true_templates()
 	if arg == "single":
