@@ -20,6 +20,7 @@ class Point:
         self.isCenter = center
         self.color = color
         self.hierarchy = hierarchy
+        self.image = None
         
 
     def __getitem__(self, index):
@@ -72,7 +73,8 @@ class GraphFrame(Frame):
         
         self.selected = []
 
-        
+        self.thumbnail = None
+        self.thumbView = None
 
         #Bind text and ovals to clickPoint
         self.canvas.tag_bind("point", "<Double-Button-1>",self.doubleClickPoint)
@@ -82,9 +84,12 @@ class GraphFrame(Frame):
         self.canvas.tag_bind("point", "<Shift-ButtonPress-1>", self.shiftClickPoint)
         self.canvas.tag_bind("point", "<Shift-B1-Motion>", self.shiftDragPoint)
         self.canvas.tag_bind("point", "<Shift-Double-Button-1>",self.shiftDoubleClickPoint)
-
-
+        
+        
         self.canvas.bind("<ButtonPress-1>", self.mouseDown)
+        
+        self.canvas.tag_bind("point", "<Enter>", self.enteredPoint)
+        self.canvas.tag_bind("point", "<Leave>", self.leftPoint)
 
         self.canvas.pack(fill=BOTH, expand=1)
 
@@ -92,11 +97,56 @@ class GraphFrame(Frame):
         #Press r to refresh the MDS points
         parent.bind("t", self.toggleReps)
         parent.bind("r",self.displayPoints)
+        parent.bind("c", self.clusterSelected)
         parent.bind("<Return>", self.newWindow)
+        
         self.bind("<Configure>", self.on_resize)
+       
+       
+    def clusterSelected(self, event=None):
+        popup = Toplevel(self)
+        
+        hierarchy = None
+        
+        if (self.displayRepresentatives):
+            hierarchy = Hierarchy(representatives=map(lambda s: self.findHierarchy(s).hierarchy, self.selected))
+        else:
+            reps = []
+            
+            for tag in self.selected:
+                reps += self.findHierarchy(tag).hierarchy.representatives
+       
+            hierarchy = Hierarchy(representatives=reps)
+       
+        frame = GraphFrame(popup, hierarchy)
+        frame.pack(fill=BOTH, expand=1)
         
     def mouseDown(self, event):
         #print "Mouse Down on Canvas", CURRENT
+        pass
+
+
+    def enteredPoint(self,event):
+        tags = self.canvas.itemcget(event.widget.find_closest(event.x, event.y), "tags").split(" ")
+        #print tags
+        tag = tags[1]
+            
+        #print tag
+        point = self.findHierarchy(tag)
+        #print "Found point"
+        thumbIm = self.getPhotoImage(point, 300)
+        
+        
+        self.displayThumb(thumbIm, title=point.hierarchy.uId)
+        
+        
+        #print "generated Thumb"
+        #self.canvas.delete("thumbnail")
+        #self.canvas.create_image(event.x, event.y, image=self.thumbIm, tags="thumbnail")
+        #print "Thumb displayed"
+
+    
+    def leftPoint(self, event):
         pass
 
     #resize canvas to fit into window on resize
@@ -186,11 +236,7 @@ class GraphFrame(Frame):
 
         point = self.findHierarchy(docTag)
 
-        _doc = point.hierarchy.center
-
-        im = _doc.draw()
-
-        im = ImageTk.PhotoImage(resizeImage(im, 800))
+        im = self.getPhotoImage(point,800)
 
         popup = Toplevel(self)
         popup.title("Doc " + str(point.hierarchy.uId))
@@ -199,6 +245,17 @@ class GraphFrame(Frame):
         lbl = Label(popup, image=im)
         lbl.image = im
         lbl.pack()
+
+    def getPhotoImage(self, point, size=800):
+        
+        if(point.image == None):
+            _doc = point.hierarchy.center
+
+            point.image = _doc.draw()
+        
+        im = ImageTk.PhotoImage(resizeImage(point.image, size))
+        
+        return im
 
     def findHierarchy(self, docTag):
         idx = docTag[4:]
@@ -238,6 +295,27 @@ class GraphFrame(Frame):
         #normalize points to fit in view
         self.points = self.normalizeHierarchy(hierarchy)
         self.drawPoints(self.points)
+        
+    
+    def displayThumb(self, thumb, title=""):
+        title = "Thumbnail " + str(title)
+        
+        
+        try:
+            self.thumbView.lbl.configure(image=thumb)
+            self.thumbView.title(title)
+            self.thumbView.lbl.im = thumb
+        except:
+            self.thumbView = Toplevel(self)
+            self.thumbView.title(title)
+    
+                
+            self.thumbView.lbl = Label(self.thumbView, image=self.thumbnail)
+            self.thumbView.lbl.im = thumb
+            self.thumbView.lbl.pack()
+        
+            
+        
 
 
     def normalizePoint(self, point, high, low, maximum=1, minimum=0):
@@ -374,6 +452,8 @@ def main(args):
     print "Loading"
     clustering = utils.load_obj(path)
     #clustering  = doc.get_docs_nested(driver.get_data_dir("very_small"))
+    
+    print clustering[0].members[0].label
     
     hierarchy = Hierarchy.createHierarchy(clustering)
 
