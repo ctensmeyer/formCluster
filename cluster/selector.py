@@ -116,7 +116,7 @@ def streamSelector(clustering):
 
 
 def pseudoDistance(clustering):
-#   for each cluster, returns the pairwise distances of every point to every point in the cluster
+#   for each cluster, returns the estimated pairwise distances of every point to every point in the cluster
 
     distances = []
     total = 0.0
