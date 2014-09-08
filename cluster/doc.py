@@ -23,6 +23,7 @@ _text_decay_amount = 1.0 / 15 if DECAY else 0
 
 # used to determine grid line offset tolerance when matching
 _line_thresh_mult = 0.05
+_text_line_thresh_mult = 0.15
 
 def get_doc(_dir, basename):
 	paths = map(lambda ext: os.path.join(_dir, basename + ext), _file_extensions)
