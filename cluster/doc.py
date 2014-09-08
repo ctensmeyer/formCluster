@@ -12,13 +12,17 @@ import profiles
 import lines
 import ocr
 
+# the file extensions of the files that compose a single document
 _file_extensions = [".jpg", ".xml", "_line.xml", "_FormType.txt", "_endpoints.xml"]
 
+# use weight decay when aggregating two document together - eventually phases out infrequent features
 DECAY = True
-
-_line_thresh_mult = 0.05
+# magnitude of the decay
 _line_decay_amount = 1.0 / 10 if DECAY else 0
 _text_decay_amount = 1.0 / 15 if DECAY else 0
+
+# used to determine grid line offset tolerance when matching
+_line_thresh_mult = 0.05
 
 def get_doc(_dir, basename):
 	paths = map(lambda ext: os.path.join(_dir, basename + ext), _file_extensions)
@@ -27,6 +31,12 @@ def get_doc(_dir, basename):
 	return document
 
 def get_docs(_dir, pr=True):
+	'''
+	returns (list(Document), int) - the list of Documents loaded and the
+		number of incomplete documents.
+		_dir - str the directory to load from.  Subdirectories are not considered
+		pr - boolean to print or not
+	'''
 	docs = []
 	num_loaded = 0
 	num_exceptions = 0
@@ -55,6 +65,13 @@ def get_docs(_dir, pr=True):
 	
 
 def get_docs_nested(data_dir, pr=True):
+	'''
+	returns (list(Document), int) - the list of Documents loaded and the
+		number of incomplete documents.
+		data_dir - str the top directory to load from.  All documents two 
+			directories down are loaded.
+		pr - boolean to print or not
+	'''
 	all_docs = []
 	total_exceptions = 0
 	for _dir in os.listdir(data_dir):
@@ -72,13 +89,28 @@ def get_docs_nested(data_dir, pr=True):
 
 
 
+# do lazy loading of documents.  It's a good thing
 LAZY = True
+# prefix/suffix matching for edit distance in text lines
 ALLOW_PARTIAL_MATCHES = False
+# set true to print a bunch of extra info
 DEBUG = False
 
 class Document:
+	'''
+	Represents an element in our clustering scheme.  Composed of a single document
+		digital image and all extracted features (contained in various files).
+	Currently we use Text Lines, Horizontal Grid Lines, Vertical Grid Lines, and
+		image dimensions as features
+	'''
 	
-	def __init__(self, _id, paths, original=True):
+	def __init__(self, _id, paths, _original=True):
+		'''
+		_id - a unique id for the document
+		paths - list(str) a list of file paths for the files that compose this document
+			image + feature files
+		_original - boolean used by copy() to avoid reloading from files
+		'''
 		self._id = _id
 		self.paths = paths
 		self.image_path = paths[0]
@@ -88,12 +120,13 @@ class Document:
 		self.endpoints_path = paths[4]
                 
 		self.loaded = False
-		if not LAZY and original:
+		if not LAZY and _original:
 			self.load()
 
 	def copy(self, new_id):
+		''' Make a deep copy of a document with a new_id '''
 		self._load_check()
-		cpy = Document(new_id, self.paths, original=False)
+		cpy = Document(new_id, self.paths, _original=False)
 		cpy.loaded = True  # makes sure we never load data from files
 
 		cpy.label = self.label
@@ -109,6 +142,7 @@ class Document:
 		return cpy
 
 	def display(self):
+		''' print out all of the text lines '''
 		self._load_check()
 		print "Document %s" % self._id
 		for line in self.textLines:
@@ -120,6 +154,7 @@ class Document:
 			self.load()
 
 	def load(self):
+		''' Load the features of the Document from all of the files '''
 		#image = Image.open(image_path)
 		#del image
 
@@ -151,9 +186,14 @@ class Document:
 		self.loaded = True
 
 	def _set_total_char_mass(self):
+		'''
+		calculate the total char mass of the text lines.  Used to determine what percentage of
+			characters match in text line matching
+		'''
 		self.char_mass = sum(map(lambda line: line.match_value(), self.text_lines))
 
 	def _get_matching_char_mass(self):
+		''' calculate the char mass of the text lines that are currently labeled as matched '''
 		mass = 0.0
 		for line in self.text_lines:
 			if line.matched:
@@ -161,9 +201,16 @@ class Document:
 		return mass
 
 	def _get_char_mass_ratio(self):
+		''' calculate percentage of matching characters '''
 		return self._get_matching_char_mass() / self.char_mass if self.char_mass else 0.0
 
 	def _find_matching_text_line(self, query_line, thresh_dist):
+		'''
+		Search the unmatched text lines, looking for a match for the query_line.
+		Does partial matches if enabled.  Marks all matched lines as matched
+		query_line - TextLine, generally from another Document
+		thresh_dist - num, only consider text lines within this distance of the query_line
+		'''
 		for line in self.text_lines:
 			if line.matched:
 				continue
@@ -205,13 +252,16 @@ class Document:
 		return None
 
 	def similarity(self, other):
+		''' alias for global_similarity '''
 		return self.global_similarity(other)
 
 	def global_similarity(self, other):
+		''' return the harmonic mean of the different similarity metrics between self and other '''
 		sims = self.similarities_by_name(other).values()
 		return utils.harmonic_mean_list(sims)
                     
 	def similarities_by_name(self, other):
+		''' return dict {name_of_sim_metric : sim_val} '''
 		sims = dict()
 		funs = self.similarity_functions()
 		for fun in funs:
@@ -219,6 +269,7 @@ class Document:
 		return sims
 
 	def similarity_functions(self):
+		''' return dict {name_of_sim_metric : sim_function(other) } '''
 		funs = dict()
 		funs['text_line'] = (lambda other: self.text_line_similarity(other))
 		funs['h_line'] = (lambda other: self.h_line_similarity(other))
@@ -226,12 +277,14 @@ class Document:
 		return funs
 
 	def similarity_function_names(self):
+		''' return a list of the sim function names '''
 		return ['text_line', 'h_line', 'v_line']
 
 	def text_line_similarity(self, other):
+		''' return the text line similarity '''
 		self._load_check()
 		other._load_check()
-		thresh_dist = 0.10 * max(max(self.size), max(other.size))  # % of largest dimension
+		thresh_dist = _text_line_thresh_mult * max(max(self.size), max(other.size))  # % of largest dimension
 
 		self.clear_text_matches()
 		other.clear_text_matches()
@@ -249,11 +302,13 @@ class Document:
 		return utils.harmonic_mean(my_ratio, other_ratio)
 
 	def line_similarity(self, other):
+		''' Combined horizontal and vertical line similarity (harmonic mean) [0-1] '''
 		h_sim = self.h_line_similarity(other)
 		v_sim = self.v_line_similarity(other)
 		return utils.harmonic_mean(h_sim, v_sim)
 
 	def h_line_similarity(self, other):
+		''' return horizontal line similarity score [0-1] '''
 		self._load_check()
 		other._load_check()
 
@@ -268,6 +323,7 @@ class Document:
 		return h_matcher.similarity()
 
 	def v_line_similarity(self, other):
+		''' return horizontal line similarity score [0-1] '''
 		self._load_check()
 		other._load_check()
 		#self.clear_v_line_matches()
@@ -281,10 +337,12 @@ class Document:
 		#v_matcher.display()
 
 	def clear_text_matches(self):
+		''' reset the matched tag on all of the text lines '''
 		for line in self.text_lines:
 			line.matched = False
 
 	def _aggregate_text(self, other):
+		''' Take the text lines of other and merge them into this Document's text lines '''
 		thresh_dist = 0.10 * max(max(self.size), max(other.size))  # % of largest dimension
 
 		self.clear_text_matches()
@@ -330,6 +388,7 @@ class Document:
 		self._set_total_char_mass()
 
 	def _aggregate_h_lines(self, other):
+		''' Take the horizontal lines of other and merge them into this Document's text lines '''
 		h_thresh_dist = _line_thresh_mult * max(self.size[0], other.size[0]) 
 		h_matcher = lines.LMatcher(self.h_lines, other.h_lines, h_thresh_dist)
 		#ops = h_matcher.get_operations()
@@ -337,11 +396,16 @@ class Document:
 		self.h_lines = h_matcher.get_merged_lines()
 
 	def _aggregate_v_lines(self, other):
+		''' Take the vertical lines of other and merge them into this Document's text lines '''
 		v_thresh_dist = _line_thresh_mult * max(self.size[1], other.size[1]) 
 		v_matcher = lines.LMatcher(self.v_lines, other.v_lines, v_thresh_dist)
 		self.v_lines = v_matcher.get_merged_lines()
 		
 	def aggregate(self, other):
+		'''
+		Merge other into self
+		Does not modify other, but self is modified
+		'''
 		self._load_check()
 		other._load_check()
 
@@ -354,11 +418,19 @@ class Document:
 		self.prune()
 
 	def prune(self):
+		'''
+		Decrements each text/horz/vert line by the parameterized amount.  Remove lines
+			that have counts below 0
+		'''
 		self._prune_text(0, _text_decay_amount)
 		self._prune_h_lines(0, _line_decay_amount)
 		self._prune_v_lines(0, _line_decay_amount)
 
 	def final_prune(self):
+		'''
+		When clustering is done, remove text/horz/vert lines that have realatively very low
+			counts
+		'''
 		get_prune_val = lambda lines: max(map(lambda line: line.count, lines)) / 10.0
 		if self.text_lines:
 			self._prune_text(get_prune_val(self.text_lines), _text_decay_amount)
