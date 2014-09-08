@@ -452,9 +452,7 @@ def main(args):
     print "Loading"
     clustering = utils.load_obj(path)
     #clustering  = doc.get_docs_nested(driver.get_data_dir("very_small"))
-    
-    print clustering[0].members[0].label
-    
+        
     hierarchy = Hierarchy.createHierarchy(clustering)
 
     print "Starting GUI"
