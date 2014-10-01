@@ -2,6 +2,7 @@
 import utils
 import itertools
 import collections
+import Levenshtein
 
 
 class TextLineMatcher:
@@ -17,6 +18,9 @@ class TextLineMatcher:
 
 	OP_STR = {PERFECT: "Perfect", PARTIAL1: "Partial1", PARTIAL2: "Partial2", SUFFIX1: "Suffix1",
 				SUFFIX2: "Suffix2", PREFIX1: "Prefix1", PREFIX2: "Prefix2"}
+
+	SIZE_RATIO = 0.8
+	EDIT_DIST_THRESH = 0.2
 	
 	def __init__(self, lines1, lines2, dist_thresh, partials=False):
 		'''
@@ -27,28 +31,25 @@ class TextLineMatcher:
 		'''
 		self.lines1 = lines1
 		self.lines2 = lines2
-		self.partial_matches = partials
+		self.dist_thresh = dist_thresh
+		self.do_partial_matches = partials
 
 	def op_str(self, op):
 		return self.OP_STR.get(op)
 	
 	def similarity(self):
-		'''
-		:return: 0-1 similarity score between the two text lines
-		'''
+		''' :return: 0-1 similarity score between the two text lines '''
 		self.get_matches()  # make sure that lines get matched
 		total_val = 0.0
 		matched_val = 0.0
 		for line in itertools.chain(self.lines1, self.lines2):
-			total_val += line.matched_value()
+			total_val += line.match_value()
 			if line.matched:
-				matched_val += line.matched_value()
-		return matched_val / total_val
+				matched_val += line.match_value()
+		return matched_val / total_val if total_val else 0.5
 
 	def _clear_matches(self):
-		'''
-		Marks all lines as not matched
-		'''
+		''' Marks all lines as not matched '''
 		for line in itertools.chain(self.lines1, self.lines2):
 			line.matched = False
 
@@ -59,14 +60,13 @@ class TextLineMatcher:
 			for line2 in self.lines2:
 				if line2.matched:
 					continue
-				if perfect_match(line1, line2):
+				if self.perfect_match(line1, line2):
 					perfect_matches.append( (self.PERFECT, line1, line2) )
 					line1.matched = True
 					line2.matched = True
-		return prefect_matches
+					continue
+		return perfect_matches
 
-	SIZE_RATIO = 0.8
-	EDIT_DIST_THRESH = 0.2
 	def perfect_match(self, line1, line2):
 		'''
 		A Perfect match is defined to be two lines whose start positions are within
@@ -76,19 +76,20 @@ class TextLineMatcher:
 		:param line2: TextLine
 		:return: bool
 		'''
-		if utils.e_dist(line1.pos, line2.pos) > self.dist_thresh:
+		if (utils.e_dist(line1.pos, line2.pos) > self.dist_thresh and
+			utils.e_dist(line1.end_pos(), line2.end_pos()) > self.dist_thresh):	
 			return False
 			
-		if not (utils.ratio(line1.size[0], line2.size[0]) > self.SIZE_RATIO and
-			utils.ratio(line1.size[1], line2.size[1]) > self.SIZE_RATIO):
-			return False
+		#if not (utils.ratio(line1.size[0], line2.size[0]) > self.SIZE_RATIO and
+		#	utils.ratio(line1.size[1], line2.size[1]) > self.SIZE_RATIO):
+		#	return False
 
 		# optimization using diff in length as a lower bound on edit distance
 		if utils.ratio(line1.N, line2.N) < (1 - self.EDIT_DIST_THRESH):
 			return False
 
 		# check equality before heavy calculation
-		edit_dist = Levenshtein.dist(line1.text, line2.text) if line1.text != line2.text else 0
+		edit_dist = Levenshtein.distance(line1.text, line2.text) if line1.text != line2.text else 0
 		norm = edit_dist / float(max(line1.N, line2.N))
 		return edit_dist <= 1 or norm <= self.EDIT_DIST_THRESH
 
@@ -116,9 +117,7 @@ class TextLineMatcher:
 		return edit_dist <= 1 or norm <= self.EDIT_DIST_THRESH
 
 	def prefix_match(self, prefix, complete):
-		'''
-		Same as suffix match, except with a prefix
-		'''
+		''' Same as suffix match, except with a prefix '''
 		if complete.N <= prefix.N:
 			return False
 
@@ -133,9 +132,7 @@ class TextLineMatcher:
 		return edit_dist <= 1 or norm <= self.EDIT_DIST_THRESH
 
 	def _find_partial_matches():
-		'''
-		Finds Prefix/Suffix matches among the unmatched lines
-		'''
+		''' Finds Prefix/Suffix matches among the unmatched lines '''
 		partial_matches = list()
 		for line1 in self.lines1:
 			if line1.matched:
@@ -154,18 +151,20 @@ class TextLineMatcher:
 		return parital_matches
 
 	def _condense_matches(self, partials):
+		''' :param partials: list of tuples - (type, line1, line2) '''
 		condensed = list()
-		# complete lines to the partials in the other list
+		# mapping of complete lines to the possible partials in the other list
+		# one_two[complete_line] == list(prefix1, prefix2, ..., suffix1, suffix2, ...)
 		one_two = collections.defaultdict(list)
 		two_one = collections.defaultdict(list)
 		for part in partials:
 			op, line1, line2 = part
 			if op in [self.PREFIX2, self.SUFFIX2]:
-				one_two[line1].append(op, line2)
+				one_two[line1].append((op, line2))
 			if op in [self.PREFIX1, self.SUFFIX1]:
-				two_one[line2].append(op, line1)
+				two_one[line2].append((op, line1))
 
-		# TODO: case of multiple prefixes or suffixes better
+		# TODO: disambiguating multiple prefixes/suffixes
 		for line1, matches in one_two.iteritems():
 			prefix = suffix = None
 			for match in matches:
@@ -179,7 +178,8 @@ class TextLineMatcher:
 			l = prefix.N + suffix.N
 			if utils.ratio(l, line1.N) > (1 - self.EDIT_DIST_THRESH):
 				# we have an actual partial match
-				condensed.append( (self.PARTIAL1, line1, prefix, suffix) )
+				condensed.append( (self.PARTIAL1, line1, prefix, suffix,
+									self._norm_edit_dist(line1.text, prefix.text + suffix.text)) )
 
 		for line2, matches in two_one.iteritems():
 			prefix = suffix = None
@@ -194,21 +194,21 @@ class TextLineMatcher:
 			l = prefix.N + suffix.N
 			if utils.ratio(l, line2.N) > (1 - self.EDIT_DIST_THRESH):
 				# we have an actual partial match
-				condensed.append( (self.PARTIAL2, line2, prefix, suffix) )
+				condensed.append( (self.PARTIAL2, line2, prefix, suffix,
+									self._norm_edit_dist(line2.text, prefix.text + suffix.text)) )
 		return condensed
 
 	def get_matches(self):
-		'''
-		:return: list of tuples 
-		'''
+		''' :return: list of tuples (op, line1, line2) '''
 		matches = self._find_perfect_matches()
-		if self.partials:
+		if self.do_partial_matches:
 			paritals = self._find_partial_matches()
 			condensed = self._condense_matches(partials)
 			# mark the matches
 			for match in condensed:
 				for line in match[1:]:
 					line.matched = True
+			matches += condensed
 		return matches
 
 	def print_matches(self, matches):
@@ -216,19 +216,53 @@ class TextLineMatcher:
 		print "** Text Line Matches **"
 		for match in matches:
 			op = match[0]
+			print
 			print "\t%s" % self.get_op(op)
 			for line in match[1:]:
 				print "\t%s" % str(line)
 		print
+
+	def _norm_edit_dist(self, str1, str2):
+		edit_dist = Levenshtein.distance(str1, str2)
+		norm = edit_dist / float(max(len(str1), len(str2)))
+		return norm
 		
 	def merge(self):
 		'''
 		:return: list of TextLine - lines1, lines2 merged into one list
 		'''
-		pass
-
-
-
+		matches = self.get_matches()
+		merged_list = list()
+		for match in matches:
+			#print
+			#print match
+			op = match[0]
+			if op == self.PERFECT:
+				line1 = match[1]
+				line2 = match[2]
+				line1.aggregate(line2)
+				#print "\t", line1
+				merged_list.append(line1)
+			if op == self.PARTIAL1:
+				#print "Partial 1"
+				line1 = match[1]
+				prefix = match[2]
+				suffix = match[3]
+				line1.aggregate_partial(prefix, suffix)
+				merged_list.append(line1)
+			if op == self.PARTIAL2:
+				#print "Partial 2"
+				line2 = match[1]
+				prefix = match[2]
+				suffix = match[3]
+				prefix.aggregate_as_prefix(line2)
+				suffix.aggregate_as_suffix(line2)
+				merged_list.append(prefix)
+				merged_list.append(suffix)
+		for line in itertools.chain(self.lines1, self.lines2):
+			if not line.matched:
+				merged_list.append(line)
+		return merged_list
 
 
 

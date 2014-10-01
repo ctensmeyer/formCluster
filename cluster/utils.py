@@ -313,6 +313,9 @@ def load_obj(path):
 	loadFile.close()
 	return obj
 
+def pad_to_len(s, l):
+	return s + (" " * (l - len(s))) if l > len(s) else s
+
 if __name__ == "__main__":
 	mat = pairwise(xrange(5), lambda x,y: math.sqrt(x + y))
 	insert_indices(mat, row_start=2, col_start=3)

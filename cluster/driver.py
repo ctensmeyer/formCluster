@@ -35,7 +35,7 @@ def get_data_dir(descrip):
 def cluster_known():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
 	epsilon = float(sys.argv[3])
-	organizer = cluster.TemplateSorter(docs)
+	organizer = cluster.AnalysisTemplateSorter(docs)
 	organizer.go(epsilon)
 	organizer.prune_clusters()
 	clusters = organizer.get_clusters()
@@ -124,25 +124,39 @@ def cmp_test():
 	doc1._load_check()
 	doc2._load_check()
 
-	print "DOC1 H-lines:"
-	for line in doc1.h_lines:
-		print "\t%s" % line
-	print
+	#print "DOC1 H-lines:"
+	#for line in doc1.h_lines:
+	#	print "\t%s" % line
+	#print
 
-	print "DOC2 H-lines:"
-	for line in doc2.h_lines:
-		print "\t%s" % line
-	print
+	#print "DOC2 H-lines:"
+	#for line in doc2.h_lines:
+	#	print "\t%s" % line
+	#print
 
 	sims = doc1.similarities_by_name(doc2)
 	doc1.draw().save("output/doc1.png")
 	doc2.draw().save("output/doc2.png")
-	print sims
-	print len(doc1.h_lines), len(doc1.v_lines)
-	print len(doc2.h_lines), len(doc2.v_lines)
+	#print sims
+	#print len(doc1.h_lines), len(doc1.v_lines)
+	#print len(doc2.h_lines), len(doc2.v_lines)
 	doc1.aggregate(doc2)
 	doc1.draw().save("output/combined.png")
-	print len(doc1.h_lines), len(doc1.v_lines)
+	#print len(doc1.h_lines), len(doc1.v_lines)
+
+def draw_all():
+	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
+	try:
+		shutil.rmtree('output/docs')
+	except:
+		pass
+	try:
+		os.mkdir('output/docs')
+	except:
+		pass
+	for _doc in docs:
+		_doc.draw().save("output/docs/%s.png" % _doc._id)
+	
 
 
 def main(arg):
@@ -158,6 +172,8 @@ def main(arg):
 		cmp_test()
 	if arg == "aggregate":
 		aggreage_same()
+	if arg == "draw":
+		draw_all()
 
 if __name__ == "__main__":
 	print "Start"

@@ -101,6 +101,12 @@ class TextLine(Feature):
 		self.N = len(self.text)
 		self.members = list()  # for template string medians
 
+	def find_median(self):
+		# account for prefix/suffix stuff too
+		text = map(lambda ele: ele if isinstance(ele, str) else ele[0] + ele[1], self.members)
+		#print "\t", text
+		return Levenshtein.median(text)
+
 	def aggregate(self, other):
 		if not self.members:
 			self.members.append(self.text)
@@ -109,15 +115,63 @@ class TextLine(Feature):
 		x = utils.wavg([self.pos[0], other.pos[0]], weights)
 		y = utils.wavg([self.pos[1], other.pos[1]], weights)
 		w = utils.wavg([self.size[0], other.size[0]], weights)
-		h = utils.wavg([self.size[0], other.size[0]], weights)
+		h = utils.wavg([self.size[1], other.size[1]], weights)
 		self.pos = (x, y)
 		self.size = (w, h)
-		self.text = Levenshtein.median(self.members)
+		self.text = self.find_median()
 		self.N = len(self.text)
 		self.count += other.count
 		# because we are taking the median string, the chars no longer matter
 		if hasattr(self, "chars"):
 			del self.chars
+
+	def aggregate_partial(self, prefix, suffix):
+		''' aggregate self with a prefix and a suffix text lines '''
+		if not self.members:
+			self.members.append(self.text)
+		self.members.append( (prefix.text, suffix.text) )
+		weights = [self.count, (prefix.count + suffix.count) / 2]
+		x = utils.wavg([self.pos[0], prefix.pos[0]], weights)
+		y = utils.wavg([self.pos[1], prefix.pos[1]], weights)
+		w = utils.wavg([self.size[0], prefix.size[0] + suffix.size[0]], weights)
+		h = utils.wavg([self.size[1], (prefix.size[1] + suffix.size[1]) / 2], weights)
+		self.pos = (x, y)
+		self.size = (w, h)
+		self.text = self.find_median()
+		self.N = len(self.text)
+		self.count += weights[1]
+
+	def aggregate_as_prefix(self, other):
+		''' self is a prefix of other '''
+		if not self.members:
+			self.members.append(self.text)
+		self.members.append(other.text[0:self.N])
+		weights = [self.count, other.count / 2]
+		x = utils.wavg([self.pos[0], other.pos[0]], weights)
+		y = utils.wavg([self.pos[1], other.pos[1]], weights)
+		w = utils.wavg([self.size[0], other.size[0] * (self.N / float(other.N)) ], weights)
+		h = utils.wavg([self.size[1], other.size[1]], weights)
+		self.pos = (x, y)
+		self.size = (w, h)
+		self.text = self.find_median()
+		self.N = len(self.text)
+		self.count += weights[1]
+
+	def aggregate_as_suffix(self, other):
+		''' self is a suffix of other '''
+		if not self.members:
+			self.members.append(self.text)
+		self.members.append(other.text[-1 * self.N:])
+		weights = [self.count, other.count / 2]
+		x = utils.wavg([self.pos[0], other.pos[0] + (other.size[0] * (self.N / float(other.N)))], weights)
+		y = utils.wavg([self.pos[1], other.pos[1]], weights)
+		w = utils.wavg([self.size[0], other.size[0] * self.N / float(other.N) ], weights)
+		h = utils.wavg([self.size[1], other.size[1]], weights)
+		self.pos = (x, y)
+		self.size = (w, h)
+		self.text = self.find_median()
+		self.N = len(self.text)
+		self.count += weights[1]
 
 	def copy(self):
 		chars_copy = list()

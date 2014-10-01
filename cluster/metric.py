@@ -82,6 +82,10 @@ class KnownClusterAnalyzer:
 		print
 		print
 
+	def get_all_docs(self):
+		list_of_lists = map(lambda cluster: cluster.members, self.clusters)
+		return [_doc for docs in list_of_lists for _doc in docs]
+
 	def get_all_labels(self):
 		labels = set()
 		for cluster in self.clusters:
@@ -116,6 +120,8 @@ class KnownClusterAnalyzer:
 		self.print_label_conf_mat()
 		self.print_label_cluster_mat()
 		self.print_cluster_cohesion()
+		self.print_doc_cluster_sim_mat()
+		self.print_cluster_mismatches()
 		self.print_label_info()
 		self.print_metric_info()
 		print
@@ -175,6 +181,20 @@ class KnownClusterAnalyzer:
 		print
 		print
 
+	def print_cluster_mismatches(self):
+		print "CLUSTER MISMATCHES"
+		print
+		for x, cluster in enumerate(self.clusters):
+			print "%d:\t%s" % (x, cluster.label)
+			for _doc in cluster.members:
+				if _doc.label != cluster.label:
+					sims = _doc.similarities_by_name(cluster.center).values()
+					sim = utils.harmonic_mean_list(sims)
+					print "\t" + "\t".join(map(str, [_doc.label, sim, sims]))
+			print
+		print
+		print
+
 	def print_cluster_cohesion(self):
 		print "CLUSTER COHESION:"
 		sim_names = self.clusters[0].members[0].similarity_function_names()
@@ -193,10 +213,31 @@ class KnownClusterAnalyzer:
 			to_print.append(utils.avg(values))
 			to_print.append(utils.stddev(values))
 			l = len(similarities)
-			print "\t%s: \t%s\t%d" % (x, "\t".join(map(lambda s: "%3.2f" % s, to_print)), l)
+			print "\t%s:  \t%s\t%d" % (x, "\t".join(map(lambda s: "%3.2f" % s, to_print)), l)
 			#print "\t%s:\t%3.2f\t%3.2f\t%d" % (x, avg, sd, l)
 		print
 		print
+
+	def print_doc_cluster_sim_mat(self):
+		print "CLUSTER-DOC SIM MAT"
+		print
+		for x, cluster in enumerate(self.clusters):
+			print "%d:\t%s" % (x, cluster.label)
+
+		print
+		print ("\t" * 7) + "\t\t".join(map(str, xrange(len(self.clusters))))
+
+		docs = self.get_all_docs()
+		for _doc in docs:
+			to_print = list()
+			for cluster in self.clusters:
+				to_print.append("%3.2f" % _doc.similarity(cluster.center))
+				if (cluster.label == _doc.label):
+					to_print[-1] += '*'
+			print "%s%s" % (utils.pad_to_len(_doc.label, 30), "\t".join(to_print))
+		print
+		print
+				
 
 	def print_label_info(self):
 		assigned_labels = set(map(lambda cluster: cluster.label, self.clusters))

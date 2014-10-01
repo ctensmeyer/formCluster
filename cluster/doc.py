@@ -10,7 +10,15 @@ import os
 import components
 import profiles
 import lines
+import text
 import ocr
+
+# do lazy loading of documents.  It's a good thing
+LAZY = True
+# prefix/suffix matching for edit distance in text lines
+ALLOW_PARTIAL_MATCHES = False
+# set true to print a bunch of extra info
+DEBUG = False
 
 # the file extensions of the files that compose a single document
 _file_extensions = [".jpg", ".xml", "_line.xml", "_FormType.txt", "_endpoints.xml"]
@@ -90,12 +98,6 @@ def get_docs_nested(data_dir, pr=True):
 
 
 
-# do lazy loading of documents.  It's a good thing
-LAZY = True
-# prefix/suffix matching for edit distance in text lines
-ALLOW_PARTIAL_MATCHES = False
-# set true to print a bunch of extra info
-DEBUG = False
 
 class Document:
 	'''
@@ -160,6 +162,12 @@ class Document:
 		#del image
 
 		self.label = filter(lambda x: x in string.printable, open(self.form_path).read())
+		if self.label.startswith("UK1911Census_EnglandWales_"):
+			self.label = self.label[len("UK1911Census_EnglandWales_"):]
+
+		# for the 1911 census dataset, these two should be counted the same
+		if self.label == "Household100Names_08_01":
+			self.label = "Household40Names_07_01"
 		#print repr(self.label)
 
 		# heavy operations
@@ -287,20 +295,23 @@ class Document:
 		other._load_check()
 		thresh_dist = _text_line_thresh_mult * max(max(self.size), max(other.size))  # % of largest dimension
 
-		self.clear_text_matches()
-		other.clear_text_matches()
+		matcher = text.TextLineMatcher(self.text_lines, other.text_lines, thresh_dist, ALLOW_PARTIAL_MATCHES)
+		return matcher.similarity()
 
-		# each matched line has a flag set by has_match indicating that it matches
-		for line in other.text_lines:
-			self._find_matching_text_line(line, thresh_dist)
-		# we do it both ways to catch prefix/suffix matches in both directions
-		if ALLOW_PARTIAL_MATCHES:
-			for line in self.text_lines:
-				other._find_matching_text_line(line, thresh_dist)
+		#self.clear_text_matches()
+		#other.clear_text_matches()
 
-		my_ratio = self._get_char_mass_ratio()
-		other_ratio = other._get_char_mass_ratio()
-		return utils.harmonic_mean(my_ratio, other_ratio)
+		## each matched line has a flag set by has_match indicating that it matches
+		#for line in other.text_lines:
+		#	self._find_matching_text_line(line, thresh_dist)
+		## we do it both ways to catch prefix/suffix matches in both directions
+		#if ALLOW_PARTIAL_MATCHES:
+		#	for line in self.text_lines:
+		#		other._find_matching_text_line(line, thresh_dist)
+
+		#my_ratio = self._get_char_mass_ratio()
+		#other_ratio = other._get_char_mass_ratio()
+		#return utils.harmonic_mean(my_ratio, other_ratio)
 
 	def line_similarity(self, other):
 		''' Combined horizontal and vertical line similarity (harmonic mean) [0-1] '''
@@ -344,49 +355,52 @@ class Document:
 
 	def _aggregate_text(self, other):
 		''' Take the text lines of other and merge them into this Document's text lines '''
-		thresh_dist = 0.10 * max(max(self.size), max(other.size))  # % of largest dimension
+		thresh_dist = _text_line_thresh_mult * max(max(self.size), max(other.size))  # % of largest dimension
+		matcher = text.TextLineMatcher(self.text_lines, other.text_lines, thresh_dist, ALLOW_PARTIAL_MATCHES)
 
-		self.clear_text_matches()
-		other.clear_text_matches()
+		self.text_lines = matcher.merge()
 
-		to_add = list()
-		for line in other.text_lines:
-			matched_line = self._find_matching_text_line(line, thresh_dist)
-			if matched_line:
-				matched_line.aggregate(line)
-				#x = (line.count * line.pos[0] + matched_line.count * matched_line.pos[0]
-				#	) / (line.count + matched_line.count)
-				#y = (line.count * line.pos[1] + matched_line.count * matched_line.pos[1]
-				#	) / (line.count + matched_line.count)
+		#self.clear_text_matches()
+		#other.clear_text_matches()
 
-				## Don't worry about size for now
-				##width = (line.count * line.size[0] + matched_line.count * matched_line.size[0]) /
-				##	(line.count + matched_line.count)
-				##height = (line.count * line.size[1] + matched_line.count * matched_line.size[1]) /
-				##	(line.count + matched_line.count)
-				## hmmm, what if the text is not an exact match...
-				## partial matches?
+		#to_add = list()
+		#for line in other.text_lines:
+		#	matched_line = self._find_matching_text_line(line, thresh_dist)
+		#	if matched_line:
+		#		matched_line.aggregate(line)
+		#		#x = (line.count * line.pos[0] + matched_line.count * matched_line.pos[0]
+		#		#	) / (line.count + matched_line.count)
+		#		#y = (line.count * line.pos[1] + matched_line.count * matched_line.pos[1]
+		#		#	) / (line.count + matched_line.count)
 
-				## translations
-				#dx = x - matched_line.pos[0]
-				#dy = y - matched_line.pos[1]
-				#for char in matched_line.chars:
-				#	new_pos = (char.pos[0] + dx, char.pos[1] + dy)
-				#	char.pos = new_pos
-				#	char.pos2 = (char.pos2[0] + dx, char.pos2[1] + dy)
-				#	#char.attributes['l'] += dx
-				#	#char.attributes['r'] += dx
-				#	#char.attributes['t'] += dy
-				#	#char.attributes['b'] += dy
+		#		## Don't worry about size for now
+		#		##width = (line.count * line.size[0] + matched_line.count * matched_line.size[0]) /
+		#		##	(line.count + matched_line.count)
+		#		##height = (line.count * line.size[1] + matched_line.count * matched_line.size[1]) /
+		#		##	(line.count + matched_line.count)
+		#		## hmmm, what if the text is not an exact match...
+		#		## partial matches?
 
-				#matched_line.count += line.count
-				#matched_line.pos = (x, y)
-				##matched_line.size = (width, height)
-			else:
-				to_add.append(line.copy())
+		#		## translations
+		#		#dx = x - matched_line.pos[0]
+		#		#dy = y - matched_line.pos[1]
+		#		#for char in matched_line.chars:
+		#		#	new_pos = (char.pos[0] + dx, char.pos[1] + dy)
+		#		#	char.pos = new_pos
+		#		#	char.pos2 = (char.pos2[0] + dx, char.pos2[1] + dy)
+		#		#	#char.attributes['l'] += dx
+		#		#	#char.attributes['r'] += dx
+		#		#	#char.attributes['t'] += dy
+		#		#	#char.attributes['b'] += dy
 
-		self.text_lines += to_add
-		self._set_total_char_mass()
+		#		#matched_line.count += line.count
+		#		#matched_line.pos = (x, y)
+		#		##matched_line.size = (width, height)
+		#	else:
+		#		to_add.append(line.copy())
+
+		#self.text_lines += to_add
+		#self._set_total_char_mass()
 
 	def _aggregate_h_lines(self, other):
 		''' Take the horizontal lines of other and merge them into this Document's text lines '''
@@ -447,15 +461,15 @@ class Document:
 	def _prune_h_lines(self, thresh, amount):
 		map(lambda line: line.decay(amount), self.h_lines)
 		tmp = filter(lambda line: line.count > thresh, self.h_lines)
-		if not tmp:
-			print self.h_lines
+		#if not tmp:
+		#	print self.h_lines
 		self.h_lines = tmp
 
 	def _prune_v_lines(self, thresh, amount):
 		map(lambda line: line.decay(amount), self.v_lines)
 		tmp = filter(lambda line: line.count > thresh, self.v_lines)
-		if not tmp:
-			print self.v_lines
+		#if not tmp:
+		#	print self.v_lines
 		self.v_lines = tmp
 
 	def draw(self, colortext=False):
