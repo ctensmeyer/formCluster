@@ -1,4 +1,5 @@
 
+import collections
 import dictionary
 import utils
 import math
@@ -99,18 +100,24 @@ class TextLine(Feature):
 		#self.width = size[0]
 		#self.height = size[1]
 		self.N = len(self.text)
-		self.members = list()  # for template string medians
+		self.members = collections.Counter()
 
 	def find_median(self):
-		# account for prefix/suffix stuff too
-		text = map(lambda ele: ele if isinstance(ele, str) else ele[0] + ele[1], self.members)
-		#print "\t", text
-		return Levenshtein.median(text)
+		most_common = self.members.most_common(2);
+
+		# we have a tie for the mode
+		if most_common[0][1] == most_common[0][0]:
+			# account for prefix/suffix stuff too
+			#text = map(lambda ele: ele if isinstance(ele, str) else ele[0] + ele[1], self.members)
+			#print "\t", text
+			return Levenshtein.median(self.members.keys(), self.members.values())
+		else:
+			return most_common[0][0]
 
 	def aggregate(self, other):
 		if not self.members:
-			self.members.append(self.text)
-		self.members.append(other.text)
+			self.members[self.text] += 1
+		self.members[other.text] += 1
 		weights = [self.count, other.count]
 		x = utils.wavg([self.pos[0], other.pos[0]], weights)
 		y = utils.wavg([self.pos[1], other.pos[1]], weights)
@@ -129,7 +136,8 @@ class TextLine(Feature):
 		''' aggregate self with a prefix and a suffix text lines '''
 		if not self.members:
 			self.members.append(self.text)
-		self.members.append( (prefix.text, suffix.text) )
+		#self.members.append( (prefix.text, suffix.text) )
+		self.members[prefix.text + suffix.text] += 1
 		weights = [self.count, (prefix.count + suffix.count) / 2]
 		x = utils.wavg([self.pos[0], prefix.pos[0]], weights)
 		y = utils.wavg([self.pos[1], prefix.pos[1]], weights)
@@ -180,7 +188,8 @@ class TextLine(Feature):
 		cpy = TextLine(chars_copy, self.pos, self.size)
 		cpy.count = self.count
 		cpy.weight = self.weight
-		cpy.members = list(self.members)
+		cpy.members = collections.Counter(self.members)
+		#cpy.members = list(self.members)
 		return cpy
 
 	def match_value(self):
@@ -236,6 +245,9 @@ class TextLine(Feature):
 
 	def end_pos(self):
 		return (self.pos[0] + self.size[0], self.pos[1])
+
+	def bottom_right(self):
+		return (self.pos[0] + self.size[0], self.pos[1] + self.size[1])
 
 	def char_width(self):
 		return float(self.size[0]) / self.N

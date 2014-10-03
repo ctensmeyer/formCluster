@@ -17,8 +17,8 @@ single_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
 single_basename = "rg14_31702_0085_03"
 second_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
 second_basename = "rg14_31708_0089_03"
-aggregate_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
-#aggregate_dir = "../data/full/1911Wales/UnClassified"
+#aggregate_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
+aggregate_dir = "../data/lines/1911Wales/UK1911Census_EnglandWales_Household15Names_03_01"
 
 
 def get_data_dir(descrip):

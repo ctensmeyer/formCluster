@@ -211,6 +211,77 @@ class TextLineMatcher:
 			matches += condensed
 		return matches
 
+	def sim_mat(self, rows, cols, size):
+		'''
+		:param rows: int number of rows
+		:param cols: int number of cols
+		:param size: (int, int) size of image1
+		:return: list(list(float(0-1))) matrix of regional percentage matches
+		'''
+		self.get_matches()
+		#print "sim_mat(rows=%d, cols=%d, size=%s)" % (rows, cols, size)
+		width = (size[0] / cols) + 1
+		height = (size[1] / rows) + 1
+		#print "\twidth:", width
+		#print "\theight:", height
+		total_mat = [([0] * cols) for r in xrange(rows)]
+		matched_mat = [([0] * cols) for r in xrange(rows)]
+		for line in self.lines1:
+			br = line.bottom_right()
+			#print "\t", line
+			#print "\tul: %s\t br: %s" % (line.pos, br)
+			regions = self._get_regions(line, width, height)
+			#print regions
+			for r, c, val in regions:
+				#print r, c, val
+				if line.matched:
+					matched_mat[r][c] += val
+				else:
+					print r, c, val, line
+				total_mat[r][c] += val
+		perc_mat = [([0] * cols) for r in xrange(rows)]
+		for r in xrange(rows):
+			for c in xrange(cols):
+				perc_mat[r][c] = matched_mat[r][c] / total_mat[r][c] if total_mat[r][c] else 0
+		return perc_mat
+
+	def _get_regions(self, line, width, height):
+		line_area = float(line.size[0] * line.size[1])
+		line_value = line.match_value()
+		#print "\tarea: %.0f \tvalue: %d" % (line_area, line_value)
+		ul = line.pos
+		br = line.bottom_right()
+		row1, col1 = self._get_region(ul, width, height)
+		row2, col2 = self._get_region(br, width, height)
+		#print "\t%s\t%s" % ( (row1, col1), (row2, col2) )
+		regions = list()
+		for row in xrange(row1, row2 + 1):
+			for col in xrange(col1, col2 + 1):
+				x = ul[0] if col == col1 else col * width
+				y = ul[1] if row == row1 else row * height
+				#print "\t", row, col, (x, y)
+				overlap = self._get_region_overlap( (x, y), br, width, height)
+				#print "\t", overlap
+				regions.append( (row, col, line_value * (overlap / line_area)) )
+		return regions
+
+	def _get_region(self, pos, width, height):
+		row = pos[1] / height
+		col = pos[0] / width
+		return (row, col)
+
+	def _get_region_overlap(self, pos1, pos2, width, height):
+		'''
+		:param pos1: (x, y) upper left corner of rect
+		:param pos2: (x, y) bottom right corner of rect
+		:param width: width of tesselating rectangular regions
+		:param height: height of tesselating rectangular regions
+		return the overlap area of the region contain pos1 with rectangle (pos1, pos2)
+		'''
+		w = min(width - (pos1[0] % width), pos2[0] - pos1[0])
+		h = min(height - (pos1[1] % height), pos2[1] - pos1[1])
+		return w * h
+
 	def print_matches(self, matches):
 		print
 		print "** Text Line Matches **"

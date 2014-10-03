@@ -33,6 +33,9 @@ _text_decay_amount = 1.0 / 15 if DECAY else 0
 _line_thresh_mult = 0.05
 _text_line_thresh_mult = 0.15
 
+ROWS = 5
+COLS = 8
+
 def get_doc(_dir, basename):
 	paths = map(lambda ext: os.path.join(_dir, basename + ext), _file_extensions)
 
@@ -296,22 +299,10 @@ class Document:
 		thresh_dist = _text_line_thresh_mult * max(max(self.size), max(other.size))  # % of largest dimension
 
 		matcher = text.TextLineMatcher(self.text_lines, other.text_lines, thresh_dist, ALLOW_PARTIAL_MATCHES)
+		#sim_mat = matcher.sim_mat(ROWS, COLS, self.size)
+		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
+
 		return matcher.similarity()
-
-		#self.clear_text_matches()
-		#other.clear_text_matches()
-
-		## each matched line has a flag set by has_match indicating that it matches
-		#for line in other.text_lines:
-		#	self._find_matching_text_line(line, thresh_dist)
-		## we do it both ways to catch prefix/suffix matches in both directions
-		#if ALLOW_PARTIAL_MATCHES:
-		#	for line in self.text_lines:
-		#		other._find_matching_text_line(line, thresh_dist)
-
-		#my_ratio = self._get_char_mass_ratio()
-		#other_ratio = other._get_char_mass_ratio()
-		#return utils.harmonic_mean(my_ratio, other_ratio)
 
 	def line_similarity(self, other):
 		''' Combined horizontal and vertical line similarity (harmonic mean) [0-1] '''
@@ -327,10 +318,6 @@ class Document:
 		h_thresh_dist = _line_thresh_mult * max(self.size[0], other.size[0]) 
 		h_matcher = lines.LMatcher(self.h_lines, other.h_lines, h_thresh_dist)
 		matches = h_matcher.get_matches()
-		#print "Horizontal Matricies:"
-		#h_matcher.display()
-		#ops = h_matcher.get_operations()
-		#h_matcher.print_ops(ops)
 
 		return h_matcher.similarity()
 
@@ -338,15 +325,10 @@ class Document:
 		''' return horizontal line similarity score [0-1] '''
 		self._load_check()
 		other._load_check()
-		#self.clear_v_line_matches()
-		#other.clear_v_line_matches()
 
 		v_thresh_dist = _line_thresh_mult * max(self.size[1], other.size[1]) 
 		v_matcher = lines.LMatcher(self.v_lines, other.v_lines, v_thresh_dist)
 		return v_matcher.similarity()
-		#matches = v_matcher.get_matches()
-		#print "Vertical"
-		#v_matcher.display()
 
 	def clear_text_matches(self):
 		''' reset the matched tag on all of the text lines '''
@@ -359,48 +341,6 @@ class Document:
 		matcher = text.TextLineMatcher(self.text_lines, other.text_lines, thresh_dist, ALLOW_PARTIAL_MATCHES)
 
 		self.text_lines = matcher.merge()
-
-		#self.clear_text_matches()
-		#other.clear_text_matches()
-
-		#to_add = list()
-		#for line in other.text_lines:
-		#	matched_line = self._find_matching_text_line(line, thresh_dist)
-		#	if matched_line:
-		#		matched_line.aggregate(line)
-		#		#x = (line.count * line.pos[0] + matched_line.count * matched_line.pos[0]
-		#		#	) / (line.count + matched_line.count)
-		#		#y = (line.count * line.pos[1] + matched_line.count * matched_line.pos[1]
-		#		#	) / (line.count + matched_line.count)
-
-		#		## Don't worry about size for now
-		#		##width = (line.count * line.size[0] + matched_line.count * matched_line.size[0]) /
-		#		##	(line.count + matched_line.count)
-		#		##height = (line.count * line.size[1] + matched_line.count * matched_line.size[1]) /
-		#		##	(line.count + matched_line.count)
-		#		## hmmm, what if the text is not an exact match...
-		#		## partial matches?
-
-		#		## translations
-		#		#dx = x - matched_line.pos[0]
-		#		#dy = y - matched_line.pos[1]
-		#		#for char in matched_line.chars:
-		#		#	new_pos = (char.pos[0] + dx, char.pos[1] + dy)
-		#		#	char.pos = new_pos
-		#		#	char.pos2 = (char.pos2[0] + dx, char.pos2[1] + dy)
-		#		#	#char.attributes['l'] += dx
-		#		#	#char.attributes['r'] += dx
-		#		#	#char.attributes['t'] += dy
-		#		#	#char.attributes['b'] += dy
-
-		#		#matched_line.count += line.count
-		#		#matched_line.pos = (x, y)
-		#		##matched_line.size = (width, height)
-		#	else:
-		#		to_add.append(line.copy())
-
-		#self.text_lines += to_add
-		#self._set_total_char_mass()
 
 	def _aggregate_h_lines(self, other):
 		''' Take the horizontal lines of other and merge them into this Document's text lines '''
