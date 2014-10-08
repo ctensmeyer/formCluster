@@ -122,6 +122,7 @@ class KnownClusterAnalyzer:
 		self.print_cluster_cohesion()
 		self.print_doc_cluster_sim_mat()
 		self.print_cluster_mismatches()
+		self.print_region_info()
 		self.print_label_info()
 		self.print_metric_info()
 		print
@@ -237,7 +238,21 @@ class KnownClusterAnalyzer:
 			print "%s%s" % (utils.pad_to_len(_doc.label, 30), "\t".join(to_print))
 		print
 		print
-				
+
+	def print_region_info(self):
+		print "REGION INFO"
+
+		for x, cluster in enumerate(self.clusters):
+			print "%d:\t%s\t%d\n" % (x, cluster.label, len(cluster.members))
+			list_of_sim_mats = map(lambda _doc: cluster.center.similarity_mats_by_name(_doc), cluster.members)
+			for name in cluster.center.similarity_function_names():
+				mats = map(lambda x: x[name], list_of_sim_mats)
+				avg_mat = utils.avg_mats(mats)
+				print name
+				utils.print_mat(utils.apply_mat(avg_mat, lambda x: "%.3f" % x))
+				print
+		print
+		print
 
 	def print_label_info(self):
 		assigned_labels = set(map(lambda cluster: cluster.label, self.clusters))

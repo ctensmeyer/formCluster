@@ -139,8 +139,9 @@ class LMatcher(LineMatcher):
 				 CONTAINS2: "Contains2", OVERLAP: "Overlap", CONNECT1: "Connect1", CONNECT2: "Connect2",
 				 COFRAG: "Cofrag", TRANSPOSE: "Transpose", DEL1: "Del1", DEL2: "Del2", NO_MATCH: "No_Match"}
 
-	def __init__(self, lines1, lines2, dist_thresh):
+	def __init__(self, lines1, lines2, dist_thresh, size):
 		LineMatcher.__init__(self, lines1, lines2)
+		self.size = size
 		self.dist_thresh = dist_thresh
 		self.offset_thresh = dist_thresh / 2
 		self.colinear_thresh = dist_thresh / 5.0
@@ -411,6 +412,110 @@ class LMatcher(LineMatcher):
 		for j in xrange(1, len(self.lines2) + 1):
 			self.op_mat[0][j] = self.DEL2
 			self.cost_mat[0][j] = self.cost_mat[0][j-1] + self.indel_cost(self.lines2[j-1])
+
+	def _get_region(self, pos, width, height):
+		row = int(pos[1]) / height
+		col = int(pos[0]) / width
+		return (row, col)
+
+	def _get_regions(self, line, width, height):
+		r, c = self._get_region(line.pos, width, height)
+		regions = list()
+		if line.is_horizontal():
+			
+			# first region is partial
+			first_len = width - (line.pos[0] % width)
+			regions.append( (r, c, min(first_len, line.length) / float(line.length)) )
+			c += 1
+			remaining = line.length - first_len
+
+			# middle regions are complete
+			while remaining >= width:
+				regions.append( (r, c, width / float(line.length)) )
+				remaining -= width
+				c += 1
+			# last region may be partial or even empty
+			if remaining > 0:
+				regions.append( (r, c, remaining / float(line.length)) )
+		else:
+			first_len = height - (line.pos[1] % height)
+			regions.append( (r, c, min(first_len, line.length) / float(line.length)) )
+			r += 1
+			remaining = line.length - first_len
+
+			# middle regions are complete
+			while remaining >= height:
+				regions.append( (r, c, height / float(line.length)) )
+				remaining -= height
+				r += 1
+			# last region may be partial or even empty
+			if remaining > 0:
+				regions.append( (r, c, remaining / float(line.length)) )
+
+		return regions
+
+	def _update_region_mats(self, line, actual_cost, total_mat, actual_mat, width, height):
+		# note that the matching cost can exceed the indel cost of the one line
+		# I don't expect that to happen often because the prototype lines have high counts
+		#print line
+		#print "\t", width, height
+		#print "\t", actual_cost 
+		del_cost = max(actual_cost, self.indel_cost(line))
+		regions = self._get_regions(line, width, height)
+		#for region in regions:
+		#	print "\t", region
+		for r, c, p in regions:
+			total_mat[r][c] += p * del_cost
+			actual_mat[r][c] += p * actual_cost
+
+	def similarity_by_region(self, rows, cols, size):
+		'''
+		:param rows: int number of rows
+		:param cols: int number of cols
+		:param size: (int, int) size of image1
+		:return: list(list(float(0-1))) matrix of regional percentage matches
+		'''
+		#print size
+		#print rows, cols
+		ops = self.get_operations()
+		width = (size[0] / cols) + 1
+		height = (size[1] / rows) + 1
+		total_cost_mat = [([0] * cols) for r in xrange(rows)]
+		actual_cost_mat = [([0] * cols) for r in xrange(rows)]
+		for op_tup in ops:
+			op = op_tup[0]
+			if op in  [self.PERFECT, self.DEL1, self.CONTAINS1, self.CONTAINS2, 
+					   self.CONNECT1, self.OVERLAP, self.COFRAG]:
+				line1 = op_tup[1]
+				actual_cost = op_tup[-1]
+				self._update_region_mats(line1, actual_cost, total_cost_mat, actual_cost_mat, width, height)
+
+			elif op == self.DEL2:
+				pass
+
+			elif op == self.CONNECT2:
+				line11 = op_tup[2]
+				line12 = op_tup[3]
+				actual_cost = op_tup[-1]
+				# split responsibility down the middle
+				self._update_region_mats(line11, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height)
+				self._update_region_mats(line12, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height)
+
+			elif op == self.TRANSPOSE:
+				line11 = op_tup[1]
+				line12 = op_tup[2]
+				actual_cost = op_tup[-1]
+				# split responsibility down the middle
+				self._update_region_mats(line11, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height)
+				self._update_region_mats(line12, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height)
+			else:
+				assert False
+
+		perc_mat = [([0] * cols) for r in xrange(rows)]
+		for r in xrange(rows):
+			for c in xrange(cols):
+				perc_mat[r][c] = 1 - actual_cost_mat[r][c] / total_cost_mat[r][c] if total_cost_mat[r][c] else 0
+		return perc_mat
 
 	def similarity(self):
 		self._table_check()
@@ -720,6 +825,7 @@ class LMatcher(LineMatcher):
 			#	print "\t\t", l
 			#print "\t\tCombined:", line
 			#print
+			line.truncate(self.size)
 			merged_lines.append(line)
 		sort_lines(merged_lines)
 		return merged_lines

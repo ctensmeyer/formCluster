@@ -229,7 +229,22 @@ def split_mat(mat, row_len):
 		start += row_len
 		end += row_len
 	return mats
-	
+
+def avg_mats(mats):
+	rows = len(mats[0])
+	cols = len(mats[0][0])
+	avg_mat = [[0] * cols for x in xrange(rows)]
+	for mat in mats:
+		assert len(mat) == rows
+		assert len(mat[0]) == cols
+		for r in xrange(rows):
+			for c in xrange(cols):
+				val = mat[r][c]
+				avg_mat[r][c] += val
+	for r in xrange(rows):
+		for c in xrange(cols):
+			avg_mat[r][c] /= len(mats)
+	return avg_mat
 
 # Operations include skip or match
 def edit_distance(s, t, id_cost, match_f):

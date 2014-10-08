@@ -211,7 +211,7 @@ class TextLineMatcher:
 			matches += condensed
 		return matches
 
-	def sim_mat(self, rows, cols, size):
+	def similarity_by_region(self, rows, cols, size):
 		'''
 		:param rows: int number of rows
 		:param cols: int number of cols
@@ -236,8 +236,8 @@ class TextLineMatcher:
 				#print r, c, val
 				if line.matched:
 					matched_mat[r][c] += val
-				else:
-					print r, c, val, line
+				#else:
+				#	print r, c, val, line
 				total_mat[r][c] += val
 		perc_mat = [([0] * cols) for r in xrange(rows)]
 		for r in xrange(rows):
@@ -266,8 +266,8 @@ class TextLineMatcher:
 		return regions
 
 	def _get_region(self, pos, width, height):
-		row = pos[1] / height
-		col = pos[0] / width
+		row = int(pos[1]) / height
+		col = int(pos[0]) / width
 		return (row, col)
 
 	def _get_region_overlap(self, pos1, pos2, width, height):

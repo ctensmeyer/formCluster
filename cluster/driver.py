@@ -135,6 +135,13 @@ def cmp_test():
 	#print
 
 	sims = doc1.similarities_by_name(doc2)
+	sim_mats = doc1.similarity_mats_by_name(doc2)
+	for name in sim_mats:
+		print name
+		sim_mat = sim_mats[name]
+		utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
+		print
+
 	doc1.draw().save("output/doc1.png")
 	doc2.draw().save("output/doc2.png")
 	#print sims

@@ -72,6 +72,26 @@ class Line(Feature):
 		'''
 		return Feature.match_value(self) * math.log(self.length)
 
+	def truncate(self, size):
+		'''
+		:param size: (width, height)
+		Truncates the endpoints of the line to be within the rectangle defined by size
+		'''
+		if self.pos[0] < 0:
+			self.pos = (0, self.pos[1])
+		if self.pos[1] < 0:
+			self.pos = (self.pos[0], 0)
+		if self.is_horizontal() and (self.pos[0] + self.length) >= size[0]:
+			self.length = size[0] - self.pos[0] - 1
+		elif self.is_vertical() and (self.pos[1] + self.length) >= size[1]:
+			self.length = size[1] - self.pos[1] - 1
+
+	def end_pos(self):
+		if self.orien == Line.HORIZONTAL:
+			return (self.pos[0], self.pos[1] + self.length)
+		else:
+			return (self.pos[0] + self.length, self.pos[1])
+
 	def length_range(self, offset=0):
 		return (self.pos[1-self.orien] + offset, self.pos[1-self.orien] + self.length + offset)
 		

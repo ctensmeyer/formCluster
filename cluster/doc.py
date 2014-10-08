@@ -280,12 +280,28 @@ class Document:
 			sims[fun] = funs[fun](other)
 		return sims
 
+	def similarity_mats_by_name(self, other):
+		''' reutrn dict {name_of_sim_metric : sim_mat} '''
+		sims = dict()
+		funs = self.similarity_mat_functions()
+		for fun in funs:
+			sims[fun] = funs[fun](other)
+		return sims
+
 	def similarity_functions(self):
 		''' return dict {name_of_sim_metric : sim_function(other) } '''
 		funs = dict()
 		funs['text_line'] = (lambda other: self.text_line_similarity(other))
 		funs['h_line'] = (lambda other: self.h_line_similarity(other))
 		funs['v_line'] = (lambda other: self.v_line_similarity(other))
+		return funs
+
+	def similarity_mat_functions(self):
+		''' return dict {name_of_sim_metric : sim_function(other) } '''
+		funs = dict()
+		funs['text_line'] = (lambda other: self.text_line_similarity_mat(other))
+		funs['h_line'] = (lambda other: self.h_line_similarity_mat(other))
+		funs['v_line'] = (lambda other: self.v_line_similarity_mat(other))
 		return funs
 
 	def similarity_function_names(self):
@@ -299,7 +315,7 @@ class Document:
 		thresh_dist = _text_line_thresh_mult * max(max(self.size), max(other.size))  # % of largest dimension
 
 		matcher = text.TextLineMatcher(self.text_lines, other.text_lines, thresh_dist, ALLOW_PARTIAL_MATCHES)
-		#sim_mat = matcher.sim_mat(ROWS, COLS, self.size)
+		#sim_mat = matcher.similarity_by_region(ROWS, COLS, self.size)
 		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
 
 		return matcher.similarity()
@@ -316,19 +332,62 @@ class Document:
 		other._load_check()
 
 		h_thresh_dist = _line_thresh_mult * max(self.size[0], other.size[0]) 
-		h_matcher = lines.LMatcher(self.h_lines, other.h_lines, h_thresh_dist)
-		matches = h_matcher.get_matches()
+		h_matcher = lines.LMatcher(self.h_lines, other.h_lines, h_thresh_dist, self.size)
+		#matches = h_matcher.get_matches()
+
+		#sim_mat = h_matcher.similarity_by_region(ROWS, COLS, self.size)
+		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
 
 		return h_matcher.similarity()
 
 	def v_line_similarity(self, other):
-		''' return horizontal line similarity score [0-1] '''
+		''' return vertical line similarity score [0-1] '''
 		self._load_check()
 		other._load_check()
 
 		v_thresh_dist = _line_thresh_mult * max(self.size[1], other.size[1]) 
-		v_matcher = lines.LMatcher(self.v_lines, other.v_lines, v_thresh_dist)
+		v_matcher = lines.LMatcher(self.v_lines, other.v_lines, v_thresh_dist, self.size)
+
+		#sim_mat = v_matcher.similarity_by_region(ROWS, COLS, self.size)
+		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
+
 		return v_matcher.similarity()
+
+	def text_line_similarity_mat(self, other):
+		''' return the text line similarity matrix'''
+		self._load_check()
+		other._load_check()
+		thresh_dist = _text_line_thresh_mult * max(max(self.size), max(other.size))  # % of largest dimension
+
+		matcher = text.TextLineMatcher(self.text_lines, other.text_lines, thresh_dist, ALLOW_PARTIAL_MATCHES)
+		sim_mat = matcher.similarity_by_region(ROWS, COLS, self.size)
+		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
+
+		return sim_mat
+
+	def h_line_similarity_mat(self, other):
+		''' return horizontal line similarity matrix'''
+		self._load_check()
+		other._load_check()
+
+		h_thresh_dist = _line_thresh_mult * max(self.size[0], other.size[0]) 
+		h_matcher = lines.LMatcher(self.h_lines, other.h_lines, h_thresh_dist, self.size)
+
+		sim_mat = h_matcher.similarity_by_region(ROWS, COLS, self.size)
+		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
+		return sim_mat
+
+	def v_line_similarity_mat(self, other):
+		''' return vertical line similarity matrix'''
+		self._load_check()
+		other._load_check()
+
+		v_thresh_dist = _line_thresh_mult * max(self.size[1], other.size[1]) 
+		v_matcher = lines.LMatcher(self.v_lines, other.v_lines, v_thresh_dist, self.size)
+
+		sim_mat = v_matcher.similarity_by_region(ROWS, COLS, self.size)
+		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
+		return sim_mat
 
 	def clear_text_matches(self):
 		''' reset the matched tag on all of the text lines '''
@@ -345,7 +404,7 @@ class Document:
 	def _aggregate_h_lines(self, other):
 		''' Take the horizontal lines of other and merge them into this Document's text lines '''
 		h_thresh_dist = _line_thresh_mult * max(self.size[0], other.size[0]) 
-		h_matcher = lines.LMatcher(self.h_lines, other.h_lines, h_thresh_dist)
+		h_matcher = lines.LMatcher(self.h_lines, other.h_lines, h_thresh_dist, self.size)
 		#ops = h_matcher.get_operations()
 		#h_matcher.print_ops(ops)
 		self.h_lines = h_matcher.get_merged_lines()
@@ -353,7 +412,7 @@ class Document:
 	def _aggregate_v_lines(self, other):
 		''' Take the vertical lines of other and merge them into this Document's text lines '''
 		v_thresh_dist = _line_thresh_mult * max(self.size[1], other.size[1]) 
-		v_matcher = lines.LMatcher(self.v_lines, other.v_lines, v_thresh_dist)
+		v_matcher = lines.LMatcher(self.v_lines, other.v_lines, v_thresh_dist, self.size)
 		self.v_lines = v_matcher.get_merged_lines()
 		
 	def aggregate(self, other):
