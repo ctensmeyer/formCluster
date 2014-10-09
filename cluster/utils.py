@@ -230,6 +230,20 @@ def split_mat(mat, row_len):
 		end += row_len
 	return mats
 
+def mult_mats(mats):
+	rows = len(mats[0])
+	cols = len(mats[0][0])
+	mult_mat = [[1] * cols for x in xrange(rows)]
+	for mat in mats:
+		assert len(mat) == rows
+		assert len(mat[0]) == cols
+		for r in xrange(rows):
+			for c in xrange(cols):
+				val = mat[r][c]
+				mult_mat[r][c] *= val
+	return mult_mat
+	
+
 def avg_mats(mats):
 	rows = len(mats[0])
 	cols = len(mats[0][0])

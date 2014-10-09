@@ -226,6 +226,7 @@ class TextLineMatcher:
 		#print "\theight:", height
 		total_mat = [([0] * cols) for r in xrange(rows)]
 		matched_mat = [([0] * cols) for r in xrange(rows)]
+		total = 0
 		for line in self.lines1:
 			br = line.bottom_right()
 			#print "\t", line
@@ -239,11 +240,14 @@ class TextLineMatcher:
 				#else:
 				#	print r, c, val, line
 				total_mat[r][c] += val
+				total += val
 		perc_mat = [([0] * cols) for r in xrange(rows)]
+		weight_mat = [([0] * cols) for r in xrange(rows)]
 		for r in xrange(rows):
 			for c in xrange(cols):
-				perc_mat[r][c] = matched_mat[r][c] / total_mat[r][c] if total_mat[r][c] else 0
-		return perc_mat
+				perc_mat[r][c] = matched_mat[r][c] / total_mat[r][c] if total_mat[r][c] else 0 #float('NaN')
+				weight_mat[r][c] = total_mat[r][c] / total
+		return perc_mat, weight_mat
 
 	def _get_regions(self, line, width, height):
 		line_area = float(line.size[0] * line.size[1])

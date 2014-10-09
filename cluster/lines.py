@@ -457,13 +457,13 @@ class LMatcher(LineMatcher):
 	def _update_region_mats(self, line, actual_cost, total_mat, actual_mat, width, height):
 		# note that the matching cost can exceed the indel cost of the one line
 		# I don't expect that to happen often because the prototype lines have high counts
-		#print line
-		#print "\t", width, height
-		#print "\t", actual_cost 
+		print line
+		print "\t", width, height
+		print "\t", actual_cost 
 		del_cost = max(actual_cost, self.indel_cost(line))
 		regions = self._get_regions(line, width, height)
-		#for region in regions:
-		#	print "\t", region
+		for region in regions:
+			print "\t", region
 		for r, c, p in regions:
 			total_mat[r][c] += p * del_cost
 			actual_mat[r][c] += p * actual_cost
@@ -475,8 +475,8 @@ class LMatcher(LineMatcher):
 		:param size: (int, int) size of image1
 		:return: list(list(float(0-1))) matrix of regional percentage matches
 		'''
-		#print size
-		#print rows, cols
+		print size
+		print rows, cols
 		ops = self.get_operations()
 		width = (size[0] / cols) + 1
 		height = (size[1] / rows) + 1
@@ -512,10 +512,16 @@ class LMatcher(LineMatcher):
 				assert False
 
 		perc_mat = [([0] * cols) for r in xrange(rows)]
+		total = 0
 		for r in xrange(rows):
 			for c in xrange(cols):
-				perc_mat[r][c] = 1 - actual_cost_mat[r][c] / total_cost_mat[r][c] if total_cost_mat[r][c] else 0
-		return perc_mat
+				perc_mat[r][c] = 1 - actual_cost_mat[r][c] / total_cost_mat[r][c] if total_cost_mat[r][c] else 0 #float('NaN')
+				total += total_cost_mat[r][c]
+		weight_mat = [([0] * cols) for r in xrange(rows)]
+		for r in xrange(rows):
+			for c in xrange(cols):
+				weight_mat[r][c] = total_cost_mat[r][c] / total
+		return perc_mat, weight_mat
 
 	def similarity(self):
 		self._table_check()
@@ -798,6 +804,7 @@ class LMatcher(LineMatcher):
 
 			elif op == self.CONNECT2:
 				line1, line2 = self.combine_connect2(op_tup, pos_offset)
+				line1.truncate(self.size)
 				merged_lines.append(line1)
 				line = line2
 
@@ -813,6 +820,7 @@ class LMatcher(LineMatcher):
 			elif op == self.COFRAG:
 				line1 = self.combine_del(op_tup[1], (0, 0))
 				line2 = self.combine_del(op_tup[2], pos_offset)
+				line1.truncate(self.size)
 				merged_lines.append(line1)
 				line = line2
 			else:

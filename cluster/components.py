@@ -56,8 +56,8 @@ class Line(Feature):
 		return cpy
 
 	def __str__(self):
-		return "%s pos: %s length: %d thickness %d count %.2f" % \
-				 ('H' if self.orien else 'V', self.pos, self.length, self.thickness, self.count)
+		return "%s pos: %s length: %d thickness %d count %.2f id: %s" % \
+				 ('H' if self.orien else 'V', self.pos, self.length, self.thickness, self.count, id(self))
 
 	def is_horizontal(self):
 		return self.orien == Line.HORIZONTAL
@@ -83,8 +83,10 @@ class Line(Feature):
 			self.pos = (self.pos[0], 0)
 		if self.is_horizontal() and (self.pos[0] + self.length) >= size[0]:
 			self.length = size[0] - self.pos[0] - 1
+			#print "Truncating: ", self
 		elif self.is_vertical() and (self.pos[1] + self.length) >= size[1]:
 			self.length = size[1] - self.pos[1] - 1
+			#print "Truncating: ", self
 
 	def end_pos(self):
 		if self.orien == Line.HORIZONTAL:

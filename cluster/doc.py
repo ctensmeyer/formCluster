@@ -141,7 +141,6 @@ class Document:
 		cpy.v_lines = map(lambda line: line.copy(), self.v_lines)
 		cpy.size = self.size
 
-		cpy.char_mass = self.char_mass
 		#cpy.h_line_mass = self.h_line_mass
 		#cpy.v_line_mass = self.v_line_mass
 
@@ -175,7 +174,6 @@ class Document:
 
 		# heavy operations
 		self.text_lines = ocr.clean_lines(ocr.extract_text_lines(self.ocr_path))
-		self._set_total_char_mass()
 
 		self.h_lines, self.v_lines = lines.read_lines(self.endpoints_path)
 		assert self.h_lines
@@ -197,72 +195,6 @@ class Document:
 
 		self.loaded = True
 
-	def _set_total_char_mass(self):
-		'''
-		calculate the total char mass of the text lines.  Used to determine what percentage of
-			characters match in text line matching
-		'''
-		self.char_mass = sum(map(lambda line: line.match_value(), self.text_lines))
-
-	def _get_matching_char_mass(self):
-		''' calculate the char mass of the text lines that are currently labeled as matched '''
-		mass = 0.0
-		for line in self.text_lines:
-			if line.matched:
-				mass += line.match_value()
-		return mass
-
-	def _get_char_mass_ratio(self):
-		''' calculate percentage of matching characters '''
-		return self._get_matching_char_mass() / self.char_mass if self.char_mass else 0.0
-
-	def _find_matching_text_line(self, query_line, thresh_dist):
-		'''
-		Search the unmatched text lines, looking for a match for the query_line.
-		Does partial matches if enabled.  Marks all matched lines as matched
-		query_line - TextLine, generally from another Document
-		thresh_dist - num, only consider text lines within this distance of the query_line
-		'''
-		for line in self.text_lines:
-			if line.matched:
-				continue
-			match = line.matches(query_line, thresh_dist)
-			if match:
-				if ALLOW_PARTIAL_MATCHES and match != components.TextLine.COMPLETE_MATCH:
-					if match == components.TextLine.PREFIX_MATCH:
-						# line is a prefix of query_line
-						chars = query_line.chars[cmp_line.N:]
-					else:  
-						# line is a suffix of query_line
-						chars = query_line.chars[0:cmp_line.N]
-					first_char = chars[0]
-					last_char = chars[-1]
-					pos1 = first_char.pos
-					pos2 = last_char.pos
-					size = (pos2[0] - pos1[0], line.size[1])  # not that size is being used anywhere...
-
-					# create dummy TextLine to match the rest of query_line
-					remaining_line = components.TextLine(chars, pos1, size)
-					remaining_line.matched = False
-					if DEBUG:
-						print "partial match:"
-						print "\t", query_line
-						print "\t", line
-						print "\t", "Searching for remaining:", remaining_line
-
-					# recurse
-					partial_match = self._find_matching_text_line(remaning_line, thresh_dist)
-					if not partial_match:
-						return None
-
-				line.matched = True
-				query_line.matched = True
-				if DEBUG:
-					print line
-				return line
-
-		return None
-
 	def similarity(self, other):
 		''' alias for global_similarity '''
 		return self.global_similarity(other)
@@ -281,9 +213,25 @@ class Document:
 		return sims
 
 	def similarity_mats_by_name(self, other):
-		''' reutrn dict {name_of_sim_metric : sim_mat} '''
+		''' return dict {name_of_sim_metric : sim_mat} '''
 		sims = dict()
 		funs = self.similarity_mat_functions()
+		for fun in funs:
+			sims[fun] = funs[fun](other)
+		return sims
+
+	def similarity_weights_by_name(self, other):
+		''' return dict {name_of_sim_metric : weight_mat} '''
+		sims = dict()
+		funs = self.similarity_weight_functions()
+		for fun in funs:
+			sims[fun] = funs[fun](other)
+		return sims
+
+	def similarity_mats_weights_by_name(self, other):
+		''' return dict {name_of_sim_metric : weight_mat} '''
+		sims = dict()
+		funs = self.similarity_mat_weight_functions()
 		for fun in funs:
 			sims[fun] = funs[fun](other)
 		return sims
@@ -299,9 +247,25 @@ class Document:
 	def similarity_mat_functions(self):
 		''' return dict {name_of_sim_metric : sim_function(other) } '''
 		funs = dict()
+		funs['text_line'] = (lambda other: self.text_line_similarity_mat(other)[0])
+		funs['h_line'] = (lambda other: self.h_line_similarity_mat(other)[0])
+		funs['v_line'] = (lambda other: self.v_line_similarity_mat(other)[0])
+		return funs
+
+	def similarity_mat_weight_functions(self):
+		''' return dict {name_of_sim_metric : sim_function(other) } '''
+		funs = dict()
 		funs['text_line'] = (lambda other: self.text_line_similarity_mat(other))
 		funs['h_line'] = (lambda other: self.h_line_similarity_mat(other))
 		funs['v_line'] = (lambda other: self.v_line_similarity_mat(other))
+		return funs
+
+	def similarity_weight_functions(self):
+		''' return dict {name_of_sim_metric : sim_function(other) } '''
+		funs = dict()
+		funs['text_line'] = (lambda other: self.text_line_similarity_mat(other)[1])
+		funs['h_line'] = (lambda other: self.h_line_similarity_mat(other)[1])
+		funs['v_line'] = (lambda other: self.v_line_similarity_mat(other)[1])
 		return funs
 
 	def similarity_function_names(self):
@@ -354,40 +318,40 @@ class Document:
 		return v_matcher.similarity()
 
 	def text_line_similarity_mat(self, other):
-		''' return the text line similarity matrix'''
+		''' return the text line similarity matrix and weight mat'''
 		self._load_check()
 		other._load_check()
 		thresh_dist = _text_line_thresh_mult * max(max(self.size), max(other.size))  # % of largest dimension
 
 		matcher = text.TextLineMatcher(self.text_lines, other.text_lines, thresh_dist, ALLOW_PARTIAL_MATCHES)
-		sim_mat = matcher.similarity_by_region(ROWS, COLS, self.size)
+		sim_mat, weight_mat = matcher.similarity_by_region(ROWS, COLS, self.size)
 		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
 
-		return sim_mat
+		return sim_mat, weight_mat
 
 	def h_line_similarity_mat(self, other):
-		''' return horizontal line similarity matrix'''
+		''' return horizontal line similarity matrix and weight mat'''
 		self._load_check()
 		other._load_check()
 
 		h_thresh_dist = _line_thresh_mult * max(self.size[0], other.size[0]) 
 		h_matcher = lines.LMatcher(self.h_lines, other.h_lines, h_thresh_dist, self.size)
 
-		sim_mat = h_matcher.similarity_by_region(ROWS, COLS, self.size)
+		sim_mat, weight_mat = h_matcher.similarity_by_region(ROWS, COLS, self.size)
 		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
-		return sim_mat
+		return sim_mat, weight_mat
 
 	def v_line_similarity_mat(self, other):
-		''' return vertical line similarity matrix'''
+		''' return vertical line similarity matrix and weight mat'''
 		self._load_check()
 		other._load_check()
 
 		v_thresh_dist = _line_thresh_mult * max(self.size[1], other.size[1]) 
 		v_matcher = lines.LMatcher(self.v_lines, other.v_lines, v_thresh_dist, self.size)
 
-		sim_mat = v_matcher.similarity_by_region(ROWS, COLS, self.size)
+		sim_mat, weight_mat = v_matcher.similarity_by_region(ROWS, COLS, self.size)
 		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
-		return sim_mat
+		return sim_mat, weight_mat
 
 	def clear_text_matches(self):
 		''' reset the matched tag on all of the text lines '''
