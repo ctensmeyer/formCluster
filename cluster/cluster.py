@@ -77,7 +77,7 @@ class AnalysisTemplateSorter:
 		if odd_docs:
 			if isolate:
 				# make a single cluster of the oddballs
-				template = odd_docs[0].copy(len(self.templates))
+				template = odd_docs[0].copy(len(self.clusters))
 				template.label = None
 				for doc in odd_docs[1:]:
 					template.aggregate(doc)

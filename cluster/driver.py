@@ -37,7 +37,7 @@ def cluster_known():
 	epsilon = float(sys.argv[3])
 	organizer = cluster.AnalysisTemplateSorter(docs)
 	organizer.go(epsilon)
-	organizer.prune_clusters()
+	organizer.prune_clusters(isolate)
 	clusters = organizer.get_clusters()
 	print
 	print
