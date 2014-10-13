@@ -95,6 +95,14 @@ def tup_avg(tups, weights=None):
 	return tuple(sum(map(lambda val, w: val * w, t, weights)) / total_weight for t in zip(*tups))
 
 
+def norm_list(l):
+	s = float(sum(l))
+	return [x / s for x in l]
+
+def norm_mat(m):
+	s = float(sum(map(sum, m)))
+	return [ [row[x] / s for x in xrange(len(row))] for row in m]
+
 def e_dist(p1, p2):
 	return math.sqrt( (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 )
 
@@ -258,6 +266,23 @@ def avg_mats(mats):
 	for r in xrange(rows):
 		for c in xrange(cols):
 			avg_mat[r][c] /= len(mats)
+	return avg_mat
+
+def wavg_mats(mats, weights):
+	rows = len(mats[0])
+	cols = len(mats[0][0])
+	avg_mat = [[0] * cols for x in xrange(rows)]
+	norm = float(sum(weights))
+	for mat, weight in zip(mats, weights):
+		assert len(mat) == rows
+		assert len(mat[0]) == cols
+		for r in xrange(rows):
+			for c in xrange(cols):
+				val = mat[r][c]
+				avg_mat[r][c] += val * weight
+	for r in xrange(rows):
+		for c in xrange(cols):
+			avg_mat[r][c] /= (len(mats) * norm)
 	return avg_mat
 
 # Operations include skip or match

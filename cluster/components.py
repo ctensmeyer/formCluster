@@ -123,6 +123,10 @@ class TextLine(Feature):
 		#self.height = size[1]
 		self.N = len(self.text)
 		self.members = collections.Counter()
+		if self.size[1] == 0:
+			self.size = (self.size[0], 5)
+			print "HERE"
+			print self
 
 	def find_median(self):
 		most_common = self.members.most_common(2);
@@ -160,11 +164,11 @@ class TextLine(Feature):
 			self.members.append(self.text)
 		#self.members.append( (prefix.text, suffix.text) )
 		self.members[prefix.text + suffix.text] += 1
-		weights = [self.count, (prefix.count + suffix.count) / 2]
+		weights = [self.count, (prefix.count + suffix.count) / 2.0]
 		x = utils.wavg([self.pos[0], prefix.pos[0]], weights)
 		y = utils.wavg([self.pos[1], prefix.pos[1]], weights)
 		w = utils.wavg([self.size[0], prefix.size[0] + suffix.size[0]], weights)
-		h = utils.wavg([self.size[1], (prefix.size[1] + suffix.size[1]) / 2], weights)
+		h = utils.wavg([self.size[1], (prefix.size[1] + suffix.size[1]) / 2.0], weights)
 		self.pos = (x, y)
 		self.size = (w, h)
 		self.text = self.find_median()

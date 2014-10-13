@@ -195,6 +195,39 @@ class Document:
 
 		self.loaded = True
 
+	def similarity_vector(self, other):
+		''' returns a similarity vector '''
+		region_sims_by_name = self.similarity_mats_by_name(other)
+		global_scores_by_name = self.similarities_by_name(other)
+		vector = list()
+		for name in global_scores_by_name:
+			vector.append(global_scores_by_name[name])
+		for name in region_sims_by_name:
+			mat = region_sims_by_name[name]
+			for row in mat:
+				for val in row:
+					vector.append(val)
+		return vector
+
+	def get_initial_vector_weights(self, other):
+		''' 
+		:param other: needed, but doesn't affect the weights returned
+		returns inital weights for use in the NNs 
+		'''
+		region_weights_by_name = self.similarity_weights_by_name(other)
+		vector = list()
+
+		# for the global scores
+		for name in region_weights_by_name:
+			vector.append(1)
+		for name in region_weights_by_name:
+			mat = region_weights_by_name[name]
+			for row in mat:
+				for val in row:
+					vector.append(val)
+		return vector
+		
+
 	def similarity(self, other):
 		''' alias for global_similarity '''
 		return self.global_similarity(other)

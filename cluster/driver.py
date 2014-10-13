@@ -1,5 +1,6 @@
 
 import datetime
+import random
 import shutil
 import time
 import sys
@@ -21,6 +22,7 @@ second_basename = "rg14_31708_0089_03"
 aggregate_dir = "../data/lines/1911Wales/UK1911Census_EnglandWales_Household15Names_03_01"
 
 
+
 def get_data_dir(descrip):
 	if descrip == "big":
 		return "../data/lines/1911Wales"
@@ -34,11 +36,13 @@ def get_data_dir(descrip):
 
 def cluster_known():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
-	epsilon = float(sys.argv[3])
-	organizer = cluster.AnalysisTemplateSorter(docs)
-	organizer.go(epsilon)
-	organizer.prune_clusters()
-	clusters = organizer.get_clusters()
+	random.seed(12345)
+	random.shuffle(docs)
+	sim_thresh = float(sys.argv[3])
+	confirm = cluster.BaseCONFIRM(docs, sim_thresh)
+	#confirm = cluster.AnalysingCONFIRM(docs, sim_thresh=sim_thresh, lr=0.3)
+	confirm.cluster()
+	clusters = confirm.get_clusters()
 	print
 	print
 	analyzer = metric.KnownClusterAnalyzer(clusters)
@@ -66,9 +70,9 @@ def double_cluster_known():
 
 def compare_true_templates():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
-	organizer = cluster.CheatingSorter(docs)
-	organizer.go()
-	clusters = organizer.get_clusters()
+	confirm = cluster.PerfectCONFIRM(docs)
+	confirm.cluster()
+	clusters = confirm.get_clusters()
 	print
 	print
 	analyzer = metric.KnownClusterAnalyzer(clusters)

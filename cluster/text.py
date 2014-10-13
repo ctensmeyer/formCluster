@@ -234,6 +234,8 @@ class TextLineMatcher:
 			regions = self._get_regions(line, width, height)
 			#print regions
 			for r, c, val in regions:
+				if r >= rows or c >= cols or r < 0 or c < 0:
+					continue
 				#print r, c, val
 				if line.matched:
 					matched_mat[r][c] += val
@@ -246,12 +248,15 @@ class TextLineMatcher:
 		for r in xrange(rows):
 			for c in xrange(cols):
 				perc_mat[r][c] = matched_mat[r][c] / total_mat[r][c] if total_mat[r][c] else 0 #float('NaN')
-				weight_mat[r][c] = total_mat[r][c] / total
+				weight_mat[r][c] = total_mat[r][c] / total if total else (1.0 / rows * cols)
 		return perc_mat, weight_mat
 
 	def _get_regions(self, line, width, height):
 		line_area = float(line.size[0] * line.size[1])
+		if line_area == 0:
+			return list()
 		line_value = line.match_value()
+		#print line
 		#print "\tarea: %.0f \tvalue: %d" % (line_area, line_value)
 		ul = line.pos
 		br = line.bottom_right()

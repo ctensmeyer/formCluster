@@ -185,14 +185,17 @@ class KnownClusterAnalyzer:
 	def print_cluster_mismatches(self):
 		print "CLUSTER MISMATCHES"
 		print
+		total = 0
 		for x, cluster in enumerate(self.clusters):
 			print "%d:\t%s" % (x, cluster.label)
 			for _doc in cluster.members:
 				if _doc.label != cluster.label:
+					total += 1
 					sims = _doc.similarities_by_name(cluster.center).values()
 					sim = utils.harmonic_mean_list(sims)
 					print "\t" + "\t".join(map(str, [_doc.label, sim, sims]))
 			print
+		print "Total Mismatches:", total
 		print
 		print
 
@@ -245,11 +248,15 @@ class KnownClusterAnalyzer:
 		for x, cluster in enumerate(self.clusters):
 			print "%d:\t%s\t%d\n" % (x, cluster.label, len(cluster.members))
 			list_of_sim_mats = map(lambda _doc: cluster.center.similarity_mats_by_name(_doc), cluster.members)
+			list_of_weight_mats = cluster.center.similarity_weights_by_name(cluster.members[0])
 			for name in cluster.center.similarity_function_names():
 				mats = map(lambda x: x[name], list_of_sim_mats)
 				avg_mat = utils.avg_mats(mats)
+				weight_mat = list_of_weight_mats[name]
 				print name
 				utils.print_mat(utils.apply_mat(avg_mat, lambda x: "%.3f" % x))
+				print
+				utils.print_mat(utils.apply_mat(weight_mat, lambda x: "%.3f" % x))
 				print
 		print
 		print

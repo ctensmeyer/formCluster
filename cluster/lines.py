@@ -454,17 +454,19 @@ class LMatcher(LineMatcher):
 
 		return regions
 
-	def _update_region_mats(self, line, actual_cost, total_mat, actual_mat, width, height):
+	def _update_region_mats(self, line, actual_cost, total_mat, actual_mat, width, height, rows, cols):
 		# note that the matching cost can exceed the indel cost of the one line
 		# I don't expect that to happen often because the prototype lines have high counts
-		print line
-		print "\t", width, height
-		print "\t", actual_cost 
+		#print line
+		#print "\t", width, height
+		#print "\t", actual_cost 
 		del_cost = max(actual_cost, self.indel_cost(line))
 		regions = self._get_regions(line, width, height)
-		for region in regions:
-			print "\t", region
+		#for region in regions:
+			#print "\t", region
 		for r, c, p in regions:
+			if r >= rows or c >= cols or r < 0 or c < 0:
+				continue
 			total_mat[r][c] += p * del_cost
 			actual_mat[r][c] += p * actual_cost
 
@@ -475,8 +477,8 @@ class LMatcher(LineMatcher):
 		:param size: (int, int) size of image1
 		:return: list(list(float(0-1))) matrix of regional percentage matches
 		'''
-		print size
-		print rows, cols
+		#print size
+		#print rows, cols
 		ops = self.get_operations()
 		width = (size[0] / cols) + 1
 		height = (size[1] / rows) + 1
@@ -488,7 +490,7 @@ class LMatcher(LineMatcher):
 					   self.CONNECT1, self.OVERLAP, self.COFRAG]:
 				line1 = op_tup[1]
 				actual_cost = op_tup[-1]
-				self._update_region_mats(line1, actual_cost, total_cost_mat, actual_cost_mat, width, height)
+				self._update_region_mats(line1, actual_cost, total_cost_mat, actual_cost_mat, width, height, rows, cols)
 
 			elif op == self.DEL2:
 				pass
@@ -498,16 +500,16 @@ class LMatcher(LineMatcher):
 				line12 = op_tup[3]
 				actual_cost = op_tup[-1]
 				# split responsibility down the middle
-				self._update_region_mats(line11, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height)
-				self._update_region_mats(line12, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height)
+				self._update_region_mats(line11, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height, rows, cols)
+				self._update_region_mats(line12, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height, rows, cols)
 
 			elif op == self.TRANSPOSE:
 				line11 = op_tup[1]
 				line12 = op_tup[2]
 				actual_cost = op_tup[-1]
 				# split responsibility down the middle
-				self._update_region_mats(line11, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height)
-				self._update_region_mats(line12, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height)
+				self._update_region_mats(line11, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height, rows, cols)
+				self._update_region_mats(line12, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height, rows, cols)
 			else:
 				assert False
 
