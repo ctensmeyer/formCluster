@@ -4,6 +4,7 @@ import utils
 import doc
 
 import collections
+import random
 
 class Cluster:
 	
@@ -106,7 +107,11 @@ class BaseCONFIRM(object):
 	def get_clusters(self):
 		return self.clusters
 
-	def get_prototype_sim_mat(self):
+	def get_docs(self):
+		return self.docs
+
+	# Can be expensive if there are lots of clusters
+	def get_cluster_sim_mat(self):
 		mat = []
 		for clust1 in self.clusters:
 			row = []
@@ -132,7 +137,7 @@ class BaseCONFIRM(object):
 		return mat
 
 	# may be expensive
-	def get_doc_prototype_sim_mat(self):
+	def get_doc_cluster_sim_mat(self):
 		mat = []
 		for _doc in self.docs:
 			row = []
@@ -232,13 +237,44 @@ class PerfectCONFIRM(BaseCONFIRM):
 	def _add_cluster(self, _doc):
 		prototype = _doc.copy(len(self.clusters))
 		prototype.label = _doc.label
-		self.clusters.append(Cluster([_doc], prototype))
+		cluster = Cluster([_doc], prototype)
+		self.clusters.append(cluster)
+		return cluster
 
 	def _choose_cluster(self, _doc):
 		for cluster in self.clusters:
 			if cluster.center.label == _doc.label:
 				return cluster
 		return self.NEW_CLUSTER
+
+class AlmostPerfectCONFIRM(PerfectCONFIRM):
+	'''
+	It's perfect (1-p)% of the time.  p% of the time, it makes a random cluster assignment
+	At the end, it puts each doc back in the correct cluster.
+	Used for testing robustness of representation/similarity when bad choices are made
+	'''
+	
+	def __init__(self, p=0.05, **kwargs):
+		super(AlmostPerfectCONFIRM, self).__init__(**kwargs)
+		self.p = p
+	
+	def _choose_cluster(self, _doc):
+		if random.random() > p:
+			return super(AlmostPerfectCONFIRM, self)._choose_cluster(_doc)
+		return random.sample(self.clusters, 1)[0]
+
+	def post_process_clusters(self, **kwargs):
+		for cluster in self.clusters:
+			renegade_docs = list()
+			for _doc in cluster.members:
+				if _doc.label != cluster.center.label:
+					renegade_docs.append(_doc)
+			for _doc in renegade_docs:
+				cluster.members.remove(_doc)
+				for new_cluster in self.clusters:
+					if new_cluster.center.label == _doc.label:
+						new_cluster.members.append(_doc)
+		
 
 class RegionalCONFIRM(BaseCONFIRM):
 
@@ -256,8 +292,15 @@ class RegionalCONFIRM(BaseCONFIRM):
 			composite_regional_score += s * 1.0 / len(region_scores_by_name)
 		return composite_regional_score
 
+class PerfectRegionalCONFIRM(RegionalCONFIRM, PerfectCONFIRM):
+	pass
+
 # inherits from regional confrim to get doc_similarity() for get_doc_sim_mat()
 class RegionalWeightedCONFIRM(RegionalCONFIRM):
+	'''
+	Does automatic weighting of regions.  Feature weights are the sum of the feature
+		sim scores of the documents belonging to that cluster
+	'''
 
 	def _uniform_mat(self, rows, cols):
 		mat = [[1] * cols for x in xrange(rows)]
@@ -294,7 +337,16 @@ class RegionalWeightedCONFIRM(RegionalCONFIRM):
 				for c in xrange(len(weight_mat[r])):
 					weight_mat[r][c] += sim_mat[r][c]
 
+class PerfectRegionalWeightedCONFIRM(RegionalWeightedCONFIRM, PerfectCONFIRM):
+	pass
+
 class WavgNetCONFIRM(RegionalCONFIRM):
+	'''
+	Uses a linear classifier to learn feature weights and calculate similarity.
+	Backprop with SGD updates.
+	Handles "empty" inputs by not including their weights in the normalization.
+	Each cluster's network only sees positive examples (no negative competition)
+	'''
 
 	def __init__(self, docs, lr, **kwargs):
 		super(WavgNetCONFIRM, self).__init__(docs, **kwargs)
@@ -314,5 +366,19 @@ class WavgNetCONFIRM(RegionalCONFIRM):
 		sim_vec = cluster.center.similarity_vector(_doc)
 		cluster.network.learn(sim_vec, 1)
 	
+class PerfectWavgCONFIRM(WavgNetCONFIRM, PerfectCONFIRM):
+	pass
+
+class MSTInitCONFIRM(BaseConfirm):
+	'''
+	Initializes the set of clusters by taking the first $num_instances docs and forms
+		a maximal spanning tree from their similarity matrix.  Then random edges are removed to
+		form $num_init connected components (ccs).  Then one doc is sampled from each cc to be
+		an initial cluster.
+	'''
+
+	def __init__(self, docs, num_init=5, num_instances=20, **kwargs):
+		super(MSTInitCONFIRM, self).__init__(docs, **kwargs)
+		
 
 		

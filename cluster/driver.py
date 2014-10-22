@@ -42,10 +42,9 @@ def cluster_known():
 	confirm = cluster.BaseCONFIRM(docs, sim_thresh)
 	#confirm = cluster.AnalysingCONFIRM(docs, sim_thresh=sim_thresh, lr=0.3)
 	confirm.cluster()
-	clusters = confirm.get_clusters()
 	print
 	print
-	analyzer = metric.KnownClusterAnalyzer(clusters)
+	analyzer = metric.KnownClusterAnalyzer(confirm)
 	analyzer.draw_centers()
 	analyzer.print_all()
 
@@ -70,12 +69,12 @@ def double_cluster_known():
 
 def compare_true_templates():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
-	confirm = cluster.PerfectCONFIRM(docs)
+	#confirm = cluster.PerfectCONFIRM(docs)
+	confirm = cluster.PerfectRegionalWeightedCONFIRM(docs)
 	confirm.cluster()
-	clusters = confirm.get_clusters()
 	print
 	print
-	analyzer = metric.KnownClusterAnalyzer(clusters)
+	analyzer = metric.KnownClusterAnalyzer(confirm)
 	analyzer.draw_centers()
 	analyzer.print_all()
 

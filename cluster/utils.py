@@ -285,6 +285,12 @@ def wavg_mats(mats, weights):
 			avg_mat[r][c] /= (len(mats) * norm)
 	return avg_mat
 
+def mat_sum(mat):
+	return sum(map(sum, mat))
+
+def avg_val_mat(mat):
+	return mat_sum(mat) / float(len(mat) * len(mat[0]))
+
 # Operations include skip or match
 def edit_distance(s, t, id_cost, match_f):
 	'''
@@ -324,6 +330,38 @@ def get_font(text, width):
 		fontsize += 1
 		font = ImageFont.truetype(_font_path, fontsize)
 	return font
+
+def get_sorted_edges(sim_mat):
+	edges = list()
+	for x in xrange(len(sim_mat)):
+		for y in xrange(len(sim_mat)):
+			if y >= x:
+				continue
+			edges.append( (x, y, sim_mat[x][y]) )
+	edges.sort(key=lambda tup: tup[2], reverse=True)
+	return edges
+			
+
+def maximal_spanning_tree(sim_mat):
+	'''
+	Returns the maximal spanning tree of the similarity matrix
+	:return: list( (idx1, idx2, sim) *)
+	'''
+	edges = get_sorted_edges(sim_mat)
+	ccs = {x : x for x in xrange(len(sim_mat))}
+	edges_added = list()
+	for edge in edges:
+		if len(edges_added) == (len(sim_mat) - 1):
+			break
+		idx1 = edge[0]
+		idx2 = edge[1]
+		if ccs[idx1] != ccs[idx2]:
+			edges_added.append(edge)
+			val = ccs[idx2]
+			for x in ccs:
+				if ccs[x] == val:
+					ccs[x] = ccs[idx1]
+	return edges_added
 
 def euclideanDistance(x,y):
     assert(len(x) == len(y))

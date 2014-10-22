@@ -13,15 +13,15 @@ _output_dir = "output/"
 
 class KnownClusterAnalyzer:
 
-	def __init__(self, clusters):
-		self.clusters = clusters
-		self.sort_by_size()
+	def __init__(self, confirm):
+		self.confirm = confirm
+		self.clusters = confirm.get_clusters()
+		self.preprocess_clusters()
 
-		self.create_cluster_ids()
-		self.fill_in_cluster_labels()
+		self.docs = confirm.get_docs()
 		self.all_labels = self.get_all_labels()
+		self.num_docs = len(self.docs)
 
-		self.num_docs = sum(map(lambda cluster: len(cluster.members), clusters))
 		self.label_pr_mats = self.calc_label_pr_mats()
 		self.label_cluster_mat = self.calc_label_cluster_counts()
 		self.total_counts = {count: 0 for count in _counts}
@@ -29,23 +29,16 @@ class KnownClusterAnalyzer:
 			for count in _counts:
 				n = self.label_pr_mats[label][count]
 				self.total_counts[count] += n
-		print json.dumps(self.label_pr_mats, indent=4)
-		#self.print_assignments()
+		#print json.dumps(self.label_pr_mats, indent=4)
 
-	def sort_by_size(self):
+	def preprocess_clusters(self):
 		self.clusters.sort(key=lambda cluster: len(cluster.members), reverse=True)
-
-	def create_cluster_ids(self):
 		num = 0
 		for cluster in self.clusters:
 			if cluster._id is None:
 				cluster._id = num
 				num += 1
-
-	def fill_in_cluster_labels(self):
-		for cluster in self.clusters:
-			if cluster.label is None:
-				cluster.label = self.majority_label(cluster)
+			cluster.set_label()
 
 	def draw_centers(self):
 		# make the appropriate directory
@@ -82,22 +75,16 @@ class KnownClusterAnalyzer:
 		print
 		print
 
-	def get_all_docs(self):
-		list_of_lists = map(lambda cluster: cluster.members, self.clusters)
-		return [_doc for docs in list_of_lists for _doc in docs]
-
 	def get_all_labels(self):
 		labels = set()
-		for cluster in self.clusters:
-			for doc in cluster.members:
-				labels.add(doc.label)
+		for _doc in self.docs:
+			labels.add(_doc.label)
 		return labels
 
 	def get_true_doc_histogram(self):
 		counts = collections.defaultdict(int)
-		for cluster in self.clusters:
-			for doc in cluster.members:
-				counts[doc.label] += 1
+		for _doc in self.docs:
+			counts[_doc.label] += 1
 		return counts
 
 	def get_doc_histogram(self):
@@ -122,6 +109,8 @@ class KnownClusterAnalyzer:
 		self.print_cluster_cohesion()
 		self.print_doc_cluster_sim_mat()
 		self.print_cluster_mismatches()
+		self.print_feature_eval()
+		self.print_cluster_separation()
 		self.print_region_info()
 		self.print_label_info()
 		self.print_metric_info()
@@ -180,6 +169,13 @@ class KnownClusterAnalyzer:
 		utils.insert_indices(sub_mat)
 		utils.print_mat(sub_mat)
 		print
+
+		print "Similarity Type: Cluster sim by CONFIRM"
+		sub_mat = utils.pairwise(self.clusters, lambda c1, c2: self.confirm.cluster_similarity(c1, c2))
+		sub_mat = utils.apply_mat(sub_mat, lambda x: "%3.2f" % x)
+		utils.insert_indices(sub_mat)
+		utils.print_mat(sub_mat)
+		print
 		print
 
 	def print_cluster_mismatches(self):
@@ -199,12 +195,129 @@ class KnownClusterAnalyzer:
 		print
 		print
 
+	def feature_eval_metrics(self, sim_fun):
+		doc_cluster_sims_flat = list()
+		doc_cluster_means = list()
+		doc_cluster_std_devs = list()
+		for cluster in self.clusters:
+			cluster_sims = list()
+			for _doc in cluster.members:
+				val = sim_fun(cluster, _doc)
+				doc_cluster_sims_flat.append(val)
+				cluster_sims.append(val)
+			doc_cluster_means.append(utils.avg(cluster_sims))
+			doc_cluster_std_devs.append(utils.stddev(cluster_sims))
+		global_mean = utils.avg(doc_cluster_sims_flat)
+		global_stddev = utils.stddev(doc_cluster_sims_flat)
+		mean_of_means = utils.avg(doc_cluster_means)
+		stddev_of_means = utils.stddev(doc_cluster_means)
+		mean_of_stddev = utils.avg(doc_cluster_std_devs)
+		stddev_of_stddev = utils.stddev(doc_cluster_std_devs)
+
+		return global_mean, global_stddev, mean_of_means, stddev_of_means, mean_of_stddev, stddev_of_stddev
+		
+
+	def print_feature_eval(self):
+		'''
+		For each feature type, calculate the means and the std dev for each cluster.  Then
+			take the mean and std dev of those quantaties
+		'''
+		print "FEATURE EVAL"
+		print
+
+		stats = dict()
+
+		stats['text_line_global_stats'] = self.feature_eval_metrics(
+			lambda cluster, _doc: cluster.center.text_line_similarity(_doc))
+		stats['text_line_regional_unweighted_stats'] = self.feature_eval_metrics(
+			lambda cluster, _doc: utils.avg_val_mat(cluster.center.text_line_similarity_mat(_doc)[0]))
+		stats['text_line_regional_weighted_stats'] = self.feature_eval_metrics(
+			lambda cluster, _doc: utils.mat_sum(utils.mult_mats(cluster.center.text_line_similarity_mat(_doc))))
+
+		stats['h_line_global_stats'] = self.feature_eval_metrics(
+			lambda cluster, _doc: cluster.center.h_line_similarity(_doc))
+		stats['h_line_regional_unweighted_stats'] = self.feature_eval_metrics(
+			lambda cluster, _doc: utils.avg_val_mat(cluster.center.h_line_similarity_mat(_doc)[0]))
+		stats['h_line_regional_weighted_stats'] = self.feature_eval_metrics(
+			lambda cluster, _doc: utils.mat_sum(utils.mult_mats(cluster.center.h_line_similarity_mat(_doc))))
+
+		stats['v_line_global_stats'] = self.feature_eval_metrics(
+			lambda cluster, _doc: cluster.center.v_line_similarity(_doc))
+		stats['v_line_regional_unweighted_stats'] = self.feature_eval_metrics(
+			lambda cluster, _doc: utils.avg_val_mat(cluster.center.v_line_similarity_mat(_doc)[0]))
+		stats['v_line_regional_weighted_stats'] = self.feature_eval_metrics(
+			lambda cluster, _doc: utils.mat_sum(utils.mult_mats(cluster.center.v_line_similarity_mat(_doc))))
+
+		stats['_combined_global_stats'] = self.feature_eval_metrics(
+			lambda cluster, _doc: cluster.center.global_similarity(_doc))
+		stats['_overall_similarity_stats'] = self.feature_eval_metrics(
+			lambda cluster, _doc: self.confirm.cluster_doc_similarity(cluster, _doc))
+
+		padding_len = 1 + max(map(len, stats.keys()))
+		print "Columns are in order:"
+		print "1) Mean Similarity between Document and assigned Clusters"
+		print "2) Std. Dev of Document-Cluster similarities"
+		print "3) Mean Average Cluster similarity (cluster members to cluster)"
+		print "4) Std Dev of Average Cluster similarity"
+		print "5) Mean of Std Dev of Cluster similarity (cluster members to cluster)"
+		print "6) Std Dev of the Std Dev of Cluster similarity"
+		print
+		for name in sorted(list(stats.keys())):
+			print utils.pad_to_len(name, padding_len), "\t", "\t".join(map(lambda x: "%.4f" % x, stats[name]))
+			if "_weighted" in name or "overall" in name:
+				print
+
+		print
+		print
+
+	def print_cluster_separation(self):
+		print "CLUSTER SEPERATION"
+		print
+		print "Comparing each Cluster to it's most similar other clusters"
+
+		cluster_sim_mat = self.confirm.get_cluster_sim_mat()
+		for row in cluster_sim_mat:
+			row.sort(reverse=True)
+
+		top_1 = list()
+		top_3 = list()
+		top_5 = list()
+		for row in cluster_sim_mat:
+			for x, val in enumerate(row):
+				if x == 0:
+					continue
+				if x <= 1:
+					top_1.append(val)
+				if x <= 3:
+					top_3.append(val)
+				if x <= 5:
+					top_5.append(val)
+				else:
+					break
+		top_1.sort(reverse=True)
+
+		top_1_mean = utils.avg(top_1)
+		top_1_stddev = utils.stddev(top_1)
+		top_3_mean = utils.avg(top_3)
+		top_3_stddev = utils.stddev(top_3)
+		top_5_mean = utils.avg(top_5)
+		top_5_stddev = utils.stddev(top_5)
+		print "\n        Mean\t   Std Dev"
+		print "Top 1: %3.3f\t %3.3f" % (top_1_mean, top_1_stddev)
+		print "Top 3: %3.3f\t %3.3f" % (top_3_mean, top_3_stddev)
+		print "Top 5: %3.3f\t %3.3f" % (top_5_mean, top_5_stddev)
+		print
+		print "List of 10 most similar scores"
+		print ", ".join(map(lambda x: "%4.3f" % x, top_1[:10]))
+
+		print
+		print
+
 	def print_cluster_cohesion(self):
 		print "CLUSTER COHESION:"
 		sim_names = self.clusters[0].members[0].similarity_function_names()
 		sim_names.append("harmonic_mean")
 		print "\t\t\t%s\tSIZE" % ("\t  ".join(sim_names))
-		#print "\t\tAVG\tSTDDEV\tSIZE"
 		for x, cluster in enumerate(self.clusters):
 			# list of dictionaries
 			similarities = map(lambda doc: doc.similarities_by_name(cluster.center), cluster.members)
@@ -218,7 +331,6 @@ class KnownClusterAnalyzer:
 			to_print.append(utils.stddev(values))
 			l = len(similarities)
 			print "\t%s:  \t%s\t%d" % (x, "\t".join(map(lambda s: "%3.2f" % s, to_print)), l)
-			#print "\t%s:\t%3.2f\t%3.2f\t%d" % (x, avg, sd, l)
 		print
 		print
 
@@ -229,16 +341,38 @@ class KnownClusterAnalyzer:
 			print "%d:\t%s" % (x, cluster.label)
 
 		print
-		print ("\t" * 7) + "\t\t".join(map(str, xrange(len(self.clusters))))
+		print (" " * 50) + "\t\t".join(map(str, xrange(len(self.clusters))))
 
-		docs = self.get_all_docs()
-		for _doc in docs:
+		print
+		print "documents labeled with # indicate that their most similar cluster has a different true label"
+		print "documents labeled with ^ indicate that their assigned cluster is not the most similar cluster"
+		print "cluster sim scores labeled with * indicate that the cluster shares the label with the document"
+		print
+
+		num_closest_to_incorrect_cluster = 0
+		for _doc in self.docs:
 			to_print = list()
+			best_cluster = None
+			best_sim_score = -1
+			post = ""
 			for cluster in self.clusters:
-				to_print.append("%3.2f" % _doc.similarity(cluster.center))
+				sim_score = self.confirm.cluster_doc_similarity(cluster, _doc)
+				if sim_score > best_sim_score:
+					best_cluster = cluster
+					best_sim_score = sim_score
+				to_print.append("%3.2f" % sim_score)
 				if (cluster.label == _doc.label):
 					to_print[-1] += '*'
-			print "%s%s" % (utils.pad_to_len(_doc.label, 30), "\t".join(to_print))
+			if _doc.label != best_cluster.label:	
+				num_closest_to_incorrect_cluster += 1
+				post += "#"
+			if _doc not in best_cluster.members:
+				post += "^"
+			print "%s%s" % (utils.pad_to_len("%s %s" % (_doc._id, (_doc.label + post)), 50), "\t".join(to_print))
+
+		print
+		print "Number of docs most similar to a wrong cluster: %d / %d = %2.1f%%" % (
+			num_closest_to_incorrect_cluster, len(self.docs), 100.0 * num_closest_to_incorrect_cluster / len(self.docs))
 		print
 		print
 
@@ -473,14 +607,4 @@ class KnownClusterAnalyzer:
 		# H(C)
 
 		return 1.0 - (num / self.label_entropy())
-
-	def ari(self):
-		contingency_table = []
-		for cluster in self.clusters:
-			row = []
-			for label in self.all_labels:
-				row.append(map(lambda doc: doc.label, cluster.members).count(label))
-		# TODO: finish
-				
-
 
