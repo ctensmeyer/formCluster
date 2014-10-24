@@ -36,10 +36,13 @@ class BaseCONFIRM(object):
 		if self.num_clustered % 10 == 0:
 			print "%d documents processed" % self.num_clustered
 
-	def _add_cluster(self, _doc):
+	def _add_cluster(self, _doc, member=True):
 		prototype = _doc.copy(len(self.clusters))
 		prototype.label = None
-		cluster = Cluster([_doc], prototype)
+		members = list()
+		if member:
+			member.append(_doc)
+		cluster = Cluster(members, prototype)
 		self.clusters.append(cluster)
 		return cluster
 
@@ -67,7 +70,11 @@ class BaseCONFIRM(object):
 		else:
 			return self.NEW_CLUSTER
 
+	def _init_clusters():
+		pass
+
 	def cluster(self):
+		self._init_clusters()
 		for x, _doc in enumerate(self.docs):
 			self._before_iteration()
 			_doc._load_check()
@@ -234,10 +241,13 @@ class TwoPassCONFIRM(BaseCONFIRM):
 
 class PerfectCONFIRM(BaseCONFIRM):
 	
-	def _add_cluster(self, _doc):
+	def _add_cluster(self, _doc, member=True):
 		prototype = _doc.copy(len(self.clusters))
 		prototype.label = _doc.label
-		cluster = Cluster([_doc], prototype)
+		members = list()
+		if member:
+			members.append(_doc)
+		cluster = Cluster(members, prototype)
 		self.clusters.append(cluster)
 		return cluster
 
@@ -369,7 +379,7 @@ class WavgNetCONFIRM(RegionalCONFIRM):
 class PerfectWavgCONFIRM(WavgNetCONFIRM, PerfectCONFIRM):
 	pass
 
-class MSTInitCONFIRM(BaseConfirm):
+class MSTInitCONFIRM(BaseCONFIRM):
 	'''
 	Initializes the set of clusters by taking the first $num_instances docs and forms
 		a maximal spanning tree from their similarity matrix.  Then random edges are removed to
@@ -379,6 +389,18 @@ class MSTInitCONFIRM(BaseConfirm):
 
 	def __init__(self, docs, num_init=5, num_instances=20, **kwargs):
 		super(MSTInitCONFIRM, self).__init__(docs, **kwargs)
-		
+		self.num_init = num_init
+		self.num_instances = num_instances
 
+	def _init_clusters(self):
+		sub_docs = docs[:self.num_instances]
+		sim_mat = utils.pairwise(sub_docs, lambda x, y: max(self.doc_similarity(x, y), self.doc_similarity(y, x)))
+		edges = utils.maximal_spanning_tree(sim_mat)
+		to_remove = random.sample(edges, self.num_init - 1)
+		for edge in to_remove:
+			edges.remove(edge)
+		ccs = utils.get_ccs(edges)
+		indices = map(lambda cc: random.sample(cc, 1)[0], ccs)
+		for idx in indices:
+			self._add_cluster(self.docs[idx], member=False)
 		
