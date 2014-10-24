@@ -70,7 +70,7 @@ class BaseCONFIRM(object):
 		else:
 			return self.NEW_CLUSTER
 
-	def _init_clusters():
+	def _init_clusters(self):
 		pass
 
 	def cluster(self):
