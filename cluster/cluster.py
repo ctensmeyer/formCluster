@@ -28,6 +28,7 @@ class BaseCONFIRM(object):
 		self.clusters = list()
 		self.num_clustered = 0
 		self.sim_thresh = sim_thresh
+		self._cached_doc = None
 
 	def _before_iteration(self, **kwargs):
 		pass
@@ -53,8 +54,14 @@ class BaseCONFIRM(object):
 	def _sufficiently_similar(self, _doc, cluster, sim_score, **kwargs):
 		return sim_score > self.sim_thresh
 
+	def _get_cached_sim_scores(self, _doc):
+		if not _doc is self._cached_doc:
+			self._cached_sim_scores = map(lambda cluster: self.cluster_doc_similarity(cluster, _doc), self.clusters)
+			self._cached_doc = _doc
+		return self._cached_sim_scores
+
 	def _cluster_sim_scores(self, _doc):
-		return map(lambda cluster: self.cluster_doc_similarity(cluster, _doc), self.clusters)
+		return self._get_cached_sim_scores(_doc)
 
 	def _most_similar_cluster(self, _doc):
 		similarities = self._cluster_sim_scores(_doc)
@@ -273,6 +280,8 @@ class AlmostPerfectCONFIRM(PerfectCONFIRM):
 			return super(AlmostPerfectCONFIRM, self)._choose_cluster(_doc)
 		return random.sample(self.clusters, 1)[0]
 
+class AlmostPerfect2CONFIRM(AlmostPerfectCONFIRM):
+
 	def post_process_clusters(self, **kwargs):
 		for cluster in self.clusters:
 			renegade_docs = list()
@@ -375,8 +384,43 @@ class WavgNetCONFIRM(RegionalCONFIRM):
 		super(WavgNetCONFIRM, self)._add_to_cluster(cluster, _doc)
 		sim_vec = cluster.center.similarity_vector(_doc)
 		cluster.network.learn(sim_vec, 1)
-	
+
+	def get_cluster_sim_mat(self):
+		mat = []
+		for clust1 in self.clusters:
+			row = []
+			for clust2 in self.clusters:
+				if clust1 == clust2:
+					row.append(1.0)
+				else:
+					row.append(self.cluster_doc_similarity(clust1, clust2.center))
+			mat.append(row)
+		return mat
+
 class PerfectWavgCONFIRM(WavgNetCONFIRM, PerfectCONFIRM):
+	pass
+
+class CompetitiveWavgNetCONFIRM(WavgNetCONFIRM):
+	'''
+	Like WavgNetCONFIRM, but instead of only updating the network of the assinged cluster,
+		the next closest cluster is decremented.
+	'''
+	def _add_to_cluster(self, cluster, _doc):
+		super(WavgNetCONFIRM, self)._add_to_cluster(cluster, _doc)
+		sim_vec = cluster.center.similarity_vector(_doc)
+		cluster.network.learn(sim_vec, 1)
+
+		# competitive stage
+		similarities = self._cluster_sim_scores(_doc)
+		idx = utils.argmax(similarities)
+		del similarities[idx]
+		if similarities:
+			idx2 = utils.argmax(similarities)
+			sim_vec2 = self.clusters[idx2].center.similarity_vector(_doc)
+			self.clusters[idx2].network.learn(sim_vec2, 1)
+		
+
+class PerfectCompetitiveWavgCONFIRM(CompetitiveWavgNetCONFIRM, PerfectCONFIRM):
 	pass
 
 class MSTInitCONFIRM(BaseCONFIRM):

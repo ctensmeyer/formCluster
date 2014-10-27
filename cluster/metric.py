@@ -340,13 +340,14 @@ class KnownClusterAnalyzer:
 		for x, cluster in enumerate(self.clusters):
 			print "%d:\t%s" % (x, cluster.label)
 
-		print
-		print (" " * 50) + "\t\t".join(map(str, xrange(len(self.clusters))))
 
 		print
 		print "documents labeled with # indicate that their most similar cluster has a different true label"
 		print "documents labeled with ^ indicate that their assigned cluster is not the most similar cluster"
 		print "cluster sim scores labeled with * indicate that the cluster shares the label with the document"
+		print
+
+		print (" " * 50) + "\t\t".join(map(str, xrange(len(self.clusters))))
 		print
 
 		num_closest_to_incorrect_cluster = 0

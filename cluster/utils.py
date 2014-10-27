@@ -363,6 +363,39 @@ def maximal_spanning_tree(sim_mat):
 					ccs[x] = ccs[idx1]
 	return edges_added
 
+def get_ccs(edges):
+	'''
+	return: list(list(v1, v2, ...), ...)
+	'''
+	ccs = list()
+	for edge in edges:
+		idx1 = edge[0]
+		idx2 = edge[1]
+		cc1 = None
+		cc2 = None
+		for cc in ccs:
+			if idx1 in cc:
+				cc1 = cc
+			if idx2 in cc:
+				cc2 = cc
+		if cc1 is cc2:
+			if cc1 is None:
+				# new cc
+				ccs.append(set([idx1, idx2]))
+			else:
+				pass
+		elif cc1 is None:
+			# add leaf
+			cc2.add(idx1)
+		elif cc2 is None:
+			# add leaf
+			cc1.add(idx2)
+		else:
+			# merge
+			ccs.remove(cc2)
+			cc1.update(cc2)
+	return ccs
+
 def euclideanDistance(x,y):
     assert(len(x) == len(y))
     
