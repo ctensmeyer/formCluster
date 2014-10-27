@@ -42,7 +42,7 @@ class BaseCONFIRM(object):
 		prototype.label = None
 		members = list()
 		if member:
-			member.append(_doc)
+			members.append(_doc)
 		cluster = Cluster(members, prototype)
 		self.clusters.append(cluster)
 		return cluster
