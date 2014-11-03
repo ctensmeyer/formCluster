@@ -12,20 +12,18 @@ import utils
 import lines
 import doc
 
-#data_dir = "../data/full/1911Wales/"
-data_dir = "../data/wales100/"
 single_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
-single_basename = "rg14_31702_0085_03"
+single_file = "rg14_31702_0069_03.txt"
 second_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
-second_basename = "rg14_31708_0089_03"
-#aggregate_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
-aggregate_dir = "../data/lines/1911Wales/UK1911Census_EnglandWales_Household15Names_03_01"
+second_file = "rg14_31704_0055_03.txt"
+aggregate_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
+#aggregate_dir = "../data/new/1911Wales/UK1911Census_EnglandWales_Household15Names_03_01"
 
 
 
 def get_data_dir(descrip):
 	if descrip == "big":
-		return "../data/lines/1911Wales"
+		return "../data/new/1911Wales"
 		#return "../data/full/WashStatePassLists"
 	if descrip == "medium":
 		return "../data/wales1000/"
@@ -70,7 +68,7 @@ def double_cluster_known():
 def compare_true_templates():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
 	#confirm = cluster.PerfectCONFIRM(docs)
-	confirm = cluster.PerfectRegionalWeightedCONFIRM(docs)
+	confirm = cluster.PerfectCompetitiveWavgCONFIRM(docs, 0.05)
 	confirm.cluster()
 	print
 	print
@@ -109,7 +107,7 @@ def aggreage_same():
 	im.save("output/aggregate/template_final.png")
 
 def load_doc_test():
-	_doc = doc.get_doc(single_dir, single_basename)
+	_doc = doc.get_doc(single_dir, single_file)
 	#_doc = doc.get_doc(second_dir, second_basename)
 	_doc._load_check()
 	for line in _doc.h_lines:
@@ -122,8 +120,8 @@ def load_doc_test():
 	im.save("output/single_doc.png")
 
 def cmp_test():
-	doc1 = doc.get_doc(single_dir, single_basename)
-	doc2 = doc.get_doc(second_dir, second_basename)
+	doc1 = doc.get_doc(single_dir, single_file)
+	doc2 = doc.get_doc(second_dir, second_file)
 	doc1._load_check()
 	doc2._load_check()
 

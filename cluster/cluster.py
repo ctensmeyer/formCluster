@@ -416,8 +416,10 @@ class CompetitiveWavgNetCONFIRM(WavgNetCONFIRM):
 		del similarities[idx]
 		if similarities:
 			idx2 = utils.argmax(similarities)
+			if idx2 <= idx:
+				idx2 += 1
 			sim_vec2 = self.clusters[idx2].center.similarity_vector(_doc)
-			self.clusters[idx2].network.learn(sim_vec2, 1)
+			self.clusters[idx2].network.learn(sim_vec2, 0)
 		
 
 class PerfectCompetitiveWavgCONFIRM(CompetitiveWavgNetCONFIRM, PerfectCONFIRM):

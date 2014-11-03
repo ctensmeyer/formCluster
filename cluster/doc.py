@@ -11,7 +11,6 @@ import components
 import profiles
 import lines
 import text
-import ocr
 
 # do lazy loading of documents.  It's a good thing
 LAZY = True
@@ -21,7 +20,7 @@ ALLOW_PARTIAL_MATCHES = False
 DEBUG = False
 
 # the file extensions of the files that compose a single document
-_file_extensions = [".jpg", ".xml", "_line.xml", "_FormType.txt", "_endpoints.xml"]
+#_file_extensions = [".jpg", ".xml", "_line.xml", "_FormType.txt", "_endpoints.xml"]
 
 # use weight decay when aggregating two document together - eventually phases out infrequent features
 DECAY = True
@@ -36,10 +35,8 @@ _text_line_thresh_mult = 0.15
 ROWS = 5
 COLS = 8
 
-def get_doc(_dir, basename):
-	paths = map(lambda ext: os.path.join(_dir, basename + ext), _file_extensions)
-
-	document = Document(basename, paths)
+def get_doc(_dir, source_file):
+	document = Document(os.path.basename(source_file), os.path.join(_dir, source_file))
 	return document
 
 def get_docs(_dir, pr=True):
@@ -54,15 +51,10 @@ def get_docs(_dir, pr=True):
 	num_exceptions = 0
 	if pr:
 		print "Loading Docs from:", _dir
-		basenames = set()
-		image_names = os.listdir(_dir)
-		for name in image_names:
-			if name.endswith(".jpg"):
-				basename = os.path.splitext(name)[0]
-				basenames.add(basename)
-		for basename in basenames:
+	for f in os.listdir(_dir):
+		if f.endswith(".txt"):
 			try:
-				docs.append(get_doc(_dir, basename))
+				docs.append(get_doc(_dir, f))
 				num_loaded += 1
 				if pr and num_loaded % 10 == 0:
 					print "\tLoaded %d documents" % num_loaded
@@ -73,7 +65,6 @@ def get_docs(_dir, pr=True):
 		if num_exceptions:
 			print "\t%d Docs could not be read" % num_exceptions
 	return docs, num_exceptions
-
 	
 
 def get_docs_nested(data_dir, pr=True):
@@ -109,30 +100,44 @@ class Document:
 	Currently we use Text Lines, Horizontal Grid Lines, Vertical Grid Lines, and
 		image dimensions as features
 	'''
-	
-	def __init__(self, _id, paths, _original=True):
+
+	def __init__(self, _id, f=None):
 		'''
 		_id - a unique id for the document
-		paths - list(str) a list of file paths for the files that compose this document
-			image + feature files
+		f - str filename of the feature file.  Use None for self.copy()
 		_original - boolean used by copy() to avoid reloading from files
 		'''
 		self._id = _id
-		self.paths = paths
-		self.image_path = paths[0]
-		self.ocr_path = paths[1]
-		self.prof_path = paths[2] # path of projection profiles
-		self.form_path = paths[3]
-		self.endpoints_path = paths[4]
-                
+		self.source_file = f
 		self.loaded = False
-		if not LAZY and _original:
+		if not LAZY and self.source_file:
 			self.load()
+		
+	
+#	def __init__(self, _id, paths, _original=True):
+#		'''
+#		_id - a unique id for the document
+#		paths - list(str) a list of file paths for the files that compose this document
+#			image + feature files
+#		_original - boolean used by copy() to avoid reloading from files
+#		'''
+#		self._id = _id
+#		self.paths = paths
+#		self.image_path = paths[0]
+#		self.ocr_path = paths[1]
+#		self.prof_path = paths[2] # path of projection profiles
+#		self.form_path = paths[3]
+#		self.endpoints_path = paths[4]
+#                
+#		self.loaded = False
+#		if not LAZY and _original:
+#			self.load()
 
 	def copy(self, new_id):
 		''' Make a deep copy of a document with a new_id '''
 		self._load_check()
-		cpy = Document(new_id, self.paths, _original=False)
+		#cpy = Document(new_id, self.paths, _original=False)
+		cpy = Document(new_id)
 		cpy.loaded = True  # makes sure we never load data from files
 
 		cpy.label = self.label
@@ -159,41 +164,84 @@ class Document:
 			self.load()
 
 	def load(self):
-		''' Load the features of the Document from all of the files '''
-		#image = Image.open(image_path)
-		#del image
+		lines = open(self.source_file, 'r').readlines()
 
-		self.label = filter(lambda x: x in string.printable, open(self.form_path).read())
-		if self.label.startswith("UK1911Census_EnglandWales_"):
-			self.label = self.label[len("UK1911Census_EnglandWales_"):]
+		#self.label = lines[0] 
+		# forgot to get the basename in the file in extraction script
+		self._id = os.path.basename(lines[0])
 
-		# for the 1911 census dataset, these two should be counted the same
-		if self.label == "Household100Names_08_01":
-			self.label = "Household40Names_07_01"
-		#print repr(self.label)
+		self.label = lines[1]
 
-		# heavy operations
-		self.text_lines = ocr.clean_lines(ocr.extract_text_lines(self.ocr_path))
+		size_line = lines[2]
+		tokens = size_line.split()
+		self.size = ( int(tokens[0]), int(tokens[1]) )
 
-		self.h_lines, self.v_lines = lines.read_lines(self.endpoints_path)
-		assert self.h_lines
-		assert self.v_lines
+		self.text_lines = list()
+		for x, line in enumerate(lines[4:], start=4):
+			line = line.strip()
+			if line == "":
+				break
+			tokens = line.split()
+			text = " ".join(tokens[4:])
+			pos = ( int(tokens[0]), int(tokens[1]) )
+			size = ( int(tokens[2]), int(tokens[3]) )
+			self.text_lines.append(components.TextLine(text, pos, size))
+		x += 1
 
-		#profs = profiles.extract_profiles(self.prof_path)
-		#self.horz_prof = profs['HorizontalLineProfile']
-		#self.vert_prof = profs['VerticalLineProfile']
-		#self.horz_prof = profs['HorizontalLineProfile']
-		#self.vert_prof = profs['VerticalLineProfile']
-		#self.size = (len(self.vert_prof), len(self.horz_prof))
 
-		# TODO: finish this
-		self.size = profiles.get_size(self.prof_path)
+		self.h_lines = list()
+		self.v_lines = list()
+		orien = components.Line.HORIZONTAL
+		l = self.h_lines
+		for line in lines[x:]:
+			line = line.strip()
+			if line == "":
+				orien = components.Line.VERTICAL
+				l = self.v_lines
+				continue
+			tokens = line.split()
+			pos = ( int(tokens[0]), int(tokens[1]) )
+			length = int(tokens[2])
+			thick = int(tokens[3])
+			l.append(components.Line(orien, pos, length, thick))
 
-		# inefficient for now
-		#profs = profiles.extract_profiles(self.prof_path)
-		#self.size = (len(profs['VerticalLineProfile']), len(profs['HorizontalLineProfile']))
 
-		self.loaded = True
+#	def load(self):
+#		''' Load the features of the Document from all of the files '''
+#		#image = Image.open(image_path)
+#		#del image
+#
+#		self.label = filter(lambda x: x in string.printable, open(self.form_path).read())
+#		if self.label.startswith("UK1911Census_EnglandWales_"):
+#			self.label = self.label[len("UK1911Census_EnglandWales_"):]
+#
+#		# for the 1911 census dataset, these two should be counted the same
+#		if self.label == "Household100Names_08_01":
+#			self.label = "Household40Names_07_01"
+#		#print repr(self.label)
+#
+#		# heavy operations
+#		self.text_lines = ocr.clean_lines(ocr.extract_text_lines(self.ocr_path))
+#
+#		self.h_lines, self.v_lines = lines.read_lines(self.endpoints_path)
+#		assert self.h_lines
+#		assert self.v_lines
+#
+#		#profs = profiles.extract_profiles(self.prof_path)
+#		#self.horz_prof = profs['HorizontalLineProfile']
+#		#self.vert_prof = profs['VerticalLineProfile']
+#		#self.horz_prof = profs['HorizontalLineProfile']
+#		#self.vert_prof = profs['VerticalLineProfile']
+#		#self.size = (len(self.vert_prof), len(self.horz_prof))
+#
+#		# TODO: finish this
+#		self.size = profiles.get_size(self.prof_path)
+#
+#		# inefficient for now
+#		#profs = profiles.extract_profiles(self.prof_path)
+#		#self.size = (len(profs['VerticalLineProfile']), len(profs['HorizontalLineProfile']))
+#
+#		self.loaded = True
 
 	def similarity_vector(self, other):
 		''' returns a similarity vector '''
