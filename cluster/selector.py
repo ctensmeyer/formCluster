@@ -647,6 +647,21 @@ def simulateUserFeedback(label, group):
     QueryCount += 1
     return same, different
 
+def UserClusterFeedback(group):
+    global QueryCount
+    newClusters = dict()
+    
+    for _doc in group:
+        label = _doc.label
+        
+        if(label in newClusters):
+            newClusters[label].append(_doc)
+        else:
+            newClusters[label] = [_doc]
+   
+    QueryCount += 1
+    return newClusters.values()
+
 def mergeClusters(clusters, N):
     '''
         find N closest clusters to each cluster. Query user. 
@@ -672,37 +687,48 @@ def mergeClusters(clusters, N):
         
         sims = np.array(simMat[idx[c]])
         #Find indecies of each of the top N points
-        argmax = np.argsort(-sims)[:N-1]
+        argmax = np.argsort(-sims)[:N]
         
         #Map indecies to centers
-        _docs = [c] + map(lambda x: centers[x], argmax)
+        _docs = map(lambda x: centers[x], argmax)
     
         label = clusters[idx[c]].label
         
-        same,different = simulateUserFeedback(label, _docs)
+        #same,different = simulateUserFeedback(label, _docs)
+        groups = UserClusterFeedback(_docs)
         
-        #print "Same:", len(same), "Different:", len(different)
+        clustered = []
+        different = []
         
-        m = filter(lambda s: s in merged, same)
-        mergeTo = merged[m[0]] if len(m) > 0 else None
+        for cl in groups:
+            if len(cl) > 1:
+                clustered.append(cl)
+            else:
+                different += cl
         
-        if mergeTo == None:
-            mergeTo = len(newClusters)
-            newClusters.append([])
+        print "Same:", len(clustered), "-->" , sum(map(len, clustered)), "Different:", len(different)
+        
+        for same in clustered:
+            m = filter(lambda s: s in merged, same)
+            mergeTo = merged[m[0]] if len(m) > 0 else None
+        
+            if mergeTo == None:
+                mergeTo = len(newClusters)
+                newClusters.append([])
             
-        '''
-        print "Merting To:", mergeTo
-        print "Next Cluster:", nextCluster
-        print "New Clusters:", len(newClusters)
-        '''
+            '''
+            print "Merting To:", mergeTo
+            print "Next Cluster:", nextCluster
+            print "New Clusters:", len(newClusters)
+            '''
         
-        for s in same:
-            if (s in merged):
-                continue
+            for s in same:
+                if (s in merged):
+                    continue
             
-            merged[s] = mergeTo
+                merged[s] = mergeTo
             
-            newClusters[mergeTo].append(s)
+                newClusters[mergeTo].append(s)
            
         for d in different:
             if (d in merged):
@@ -728,7 +754,7 @@ def mergeClusters(clusters, N):
     return result
 
 
-def reclusterWithOPTICS(clustering, resolution=10, display=9):
+def reclusterWithOPTICS(clustering, resolution=5, display=9):
     print "Aproximating Distances"
     distances = pseudoDistance(clustering)
 
@@ -842,22 +868,22 @@ def main(args):
     path = args[1]
                 
     print "Loading"
-    clustering = utils.load_obj(path)
+    clusters = clustering = utils.load_obj(path)
 
     #map(lambda c: c.set_label(), clustering)
-
-    clusters = reclusterWithOPTICS(clustering)
+    for i in [5]:  
+        clusters = reclusterWithOPTICS(clusters, i)
     
-    _docs = reduce(lambda x,y: x+y, map(lambda c: c.members, clusters))
+        _docs = reduce(lambda x,y: x+y, map(lambda c: c.members, clusters))
     
     
-    confirm = BaseCONFIRM(_docs)
-    confirm.clusters = clusters
+        confirm = BaseCONFIRM(_docs)
+        confirm.clusters = clusters
     
-    print "Original Number of Clusters:", len(clustering)
-    print "Final Number of Clusters:", len(clusters)
+        print "Original Number of Clusters:", len(clustering)
+        print "Final Number of Clusters:", len(clusters)
     
-    '''print reps
+        '''print reps
     
         imgs = []
         
@@ -877,10 +903,10 @@ def main(args):
     #print entropy(clustering)
     
     #print "Analyzing"
-    analyzer = metric.KnownClusterAnalyzer(confirm)
-    analyzer.print_all()
+        analyzer = metric.KnownClusterAnalyzer(confirm)
+        analyzer.print_all()
 
-    print "User Queries:", QueryCount
+        print "User Queries:", QueryCount
 
 if __name__ == '__main__':
     main(sys.argv) 
