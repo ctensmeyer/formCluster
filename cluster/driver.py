@@ -22,29 +22,48 @@ aggregate_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_
 
 
 def get_data_dir(descrip):
-	if descrip == "big":
+	if descrip.startswith("big"):
 		return "../data/new/1911Wales"
 		#return "../data/full/WashStatePassLists"
-	if descrip == "medium":
+	if descrip.startswith("medium"):
 		return "../data/wales1000/"
-	if descrip == "small":
+	if descrip.startswith("small"):
 		return "../data/wales100/"
-	if descrip == "very_small":
+	if descrip.startswith("very_small"):
 		return "../data/wales40/"
+	if descrip.startswith("custom"):
+		return "../data/walescustom/"
+	if descrip.startswith("twoclass"):
+		return "../data/walestwoclass/"
 
 def cluster_known():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
 	random.seed(12345)
 	random.shuffle(docs)
 	sim_thresh = float(sys.argv[3])
-	confirm = cluster.BaseCONFIRM(docs, sim_thresh)
-	#confirm = cluster.AnalysingCONFIRM(docs, sim_thresh=sim_thresh, lr=0.3)
+	#confirm = cluster.BaseCONFIRM(docs, sim_thresh)
+	#confirm = cluster.AdaptiveThresholdCONFIRM(docs, num_clust=5, num_instances=15, sim_thresh=sim_thresh)
+	#confirm = cluster.BestCONFIRM(docs, lr=0.02, min_size=5, sim_thresh=sim_thresh)
+	confirm = cluster.TestCONFIRM(docs, lr=0.02, min_size=10, sim_thresh=sim_thresh, num_clust=2, maxK=4)
 	confirm.cluster()
 	print
 	print
 	analyzer = metric.KnownClusterAnalyzer(confirm)
 	analyzer.draw_centers()
 	analyzer.print_all()
+
+def check_init():
+	docs = doc.get_docs_nested(get_data_dir("small"))
+	random.seed(12345)
+	random.shuffle(docs)
+	confirm = cluster.MaxCliqueInitCONFIRM(docs, 7, 20)
+	confirm._init_clusters()
+
+	print
+	print "Cluster Sim Mat"
+	sim_mat = confirm.get_cluster_sim_mat()
+	utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%3.2f" % x))
+
 
 def double_cluster_known():
         docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
@@ -68,7 +87,7 @@ def double_cluster_known():
 def compare_true_templates():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
 	#confirm = cluster.PerfectCONFIRM(docs)
-	confirm = cluster.PerfectCompetitiveWavgCONFIRM(docs, 0.05)
+	confirm = cluster.BestPerfectCONFIRM(docs, lr=0.05)
 	confirm.cluster()
 	print
 	print
@@ -88,8 +107,8 @@ def aggreage_same():
 		pass
 	for x, _doc in enumerate(docs):
 		_doc._load_check()
-		im = _doc.draw()
-		im.save("output/aggregate/doc_%d.png" % x)
+		#im = _doc.draw()
+		#im.save("output/aggregate/doc_%d.png" % x)
 	template = None
 	for x, _doc in enumerate(docs):
 		print
@@ -102,6 +121,10 @@ def aggreage_same():
 			template.aggregate(_doc)
 			im = template.draw()
 			im.save("output/aggregate/template_%d.png" % x)
+			print
+			print "IN DRIVER", id(template)
+			for line in template.text_lines:
+				print line
 	template.final_prune()
 	im = template.draw()
 	im.save("output/aggregate/template_final.png")
@@ -182,6 +205,8 @@ def main(arg):
 		aggreage_same()
 	if arg == "draw":
 		draw_all()
+	if arg == "init":
+		check_init()
 
 if __name__ == "__main__":
 	print "Start"

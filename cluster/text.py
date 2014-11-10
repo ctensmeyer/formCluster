@@ -32,6 +32,7 @@ class TextLineMatcher:
 		self.lines1 = lines1
 		self.lines2 = lines2
 		self.dist_thresh = dist_thresh
+		self.dist_thresh_sqr = dist_thresh * dist_thresh
 		self.do_partial_matches = partials
 
 	def op_str(self, op):
@@ -76,8 +77,8 @@ class TextLineMatcher:
 		:param line2: TextLine
 		:return: bool
 		'''
-		if (utils.e_dist(line1.pos, line2.pos) > self.dist_thresh and
-			utils.e_dist(line1.end_pos(), line2.end_pos()) > self.dist_thresh):	
+		if (utils.e_dist_sqr(line1.pos, line2.pos) > self.dist_thresh_sqr and
+			utils.e_dist_sqr(line1.end_pos(), line2.end_pos()) > self.dist_thresh_sqr):	
 			return False
 			
 		#if not (utils.ratio(line1.size[0], line2.size[0]) > self.SIZE_RATIO and
@@ -106,7 +107,7 @@ class TextLineMatcher:
 		if complete.N <= suffix.N:
 			return False
 
-		if utils.e_dist(complete.end_pos(), suffix.end_pos()) > self.dist_thresh:
+		if utils.e_dist_sqr(complete.end_pos(), suffix.end_pos()) > self.dist_thresh_sqr:
 			return False
 
 		if not utils.ratio(complete.char_width(), suffix.char_width()) > self.SIZE_RATIO:
@@ -121,7 +122,7 @@ class TextLineMatcher:
 		if complete.N <= prefix.N:
 			return False
 
-		if utils.e_dist(complete.pos, prefix.pos) > self.dist_thresh:
+		if utils.e_dist_sqr(complete.pos, prefix.pos) > self.dist_thresh_sqr:
 			return False
 
 		if not utils.ratio(complete.char_width(), prefix.char_width()) > self.SIZE_RATIO:

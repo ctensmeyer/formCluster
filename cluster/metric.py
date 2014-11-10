@@ -351,13 +351,16 @@ class KnownClusterAnalyzer:
 		print
 
 		num_closest_to_incorrect_cluster = 0
-		for _doc in self.docs:
+		doc_cluster_sim_mat = self.confirm.get_doc_cluster_sim_mat()
+		for doc_idx in xrange(len(self.docs)):
+			_doc = self.docs[doc_idx]
 			to_print = list()
 			best_cluster = None
 			best_sim_score = -1
 			post = ""
-			for cluster in self.clusters:
-				sim_score = self.confirm.cluster_doc_similarity(cluster, _doc)
+			for cluster_idx in xrange(len(self.clusters)):
+				cluster = self.clusters[cluster_idx]
+				sim_score = doc_cluster_sim_mat[doc_idx][cluster_idx]
 				if sim_score > best_sim_score:
 					best_cluster = cluster
 					best_sim_score = sim_score
@@ -370,6 +373,26 @@ class KnownClusterAnalyzer:
 			if _doc not in best_cluster.members:
 				post += "^"
 			print "%s%s" % (utils.pad_to_len("%s %s" % (_doc._id, (_doc.label + post)), 50), "\t".join(to_print))
+
+		#for _doc in self.docs:
+		#	to_print = list()
+		#	best_cluster = None
+		#	best_sim_score = -1
+		#	post = ""
+		#	for cluster in self.clusters:
+		#		sim_score = self.confirm.cluster_doc_similarity(cluster, _doc)
+		#		if sim_score > best_sim_score:
+		#			best_cluster = cluster
+		#			best_sim_score = sim_score
+		#		to_print.append("%3.2f" % sim_score)
+		#		if (cluster.label == _doc.label):
+		#			to_print[-1] += '*'
+		#	if _doc.label != best_cluster.label:	
+		#		num_closest_to_incorrect_cluster += 1
+		#		post += "#"
+		#	if _doc not in best_cluster.members:
+		#		post += "^"
+		#	print "%s%s" % (utils.pad_to_len("%s %s" % (_doc._id, (_doc.label + post)), 50), "\t".join(to_print))
 
 		print
 		print "Number of docs most similar to a wrong cluster: %d / %d = %2.1f%%" % (

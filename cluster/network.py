@@ -2,84 +2,84 @@
 import utils
 
 # this version turns all cells of a each mat into composites, which are then combined
-class LinearNetwork:
-	
-	def __init__(self, num_feature_types, num_rows, num_cols, lr=0.1):
-		self.num_feature_types = num_feature_types
-		self.num_rows = num_rows
-		self.num_cols = num_cols
-		self.lr = lr
-		self.region_weight_mats = [ self._uniform_mat()  for f in xrange(num_feature_types) ]
-		self.region_combining_weights = self._uniform_list(self.num_feature_types)
-		self.global_weights = self._uniform_list(self.num_feature_types)
-		self.final_global_weight = 0.5
-		self.final_region_weight = 0.5
-
-	def display(self):
-		print "final weights:\n\tglobal: %.3f\n\tregion: %.3f\n" % (self.final_global_weight, self.final_region_weight)
-		for x in xrange(self.num_feature_types):
-			print "Feature", x
-			print "\tglobal: %.3f" % self.global_weights[x]
-			print "\tregion: %.3f" % self.region_combining_weights[x]
-			print "\tregion weight mat:"
-			utils.print_mat(utils.apply_mat(self.region_weight_mats[x], lambda x: "%.3f" % x))
-			print
-
-	def _uniform_mat(self):
-		div = float(self.num_rows * self.num_cols)
-		return [ [1 / div] * self.num_cols for x in xrange(self.num_rows)]
-
-	def _uniform_list(self, n):
-		return [ 1.0 / n for x in xrange(n) ]
-
-	def similarity(self, global_vals, region_vals):
-		self.region_values = self.calc_region_values(region_vals)
-		self.region_values_combined = sum(map(lambda x, y: x * y, self.region_values, self.region_combining_weights))
-		self.global_values_combined = sum(map(lambda x, y: x * y, global_vals, self.global_weights))
-		return self.region_values_combined * self.final_region_weight + self.global_values_combined * self.final_global_weight
-
-	def backprop(self, global_vals, region_vals, target):
-		sim = self.similarity(global_vals, region_vals)
-
-		# calculate errs
-		final_err = target - sim
-		region_combined_err = final_err * self.final_region_weight
-		global_combined_err = final_err * self.final_global_weight
-		region_errs = map(lambda x: x * region_combined_err, self.region_combining_weights)
-
-		# update weights
-		self.final_global_weight += self.lr * final_err * self.global_values_combined
-		if self.final_global_weight < 0:
-			self.final_global_weight = 0
-		self.final_region_weight += self.lr * final_err * self.region_values_combined
-		if self.final_region_weight < 0:
-			self.final_region_weight = 0
-		for x in xrange(len(self.global_weights)):
-			self.global_weights[x] += self.lr * global_combined_err * global_vals[x]
-			if self.global_weights[x] < 0:
-				self.global_weights[x] = 0
-			self.region_combining_weights[x] += self.lr * region_combined_err * self.region_values[x]
-			if self.region_combining_weights[x] < 0:
-				self.region_combining_weights[x] = 0
-			for r in xrange(self.num_rows):
-				for c in xrange(self.num_cols):
-					self.region_weight_mats[x][r][c] += self.lr * region_errs[x] * region_vals[x][r][c]
-					if self.region_weight_mats[x][r][c] < 0:
-						self.region_weight_mats[x][r][c] = 0
-
-		# norm weights at each layer
-		s = self.final_global_weight + self.final_region_weight
-		self.final_global_weight /= s
-		self.final_region_weight /= s
-
-		self.global_weights = utils.norm_list(self.global_weights)
-		self.region_combining_weights = utils.norm_list(self.region_combining_weights)
-		for x in xrange(len(self.region_weight_mats)):
-			self.region_weight_mats[x] = utils.norm_mat(self.region_weight_mats[x])
-
-	def calc_region_values(self, mats):
-		mult_mats = map(lambda mat, weights: utils.mult_mats([mat, weights]), mats, self.region_weight_mats)
-		return map(lambda mat: sum(map(sum, mat)), mult_mats)
+#class LinearNetwork:
+#	
+#	def __init__(self, num_feature_types, num_rows, num_cols, lr=0.1):
+#		self.num_feature_types = num_feature_types
+#		self.num_rows = num_rows
+#		self.num_cols = num_cols
+#		self.lr = lr
+#		self.region_weight_mats = [ self._uniform_mat()  for f in xrange(num_feature_types) ]
+#		self.region_combining_weights = self._uniform_list(self.num_feature_types)
+#		self.global_weights = self._uniform_list(self.num_feature_types)
+#		self.final_global_weight = 0.5
+#		self.final_region_weight = 0.5
+#
+#	def display(self):
+#		print "final weights:\n\tglobal: %.3f\n\tregion: %.3f\n" % (self.final_global_weight, self.final_region_weight)
+#		for x in xrange(self.num_feature_types):
+#			print "Feature", x
+#			print "\tglobal: %.3f" % self.global_weights[x]
+#			print "\tregion: %.3f" % self.region_combining_weights[x]
+#			print "\tregion weight mat:"
+#			utils.print_mat(utils.apply_mat(self.region_weight_mats[x], lambda x: "%.3f" % x))
+#			print
+#
+#	def _uniform_mat(self):
+#		div = float(self.num_rows * self.num_cols)
+#		return [ [1 / div] * self.num_cols for x in xrange(self.num_rows)]
+#
+#	def _uniform_list(self, n):
+#		return [ 1.0 / n for x in xrange(n) ]
+#
+#	def similarity(self, global_vals, region_vals):
+#		self.region_values = self.calc_region_values(region_vals)
+#		self.region_values_combined = sum(map(lambda x, y: x * y, self.region_values, self.region_combining_weights))
+#		self.global_values_combined = sum(map(lambda x, y: x * y, global_vals, self.global_weights))
+#		return self.region_values_combined * self.final_region_weight + self.global_values_combined * self.final_global_weight
+#
+#	def backprop(self, global_vals, region_vals, target):
+#		sim = self.similarity(global_vals, region_vals)
+#
+#		# calculate errs
+#		final_err = target - sim
+#		region_combined_err = final_err * self.final_region_weight
+#		global_combined_err = final_err * self.final_global_weight
+#		region_errs = map(lambda x: x * region_combined_err, self.region_combining_weights)
+#
+#		# update weights
+#		self.final_global_weight += self.lr * final_err * self.global_values_combined
+#		if self.final_global_weight < 0:
+#			self.final_global_weight = 0
+#		self.final_region_weight += self.lr * final_err * self.region_values_combined
+#		if self.final_region_weight < 0:
+#			self.final_region_weight = 0
+#		for x in xrange(len(self.global_weights)):
+#			self.global_weights[x] += self.lr * global_combined_err * global_vals[x]
+#			if self.global_weights[x] < 0:
+#				self.global_weights[x] = 0
+#			self.region_combining_weights[x] += self.lr * region_combined_err * self.region_values[x]
+#			if self.region_combining_weights[x] < 0:
+#				self.region_combining_weights[x] = 0
+#			for r in xrange(self.num_rows):
+#				for c in xrange(self.num_cols):
+#					self.region_weight_mats[x][r][c] += self.lr * region_errs[x] * region_vals[x][r][c]
+#					if self.region_weight_mats[x][r][c] < 0:
+#						self.region_weight_mats[x][r][c] = 0
+#
+#		# norm weights at each layer
+#		s = self.final_global_weight + self.final_region_weight
+#		self.final_global_weight /= s
+#		self.final_region_weight /= s
+#
+#		self.global_weights = utils.norm_list(self.global_weights)
+#		self.region_combining_weights = utils.norm_list(self.region_combining_weights)
+#		for x in xrange(len(self.region_weight_mats)):
+#			self.region_weight_mats[x] = utils.norm_mat(self.region_weight_mats[x])
+#
+#	def calc_region_values(self, mats):
+#		mult_mats = map(lambda mat, weights: utils.mult_mats([mat, weights]), mats, self.region_weight_mats)
+#		return map(lambda mat: sum(map(sum, mat)), mult_mats)
 
 
 class WeightedAverageNetwork:

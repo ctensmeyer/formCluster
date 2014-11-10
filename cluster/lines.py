@@ -147,6 +147,7 @@ class LMatcher(LineMatcher):
 		self.colinear_thresh = dist_thresh / 5.0
 		self.tables_built = False
 		self.match_cost_table = [[None] * (len(self.lines2)+1) for i in range(len(self.lines1)+1)]
+		self.sort()
 
 	def _table_check(self):
 		'''

@@ -32,8 +32,8 @@ _text_decay_amount = 1.0 / 15 if DECAY else 0
 _line_thresh_mult = 0.05
 _text_line_thresh_mult = 0.15
 
-ROWS = 5
-COLS = 8
+ROWS = 4
+COLS = 4
 
 def get_doc(_dir, source_file):
 	document = Document(os.path.basename(source_file), os.path.join(_dir, source_file))
@@ -91,8 +91,6 @@ def get_docs_nested(data_dir, pr=True):
 
 
 
-
-
 class Document:
 	'''
 	Represents an element in our clustering scheme.  Composed of a single document
@@ -112,31 +110,10 @@ class Document:
 		self.loaded = False
 		if not LAZY and self.source_file:
 			self.load()
-		
 	
-#	def __init__(self, _id, paths, _original=True):
-#		'''
-#		_id - a unique id for the document
-#		paths - list(str) a list of file paths for the files that compose this document
-#			image + feature files
-#		_original - boolean used by copy() to avoid reloading from files
-#		'''
-#		self._id = _id
-#		self.paths = paths
-#		self.image_path = paths[0]
-#		self.ocr_path = paths[1]
-#		self.prof_path = paths[2] # path of projection profiles
-#		self.form_path = paths[3]
-#		self.endpoints_path = paths[4]
-#                
-#		self.loaded = False
-#		if not LAZY and _original:
-#			self.load()
-
 	def copy(self, new_id):
 		''' Make a deep copy of a document with a new_id '''
 		self._load_check()
-		#cpy = Document(new_id, self.paths, _original=False)
 		cpy = Document(new_id)
 		cpy.loaded = True  # makes sure we never load data from files
 
@@ -145,9 +122,6 @@ class Document:
 		cpy.h_lines = map(lambda line: line.copy(), self.h_lines)
 		cpy.v_lines = map(lambda line: line.copy(), self.v_lines)
 		cpy.size = self.size
-
-		#cpy.h_line_mass = self.h_line_mass
-		#cpy.v_line_mass = self.v_line_mass
 
 		return cpy
 
@@ -168,9 +142,9 @@ class Document:
 
 		#self.label = lines[0] 
 		# forgot to get the basename in the file in extraction script
-		self._id = os.path.basename(lines[0])
+		self._id = os.path.basename(lines[0].strip())
 
-		self.label = lines[1]
+		self.label = lines[1].strip()
 
 		size_line = lines[2]
 		tokens = size_line.split()
@@ -204,53 +178,18 @@ class Document:
 			length = int(tokens[2])
 			thick = int(tokens[3])
 			l.append(components.Line(orien, pos, length, thick))
+		self.loaded = True
 
 
-#	def load(self):
-#		''' Load the features of the Document from all of the files '''
-#		#image = Image.open(image_path)
-#		#del image
-#
-#		self.label = filter(lambda x: x in string.printable, open(self.form_path).read())
-#		if self.label.startswith("UK1911Census_EnglandWales_"):
-#			self.label = self.label[len("UK1911Census_EnglandWales_"):]
-#
-#		# for the 1911 census dataset, these two should be counted the same
-#		if self.label == "Household100Names_08_01":
-#			self.label = "Household40Names_07_01"
-#		#print repr(self.label)
-#
-#		# heavy operations
-#		self.text_lines = ocr.clean_lines(ocr.extract_text_lines(self.ocr_path))
-#
-#		self.h_lines, self.v_lines = lines.read_lines(self.endpoints_path)
-#		assert self.h_lines
-#		assert self.v_lines
-#
-#		#profs = profiles.extract_profiles(self.prof_path)
-#		#self.horz_prof = profs['HorizontalLineProfile']
-#		#self.vert_prof = profs['VerticalLineProfile']
-#		#self.horz_prof = profs['HorizontalLineProfile']
-#		#self.vert_prof = profs['VerticalLineProfile']
-#		#self.size = (len(self.vert_prof), len(self.horz_prof))
-#
-#		# TODO: finish this
-#		self.size = profiles.get_size(self.prof_path)
-#
-#		# inefficient for now
-#		#profs = profiles.extract_profiles(self.prof_path)
-#		#self.size = (len(profs['VerticalLineProfile']), len(profs['HorizontalLineProfile']))
-#
-#		self.loaded = True
-
+	_sim_names = ['text_line', 'h_line', 'v_line']
 	def similarity_vector(self, other):
 		''' returns a similarity vector '''
 		region_sims_by_name = self.similarity_mats_by_name(other)
 		global_scores_by_name = self.similarities_by_name(other)
 		vector = list()
-		for name in global_scores_by_name:
+		for name in self._sim_names:
 			vector.append(global_scores_by_name[name])
-		for name in region_sims_by_name:
+		for name in self._sim_names:
 			mat = region_sims_by_name[name]
 			for row in mat:
 				for val in row:
@@ -266,9 +205,9 @@ class Document:
 		vector = list()
 
 		# for the global scores
-		for name in region_weights_by_name:
+		for name in self._sim_names:
 			vector.append(1)
-		for name in region_weights_by_name:
+		for name in self._sim_names:
 			mat = region_weights_by_name[name]
 			for row in mat:
 				for val in row:
@@ -444,7 +383,13 @@ class Document:
 		thresh_dist = _text_line_thresh_mult * max(max(self.size), max(other.size))  # % of largest dimension
 		matcher = text.TextLineMatcher(self.text_lines, other.text_lines, thresh_dist, ALLOW_PARTIAL_MATCHES)
 
+		#print "BEFORE", id(self)
+		#for line in self.text_lines:
+		#	print line
 		self.text_lines = matcher.merge()
+		#print "\nAFTER", id(self)
+		#for line in self.text_lines:
+		#	print line
 
 	def _aggregate_h_lines(self, other):
 		''' Take the horizontal lines of other and merge them into this Document's text lines '''

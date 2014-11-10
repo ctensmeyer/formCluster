@@ -4,8 +4,10 @@ import math
 import string
 import operator
 import ImageFont
+import collections
 import Levenshtein
 import cPickle
+import networkx as nx
 
 colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255),
 			 (255, 255, 0), (255, 0, 255), (0, 255, 255),
@@ -104,7 +106,10 @@ def norm_mat(m):
 	return [ [row[x] / s for x in xrange(len(row))] for row in m]
 
 def e_dist(p1, p2):
-	return math.sqrt( (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 )
+	return math.sqrt(e_dist_sqr(p1, p2))
+
+def e_dist_sqr(p1, p2):
+	return (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 
 
 
 def ratio(num1, num2):
@@ -153,8 +158,9 @@ def wavg(l, w):
 	return float(sum(map(lambda val, w: val * w, l, w))) / sum(w) if len(l) else float('nan')
 
 
-def stddev(l):
-	mean = avg(l)
+def stddev(l, mean=None):
+	if mean is None:
+		mean = avg(l)
 	var = sum(map(lambda x: (x - mean) ** 2, l)) / len(l)
 	return math.sqrt(var)
 	
@@ -338,13 +344,13 @@ def get_sorted_edges(sim_mat):
 			if y >= x:
 				continue
 			edges.append( (x, y, sim_mat[x][y]) )
-	edges.sort(key=lambda tup: tup[2], reverse=True)
+	edges.sort(key=lambda tup: tup[2])
 	return edges
 			
 
-def maximal_spanning_tree(sim_mat):
+def minimum_spanning_tree(sim_mat):
 	'''
-	Returns the maximal spanning tree of the similarity matrix
+	Returns the minimum spanning tree of the similarity matrix
 	:return: list( (idx1, idx2, sim) *)
 	'''
 	edges = get_sorted_edges(sim_mat)
@@ -363,7 +369,7 @@ def maximal_spanning_tree(sim_mat):
 					ccs[x] = ccs[idx1]
 	return edges_added
 
-def get_ccs(edges):
+def get_ccs(vertices, edges):
 	'''
 	return: list(list(v1, v2, ...), ...)
 	'''
@@ -394,7 +400,55 @@ def get_ccs(edges):
 			# merge
 			ccs.remove(cc2)
 			cc1.update(cc2)
+	for vertex in vertices:
+		has_cc = False
+		for cc in ccs:
+			if vertex in cc:
+				has_cc = True
+				break
+		if not has_cc:
+			ccs.append(set([vertex]))
 	return ccs
+
+def max_weight_clique(sim_mat, idxs):
+	m = 0
+	for idx1 in idxs:
+		for idx2 in idxs:
+			if idx1 != idx2:
+				m = max(m, sim_mat[idx1][idx2])
+	return m
+
+def find_best_clique(sim_mat, size):
+	G = nx.Graph()
+	for x in xrange(len(sim_mat)):
+		G.add_node(x)
+	edges = get_sorted_edges(sim_mat)
+	x = 0
+	thresh = 0.05
+	while thresh <= 1:
+		while edges[x][2] <= thresh:
+			G.add_edge(edges[x][0], edges[x][1])
+			x += 1
+		max_cliques = nx.find_cliques(G)
+
+		# bucket sort
+		by_size = collections.defaultdict(list)
+		for clique in max_cliques:
+			by_size[len(clique)].append(clique)
+
+		biggest = max(by_size.keys())
+		if biggest >= size:
+			# do tie breaking
+			cliques = by_size[biggest]
+			best_clique = None
+			best_score = 1000000
+			for clique in cliques:
+				score = max_weight_clique(sim_mat, clique)
+				if score < best_score:
+					best_score = score
+					best_clique = clique
+			return best_clique
+		thresh += 0.05
 
 def euclideanDistance(x,y):
     assert(len(x) == len(y))
