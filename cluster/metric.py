@@ -54,7 +54,7 @@ class KnownClusterAnalyzer:
 		f.close()
 
 		# save clusters to file
-		utils.save_obj(self.clusters, os.path.join(dir_name, "clusters.pkl"))		
+		utils.save_obj(self.confirm, os.path.join(dir_name, "confirm.pkl"))		
 
 		# draw each cluster center
 		for cluster in self.clusters:
@@ -465,6 +465,7 @@ class KnownClusterAnalyzer:
 		print "\tV-measure: ", self.v_measure()
 		print "\t\tHomogeneity: ", self.homogeneity()
 		print "\t\tCompleteness: ", self.completeness()
+		print "\tNum Clusters: ", len(self.clusters)
 		print "\tF1 Macro: ", self.F1_macro()
 		print "\tF1 Micro: ", self.F1_micro()
 		print "\tTotal PR/RC: ", self.PR()

@@ -53,6 +53,7 @@ class BaseCONFIRM(object):
 		return cluster
 
 	def _add_to_cluster(self, cluster, _doc):
+		#print "Base _add_to_cluster()"
 		cluster.center.aggregate(_doc)
 		cluster.members.append(_doc)
 
@@ -338,6 +339,7 @@ class RegionalWeightedCONFIRM(RegionalCONFIRM):
 		cluster = super(RegionalWeightedCONFIRM, self)._add_cluster(_doc, member)
 		cluster.region_weights = {metric: self._uniform_mat(doc.ROWS, doc.COLS) for metric in _doc.similarity_function_names()}
 		cluster.global_weights = {metric: 1 for metric in _doc.similarity_function_names()}
+		return cluster
 
 	def cluster_doc_similarity(self, cluster, _doc):
 		sim_mats = cluster.center.similarity_mats_weights_by_name(_doc)
@@ -353,6 +355,7 @@ class RegionalWeightedCONFIRM(RegionalCONFIRM):
 
 	def _add_to_cluster(self, cluster, _doc):
 		super(RegionalWeightedCONFIRM, self)._add_to_cluster(cluster, _doc)
+		#print "RegionalWeighted _add_to_cluster()"
 
 		# add in scores to get weights
 		sim_scores = cluster.center.similarities_by_name(_doc)
@@ -380,10 +383,11 @@ class WavgNetCONFIRM(RegionalCONFIRM):
 		super(WavgNetCONFIRM, self).__init__(docs, **kwargs)
 		self.lr = lr
 
-	def _add_cluster(self, _doc, member=False):
+	def _add_cluster(self, _doc, member=True):
 		cluster = super(WavgNetCONFIRM, self)._add_cluster(_doc, member)
 		weights = _doc.get_initial_vector_weights(_doc)
 		cluster.network = network.WeightedAverageNetwork(len(weights), weights, self.lr)
+		return cluster
 
 	def cluster_doc_similarity(self, cluster, _doc):
 		sim_vec = cluster.center.similarity_vector(_doc)
@@ -391,6 +395,7 @@ class WavgNetCONFIRM(RegionalCONFIRM):
 		
 	def _add_to_cluster(self, cluster, _doc):
 		super(WavgNetCONFIRM, self)._add_to_cluster(cluster, _doc)
+		#print "WavgNet _add_to_cluster()"
 		sim_vec = cluster.center.similarity_vector(_doc)
 		cluster.network.learn(sim_vec, 1)
 
@@ -512,36 +517,45 @@ class InfoCONFIRM(BaseCONFIRM):
 	
 	def _after_iteration(self, _doc, new_cluster, **kwargs):
 		print
+		print map(lambda x: len(x.members), self.clusters)
+		if hasattr(self, 'global_thresh'):
+			print "Global Thresh:", self.global_thresh
 		if new_cluster:
 			cluster, similarity = self._most_similar_cluster(_doc)
-			print "New Cluster Top Sim: %.2f\t%s" % (similarity, _doc.label)
+			print "%d New Cluster Top Sim: %.2f\t%s\t%s" % (self.num_clustered, similarity, _doc.label, _doc._id)
 		else:
 			sim_scores = self._get_cached_sim_scores(_doc)
 			cluster, similarity = self._most_similar_cluster(_doc)
 			cluster.set_label()
 			margin = max(map(lambda score: similarity - score if similarity != score else -1, sim_scores))
-			print "%d\t%s\t%s\t%s\t%.2f\t%.2f\t%s" % (self.num_clustered, _doc.label, _doc.label == cluster.label, 
-													cluster.label, 
+			print "%d\t%s\t%s\t%s\t%d\t%.2f\t%.2f\t%s" % (self.num_clustered, _doc.label, _doc.label == cluster.label, 
+													cluster.label, self.clusters.index(cluster),
 													similarity, margin, " ".join(map(lambda x: "%.2f" % x, sim_scores)))
 		self.display_weights()
 
 	def display_weights(self):
 		for x, cluster in enumerate(self.clusters):
-			print "%s\t%s" % (x, " ".join(map(lambda w: "%.3f" % w, cluster.network.weights)))
+			if hasattr(cluster, 'network'):
+				print "%s\t%s" % (x, " ".join(map(lambda w: "%.3f" % w, cluster.network.weights)))
+			if hasattr(cluster, 'local_thresh'):
+				print "%.2f\t%.2f" % (cluster.local_thresh, self._get_cluster_thresh(cluster))
 		
 
 class AdaptiveThresholdCONFIRM(MaxCliqueInitCONFIRM):
 	'''
 	Each cluster has a similarity threshold that is interpolated with a global threshold
 		based on how many instances are in the cluster
+	The local similarity threshold is computed as 0.9 * the mean of the sim scores added to that cluster
+	The global similarity threshold is computed as 0.9 * the mean of all sim scores
 	'''
 
 	def __init__(self, docs, A=10, N=10, **kwargs):
 		super(AdaptiveThresholdCONFIRM, self).__init__(docs, **kwargs)
+		#print "AdaptiveThresh __init__()"
 		self.A = A
-		self.N = N
+		#self.N = N
 		self.sim_sum = 0
-		self.num_sims = 0
+		self.margin_sum = 0
 
 	def _get_cluster_thresh(self, cluster):
 		num = max(1, len(cluster.members))
@@ -549,36 +563,113 @@ class AdaptiveThresholdCONFIRM(MaxCliqueInitCONFIRM):
 		return l * self.global_thresh + (1 - l) * cluster.local_thresh
 
 	def _calc_local_thresh(self, cluster):
-		mean = utils.avg(cluster.recent_sim_scores)
+		#mean = utils.avg(cluster.recent_sim_scores)
 		#std_dev = utils.stddev(cluster.recent_sim_scores, mean)
 		#cluster.local_thresh = mean - 0.1
-		cluster.local_thresh = mean * 0.9
+		cluster.local_thresh = (cluster.sim_sum - cluster.margin_sum) / len(cluster.members) 
 
 	def _init_clusters(self):
 		super(AdaptiveThresholdCONFIRM, self)._init_clusters()
 		sim_mat = self.get_cluster_sim_mat()
-		self.global_thresh = max(map(max, sim_mat))
+		#self.global_thresh = max(map(max, sim_mat))
+		self.global_thresh = utils.avg_val_mat(sim_mat)
 
 	def _add_cluster(self, _doc, member=True):
+		#print "AT _add_cluster()"
 		cluster = super(AdaptiveThresholdCONFIRM, self)._add_cluster(_doc, member)
 		cluster.local_thresh = 0
-		cluster.recent_sim_scores = list()
+		#cluster.recent_sim_scores = list()
+		cluster.sim_sum = 0
+		cluster.margin_sum = 0
+		return cluster
 	
 	def _add_to_cluster(self, cluster, _doc):
 		super(AdaptiveThresholdCONFIRM, self)._add_to_cluster(cluster, _doc)
-		cluster.recent_sim_scores.append(self._cached_most_similar_val)
-		if len(cluster.recent_sim_scores) > self.N:
-			cluster.recent_sim_scores.pop(0)
+		#print "AT _add_to_cluster()"
+		#cluster.recent_sim_scores.append(self._cached_most_similar_val)
+		#if len(cluster.recent_sim_scores) > self.N:
+		#	cluster.recent_sim_scores.pop(0)
+		#print "Updating thresholds"
+		sim_score = self._cached_most_similar_val
+		margin = max(map(lambda x: sim_score - x if sim_score != x else 0, self._get_cached_sim_scores(_doc)))
+		cluster.sim_sum += sim_score
+		cluster.margin_sum += margin
 		self._calc_local_thresh(cluster)
-		self._set_global_thresh()
+		self._set_global_thresh(sim_score, margin)
 
-	def _set_global_thresh(self):
-		self.sim_sum += self._cached_most_similar_val
-		self.num_sims += 1
-		self.global_thresh = 0.9 * (self.sim_sum / float(self.num_sims))
+	def _set_global_thresh(self, sim_score, margin):
+		self.sim_sum += sim_score
+		self.margin_sum += margin
+		self.global_thresh = (self.sim_sum - self.margin_sum) / (self.num_clustered + 1)
 
 	def _sufficiently_similar(self, _doc, cluster, sim_score, **kwargs):
+		#print "AT _sufficiently_similar()"
 		return sim_score > self._get_cluster_thresh(cluster)
+
+class FastCONFIRM(BaseCONFIRM):
+	'''
+	This version of CONFIRM doesn't make outliers first class clusters immediately.  It pools them
+		separately until it can find $min_membership.  The majority of cases will just consider
+		the set of big clusters, which should remain small.
+	'''
+	
+	def __init__(self, docs, min_membership=5, **kwargs):
+		super(FastCONFIRM, self).__init__(docs, **kwargs)
+		self.min_membership = min_membership
+		self.potential_clusters = list()
+
+	def handle_reject(self, _doc):
+		# treat the potential clusters like the real clusters and do a clustering step
+		tmp = self.clusters
+		self.clusters = self.potential_clusters
+		self._cached_doc = None
+
+		new_cluster = False
+		if not self.clusters:
+			self._add_cluster(_doc)
+		else:
+			cluster = self._choose_cluster(_doc)
+			if cluster == self.NEW_CLUSTER:
+				new_cluster = self._add_cluster(_doc)
+			else:
+				self._add_to_cluster(cluster, _doc)
+				if len(cluster.members) >= self.min_membership:
+					self.potential_clusters.remove(cluster)
+					tmp.append(cluster)
+					new_cluster = True
+		# reset the aliases
+		self.clusters = tmp
+		return new_cluster
+		
+
+	def cluster(self):
+		self._init_clusters()
+		for x, _doc in enumerate(self.docs):
+			self._before_iteration(_doc)
+			_doc._load_check()
+			new_cluster = False
+			if not self.clusters:
+				self._add_cluster(_doc)
+			else:
+				cluster = self._choose_cluster(_doc)
+				if cluster == self.NEW_CLUSTER:
+					new_cluster = self.handle_reject(_doc)
+				else:
+					self._add_to_cluster(cluster, _doc)
+			self.num_clustered += 1
+			self._after_iteration(_doc, new_cluster=new_cluster)
+		self.post_process_clusters()
+
+	def _after_iteration(self, _doc, new_cluster):
+		print
+		if new_cluster:
+			print "New Cluster:"
+		print map(lambda x: len(x.members), self.clusters)
+		print map(lambda x: len(x.members), self.potential_clusters)
+
+	def post_process_clusters(self):
+		self.clusters = self.clusters + self.potential_clusters
+		super(FastCONFIRM, self).post_process_clusters()
 
 ##### Doesn't work.  The std lib for multiprocessing uses cPickle for tranfering
 ##### functions to worker threads.  cPickle cannot handle closures or lambdas...
@@ -628,7 +719,16 @@ class ParallelCONFIRM(BaseCONFIRM):
 		return mat
 		
 		
-class TestCONFIRM(WavgNetCONFIRM, MaxCliqueInitCONFIRM, RedistributePruningCONFIRM, TwoPassCONFIRM, InfoCONFIRM):
+class TestCONFIRM(MaxCliqueInitCONFIRM, RedistributePruningCONFIRM, TwoPassCONFIRM, InfoCONFIRM):
+	pass
+
+class RegionalTestCONFIRM(RegionalCONFIRM, TestCONFIRM):
+	pass
+
+class RegionalWeightedTestCONFIRM(RegionalWeightedCONFIRM, TestCONFIRM):
+	pass
+
+class WavgNetTestCONFIRM(AdaptiveThresholdCONFIRM, WavgNetCONFIRM, TestCONFIRM):
 	pass
 
 class BestCONFIRM(WavgNetCONFIRM, MaxCliqueInitCONFIRM, RedistributePruningCONFIRM, 

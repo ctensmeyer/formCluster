@@ -24,7 +24,12 @@ aggregate_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_
 def get_data_dir(descrip):
 	if descrip.startswith("big"):
 		return "../data/new/1911Wales"
-		#return "../data/full/WashStatePassLists"
+	if descrip.startswith("wash_big"):
+		return "../data/new/WashStatePassLists"
+	if descrip.startswith("wash_small"):
+		return "../data/wash200"
+	if descrip.startswith("wash_medium"):
+		return "../data/wash500"
 	if descrip.startswith("medium"):
 		return "../data/wales1000/"
 	if descrip.startswith("small"):
@@ -33,8 +38,20 @@ def get_data_dir(descrip):
 		return "../data/wales40/"
 	if descrip.startswith("custom"):
 		return "../data/walescustom/"
+	if descrip.startswith("twoclass_small"):
+		return "../data/walestwoclass_small/"
 	if descrip.startswith("twoclass"):
 		return "../data/walestwoclass/"
+
+def get_confirm(descrip):
+	if descrip == "base":
+		return cluster.TestCONFIRM
+	if descrip == "region":
+		return cluster.RegionalTestCONFIRM
+	if descrip == "weighted":
+		return cluster.RegionalWeightedTestCONFIRM
+	if descrip == "wavg":
+		return cluster.WavgNetTestCONFIRM
 
 def cluster_known():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
@@ -44,7 +61,9 @@ def cluster_known():
 	#confirm = cluster.BaseCONFIRM(docs, sim_thresh)
 	#confirm = cluster.AdaptiveThresholdCONFIRM(docs, num_clust=5, num_instances=15, sim_thresh=sim_thresh)
 	#confirm = cluster.BestCONFIRM(docs, lr=0.02, min_size=5, sim_thresh=sim_thresh)
-	confirm = cluster.TestCONFIRM(docs, lr=0.02, min_size=10, sim_thresh=sim_thresh, num_clust=2, maxK=4)
+	#confirm = cluster.TestCONFIRM(docs, min_membership=2, lr=0.02, min_size=2, sim_thresh=sim_thresh, num_clust=2, maxK=4)
+	factory = get_confirm(sys.argv[4])
+	confirm = factory(docs, min_membership=2, lr=0.02, min_size=2, sim_thresh=sim_thresh, num_clust=2, maxK=4)
 	confirm.cluster()
 	print
 	print
