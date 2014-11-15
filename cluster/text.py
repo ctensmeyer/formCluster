@@ -3,6 +3,7 @@ import utils
 import itertools
 import collections
 import Levenshtein
+from constants import *
 
 
 class TextLineMatcher:
@@ -19,8 +20,6 @@ class TextLineMatcher:
 	OP_STR = {PERFECT: "Perfect", PARTIAL1: "Partial1", PARTIAL2: "Partial2", SUFFIX1: "Suffix1",
 				SUFFIX2: "Suffix2", PREFIX1: "Prefix1", PREFIX2: "Prefix2"}
 
-	SIZE_RATIO = 0.8
-	EDIT_DIST_THRESH = 0.2
 	
 	def __init__(self, lines1, lines2, dist_thresh, partials=False):
 		'''
@@ -34,6 +33,7 @@ class TextLineMatcher:
 		self.dist_thresh = dist_thresh
 		self.dist_thresh_sqr = dist_thresh * dist_thresh
 		self.do_partial_matches = partials
+		self.matches = None
 
 	def op_str(self, op):
 		return self.OP_STR.get(op)
@@ -86,13 +86,13 @@ class TextLineMatcher:
 		#	return False
 
 		# optimization using diff in length as a lower bound on edit distance
-		if utils.ratio(line1.N, line2.N) < (1 - self.EDIT_DIST_THRESH):
+		if utils.ratio(line1.N, line2.N) < (1 - TEXT_EDIT_DIST_THRESH):
 			return False
 
 		# check equality before heavy calculation
 		edit_dist = Levenshtein.distance(line1.text, line2.text) if line1.text != line2.text else 0
 		norm = edit_dist / float(max(line1.N, line2.N))
-		return edit_dist <= 1 or norm <= self.EDIT_DIST_THRESH
+		return edit_dist <= 1 or norm <= TEXT_EDIT_DIST_THRESH
 
 	def suffix_match(self, suffix, complete):
 		'''
@@ -115,7 +115,7 @@ class TextLineMatcher:
 
 		edit_dist = Levenshtein.dist(complete.text[-1*suffix.N:], suffix.text)
 		norm = edit_dist / float(suffix.N)
-		return edit_dist <= 1 or norm <= self.EDIT_DIST_THRESH
+		return edit_dist <= 1 or norm <= TEXT_EDIT_DIST_THRESH
 
 	def prefix_match(self, prefix, complete):
 		''' Same as suffix match, except with a prefix '''
@@ -130,7 +130,7 @@ class TextLineMatcher:
 
 		edit_dist = Levenshtein.dist(complete.text[:prefix.N], prefix.text)
 		norm = edit_dist / float(prefix.N)
-		return edit_dist <= 1 or norm <= self.EDIT_DIST_THRESH
+		return edit_dist <= 1 or norm <= TEXT_EDIT_DIST_THRESH
 
 	def _find_partial_matches():
 		''' Finds Prefix/Suffix matches among the unmatched lines '''
@@ -177,7 +177,7 @@ class TextLineMatcher:
 			if prefix is None or suffix is None:
 				continue
 			l = prefix.N + suffix.N
-			if utils.ratio(l, line1.N) > (1 - self.EDIT_DIST_THRESH):
+			if utils.ratio(l, line1.N) > (1 - TEXT_EDIT_DIST_THRESH):
 				# we have an actual partial match
 				condensed.append( (self.PARTIAL1, line1, prefix, suffix,
 									self._norm_edit_dist(line1.text, prefix.text + suffix.text)) )
@@ -193,7 +193,7 @@ class TextLineMatcher:
 			if prefix is None or suffix is None:
 				continue
 			l = prefix.N + suffix.N
-			if utils.ratio(l, line2.N) > (1 - self.EDIT_DIST_THRESH):
+			if utils.ratio(l, line2.N) > (1 - TEXT_EDIT_DIST_THRESH):
 				# we have an actual partial match
 				condensed.append( (self.PARTIAL2, line2, prefix, suffix,
 									self._norm_edit_dist(line2.text, prefix.text + suffix.text)) )
@@ -201,16 +201,19 @@ class TextLineMatcher:
 
 	def get_matches(self):
 		''' :return: list of tuples (op, line1, line2) '''
-		matches = self._find_perfect_matches()
-		if self.do_partial_matches:
-			paritals = self._find_partial_matches()
-			condensed = self._condense_matches(partials)
-			# mark the matches
-			for match in condensed:
-				for line in match[1:]:
-					line.matched = True
-			matches += condensed
-		return matches
+		if self.matches is None:
+			matches = self._find_perfect_matches()
+			if self.do_partial_matches:
+				paritals = self._find_partial_matches()
+				condensed = self._condense_matches(partials)
+				# mark the matches
+				for match in condensed:
+					for line in match[1:]:
+						line.matched = True
+				matches += condensed
+			self.matches = matches
+			
+		return self.matches
 
 	def similarity_by_region(self, rows, cols, size):
 		'''

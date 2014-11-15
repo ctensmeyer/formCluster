@@ -204,50 +204,12 @@ class TextLine(Feature):
 		'''
 		return Feature.match_value(self) * self.N
 
-	#def set_text(self):
-	#	if self.chars:
-	#		ul = self.pos = self.chars[0].pos
-	#		br = self.chars[-1].pos2
-	#		self.size = (br[0] - ul[0], br[1] - ul[1])
-	#	self.text = "".join(map(lambda char: char.val, self.chars))
-	#	self.N = len(self.text)
-		
 	def __str__(self):
 		return "text: %r pos: %s size: %s" % (self.text, self.pos, self.size)
 
 	def __repr__(self):
 		return self.__str__()
 		
-	#def filter_nonalpha(self):
-	#	for x in xrange(self.N):
-	#		c = self.chars[x].val
-	#		if ord(c) > 127 or not (c.isalpha() or c.isspace()):
-	#			self.chars[x].val = ' '
-	#	self.set_text()
-
-	#def has_dict_word(self, min_len=3):
-	#	for word in self.text.split():
-	#		if dictionary.is_word(word) and len(word) >= min_len:
-	#			return True
-	#	return False
-
-	#def trim(self):
-	#	while self.chars and self.chars[0].val.isspace():
-	#		self.chars.pop(0)
-	#	while self.chars and self.chars[-1].val.isspace():
-	#		self.chars.pop(-1)
-	#	self.set_text()
-
-	#def condense_space(self):
-	#	new_chars = []
-	#	prev_space = False
-	#	for x in xrange(self.N):
-	#		if not (prev_space and self.chars[x].val.isspace()):
-	#			new_chars.append(self.chars[x])
-	#		prev_space = self.chars[x].val.isspace()
-	#	self.chars = new_chars
-	#	self.set_text()
-
 	def end_pos(self):
 		return (self.pos[0] + self.size[0], self.pos[1])
 
@@ -270,41 +232,3 @@ class TextLine(Feature):
 			return TextLine.SUFFIX_MATCH
 		return TextLine.NO_MATCH
 
-
-#class Char:
-#
-#	bool_labels = ['wordStart', 'wordFromDictionary', 'wordNormal',
-#						'wordNumeric', 'wordIdentifier', 'wordPenalty']
-#	int_labels = ['charConfidence', 'serifProbability', 'meanStrokeWidth']
-#	
-#	#def __init__(self, value, d):
-#	def __init__(self, value, ul, br):
-#		self.val = value
-#		#self.attributes = d.copy()
-#		#l = d['l']
-#		#t = d['t']
-#		#r = d['r']
-#		#b = d['b']
-#		#self.pos = (l, t)
-#		self.pos = ul
-#		self.pos2 = br
-#
-#		# Not currently used for anything
-#		#self.size = (r - l, b - t)
-#		#self.area = self.size[0] * self.size[1]
-#		#for bool_label in Char.bool_labels:
-#		#	if bool_label in self.attributes:
-#		#		self.attributes[bool_label] = bool(self.attributes[bool_label])
-#		#	else:
-#		#		self.attributes[bool_label] = False
-#
-#	def copy(self):
-#		#return Char(self.val, self.attributes)
-#		return Char(self.val, self.pos, self.pos2)
-#
-#	#def get_attr(self, attr):
-#	#	return self.attributes.get(attr)
-#	#
-#	#def set_attr(self, attr, val):
-#	#	self.attributes[attr] = val
-		

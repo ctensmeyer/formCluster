@@ -60,8 +60,6 @@ class KnownClusterAnalyzer:
 		for cluster in self.clusters:
 			im = cluster.center.draw()
 			im.save(os.path.join(dir_name, "cluster_%d.png" % cluster._id))
-			im = cluster.center.draw(colortext=True)
-			im.save(os.path.join(dir_name, "color_cluster_%d.png" % cluster._id))
 			
 
 	def print_assignments(self):
@@ -153,23 +151,18 @@ class KnownClusterAnalyzer:
 
 	def print_cluster_sim_mat(self):
 		print "CLUSTER SIM MATRICES:"
-		centers = map(lambda cluster: cluster.center, self.clusters)
-		mat = utils.pairwise(centers, lambda doc1, doc2: doc1.similarities_by_name(doc2))
-		sim_names = self.clusters[0].members[0].similarity_function_names()
-		for sim_type in sim_names:
-			print "Similarity Type:", sim_type
-			sub_mat = utils.apply_mat(mat, lambda x: x[sim_type])
-			sub_mat = utils.apply_mat(sub_mat, lambda x: "%3.2f" % x)
-			utils.insert_indices(sub_mat)
-			utils.print_mat(sub_mat)
-			print
-		print "Similarity Type: Harmonic Mean of all"
-		sub_mat = utils.apply_mat(mat, lambda x: utils.harmonic_mean_list(x.values()))
-		sub_mat = utils.apply_mat(sub_mat, lambda x: "%3.2f" % x)
-		utils.insert_indices(sub_mat)
-		utils.print_mat(sub_mat)
-		print
 
+		centers = map(lambda cluster: cluster.center, self.clusters)
+		feature_set_names = self.clusters[0].members[0].get_feature_set_names()
+		for name in feature_set_names:
+			print
+			print "Similarity Type: %s" % name
+			mat = utils.pairwise(centers, lambda doc1, doc2: doc1.global_sim(doc2, name))
+			mat = utils.apply_mat(mat, lambda x: "%3.2f" % x)
+			utils.insert_indices(mat)
+			utils.print_mat(mat)
+
+		print
 		print "Similarity Type: Cluster sim by CONFIRM"
 		sub_mat = utils.pairwise(self.clusters, lambda c1, c2: self.confirm.cluster_similarity(c1, c2))
 		sub_mat = utils.apply_mat(sub_mat, lambda x: "%3.2f" % x)
@@ -187,8 +180,8 @@ class KnownClusterAnalyzer:
 			for _doc in cluster.members:
 				if _doc.label != cluster.label:
 					total += 1
-					sims = _doc.similarities_by_name(cluster.center).values()
-					sim = utils.harmonic_mean_list(sims)
+					sims = cluster.center.global_sim(_doc)
+					sim = self.confirm.cluster_doc_similarity(cluster, _doc)
 					print "\t" + "\t".join(map(str, [_doc.label, sim, sims]))
 			print
 		print "Total Mismatches:", total
@@ -227,30 +220,16 @@ class KnownClusterAnalyzer:
 
 		stats = dict()
 
-		stats['text_line_global_stats'] = self.feature_eval_metrics(
-			lambda cluster, _doc: cluster.center.text_line_similarity(_doc))
-		stats['text_line_regional_unweighted_stats'] = self.feature_eval_metrics(
-			lambda cluster, _doc: utils.avg_val_mat(cluster.center.text_line_similarity_mat(_doc)[0]))
-		stats['text_line_regional_weighted_stats'] = self.feature_eval_metrics(
-			lambda cluster, _doc: utils.mat_sum(utils.mult_mats(cluster.center.text_line_similarity_mat(_doc))))
+		for name in self.clusters[0].members[0].get_feature_set_names():
+			stats[name + "_global"] = self.feature_eval_metrics(
+				lambda cluster, _doc: cluster.center.global_sim(_doc, name))
+			stats[name + "_region_uniform_weights"] = self.feature_eval_metrics(
+				lambda cluster, _doc: utils.avg_val_mat(cluster.center.region_sim(_doc, name)))
+			stats[name + "_region_fixed_weights"] = self.feature_eval_metrics(
+				lambda cluster, _doc: utils.avg_val_mat(utils.mult_mats(cluster.center.region_sim_weights(_doc, name))))
 
-		stats['h_line_global_stats'] = self.feature_eval_metrics(
-			lambda cluster, _doc: cluster.center.h_line_similarity(_doc))
-		stats['h_line_regional_unweighted_stats'] = self.feature_eval_metrics(
-			lambda cluster, _doc: utils.avg_val_mat(cluster.center.h_line_similarity_mat(_doc)[0]))
-		stats['h_line_regional_weighted_stats'] = self.feature_eval_metrics(
-			lambda cluster, _doc: utils.mat_sum(utils.mult_mats(cluster.center.h_line_similarity_mat(_doc))))
 
-		stats['v_line_global_stats'] = self.feature_eval_metrics(
-			lambda cluster, _doc: cluster.center.v_line_similarity(_doc))
-		stats['v_line_regional_unweighted_stats'] = self.feature_eval_metrics(
-			lambda cluster, _doc: utils.avg_val_mat(cluster.center.v_line_similarity_mat(_doc)[0]))
-		stats['v_line_regional_weighted_stats'] = self.feature_eval_metrics(
-			lambda cluster, _doc: utils.mat_sum(utils.mult_mats(cluster.center.v_line_similarity_mat(_doc))))
-
-		stats['_combined_global_stats'] = self.feature_eval_metrics(
-			lambda cluster, _doc: cluster.center.global_similarity(_doc))
-		stats['_overall_similarity_stats'] = self.feature_eval_metrics(
+		stats['confirm'] = self.feature_eval_metrics(
 			lambda cluster, _doc: self.confirm.cluster_doc_similarity(cluster, _doc))
 
 		padding_len = 1 + max(map(len, stats.keys()))
@@ -264,7 +243,7 @@ class KnownClusterAnalyzer:
 		print
 		for name in sorted(list(stats.keys())):
 			print utils.pad_to_len(name, padding_len), "\t", "\t".join(map(lambda x: "%.4f" % x, stats[name]))
-			if "_weighted" in name or "overall" in name:
+			if "_uniform" in name or "overall" in name:
 				print
 
 		print
@@ -315,22 +294,22 @@ class KnownClusterAnalyzer:
 
 	def print_cluster_cohesion(self):
 		print "CLUSTER COHESION:"
-		sim_names = self.clusters[0].members[0].similarity_function_names()
-		sim_names.append("harmonic_mean")
-		print "\t\t\t%s\tSIZE" % ("\t  ".join(sim_names))
+		sim_names = self.clusters[0].members[0].get_feature_set_names()[:]
+		sim_names.append("confirm")
+		print "\t\t%s     SIZE" % ("        ".join(sim_names))
 		for x, cluster in enumerate(self.clusters):
-			# list of dictionaries
-			similarities = map(lambda doc: doc.similarities_by_name(cluster.center), cluster.members)
+			# list of lists
+			similarities = map(lambda doc: doc.global_sim(cluster.center), cluster.members)
 			to_print = list()
-			for metric in sim_names[:-1]:
-				values = map(lambda d: d[metric], similarities)
+			for y in xrange(len(similarities[0])):
+				values = map(lambda row: row[y], similarities)
 				to_print.append(utils.avg(values))
 				to_print.append(utils.stddev(values))
-			values = map(lambda d: utils.harmonic_mean_list(d.values()), similarities)
+			values = map(lambda _doc: self.confirm.cluster_doc_similarity(cluster, _doc), cluster.members)
 			to_print.append(utils.avg(values))
 			to_print.append(utils.stddev(values))
-			l = len(similarities)
-			print "\t%s:  \t%s\t%d" % (x, "\t".join(map(lambda s: "%3.2f" % s, to_print)), l)
+			l = len(cluster.members)
+			print "\t%s:  %s  %d" % (x, "  ".join(map(lambda s: "%3.2f" % s, to_print)), l)
 		print
 		print
 
@@ -402,20 +381,35 @@ class KnownClusterAnalyzer:
 
 	def print_region_info(self):
 		print "REGION INFO"
+		print
+		print "For each feature set, the average sim score per region by cluster and the fixed weights"
+		print
 
 		for x, cluster in enumerate(self.clusters):
 			print "%d:\t%s\t%d\n" % (x, cluster.label, len(cluster.members))
-			list_of_sim_mats = map(lambda _doc: cluster.center.similarity_mats_by_name(_doc), cluster.members)
-			list_of_weight_mats = cluster.center.similarity_weights_by_name(cluster.members[0])
-			for name in cluster.center.similarity_function_names():
-				mats = map(lambda x: x[name], list_of_sim_mats)
+			for name in cluster.center.get_feature_set_names():
+				mats = map(lambda _doc: cluster.center.region_sim(_doc, name), cluster.members)
 				avg_mat = utils.avg_mats(mats)
-				weight_mat = list_of_weight_mats[name]
+				weight_mat = cluster.center.region_weights(name)
 				print name
 				utils.print_mat(utils.apply_mat(avg_mat, lambda x: "%.3f" % x))
 				print
 				utils.print_mat(utils.apply_mat(weight_mat, lambda x: "%.3f" % x))
 				print
+
+
+
+			#list_of_sim_mats = map(lambda _doc: cluster.center.similarity_mats_by_name(_doc), cluster.members)
+			#list_of_weight_mats = cluster.center.similarity_weights_by_name(cluster.members[0])
+			#for name in cluster.center.similarity_function_names():
+			#	mats = map(lambda x: x[name], list_of_sim_mats)
+			#	avg_mat = utils.avg_mats(mats)
+			#	weight_mat = list_of_weight_mats[name]
+			#	print name
+			#	utils.print_mat(utils.apply_mat(avg_mat, lambda x: "%.3f" % x))
+			#	print
+			#	utils.print_mat(utils.apply_mat(weight_mat, lambda x: "%.3f" % x))
+			#	print
 		print
 		print
 

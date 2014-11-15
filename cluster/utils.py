@@ -111,6 +111,14 @@ def e_dist(p1, p2):
 def e_dist_sqr(p1, p2):
 	return (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 
 
+def bhattacharyya_coeff(dist1, dist2):
+	return sum(map(lambda p, q: math.sqrt(p * q), dist1, dist2))
+
+def advance_to_blank(f):
+	line = f.readline().strip()
+	while line:
+		line = f.readline().strip()
+		
 
 def ratio(num1, num2):
 	'''
@@ -321,6 +329,9 @@ def edit_distance(s, t, id_cost, match_f):
 	j = l2 - 1
 	final_val =  d[l1 - 1][l2 - 1] 
 	return final_val
+
+def flatten(mat):
+	return [cell for row in mat for cell in row]
 
 def get_font(text, width):
 	'''

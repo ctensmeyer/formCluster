@@ -1,39 +1,14 @@
 
 import Image
 import ImageDraw
-import ImageFont
-import json
-import string
 import utils
 import os
 
 import components
-import profiles
-import lines
-import text
+import feature
+from constants import *
 
-# do lazy loading of documents.  It's a good thing
-LAZY = True
-# prefix/suffix matching for edit distance in text lines
-ALLOW_PARTIAL_MATCHES = False
-# set true to print a bunch of extra info
-DEBUG = False
 
-# the file extensions of the files that compose a single document
-#_file_extensions = [".jpg", ".xml", "_line.xml", "_FormType.txt", "_endpoints.xml"]
-
-# use weight decay when aggregating two document together - eventually phases out infrequent features
-DECAY = True
-# magnitude of the decay
-_line_decay_amount = 1.0 / 10 if DECAY else 0
-_text_decay_amount = 1.0 / 15 if DECAY else 0
-
-# used to determine grid line offset tolerance when matching
-_line_thresh_mult = 0.05
-_text_line_thresh_mult = 0.15
-
-ROWS = 4
-COLS = 4
 
 def get_doc(_dir, source_file):
 	document = Document(os.path.basename(source_file), os.path.join(_dir, source_file))
@@ -108,7 +83,10 @@ class Document:
 		self._id = _id
 		self.source_file = f
 		self.loaded = False
-		if not LAZY and self.source_file:
+		self.feature_sets = list()
+		self.feature_set_names = list()
+		self.feature_name_map = dict()
+		if not LOAD_DOC_LAZY and self.source_file:
 			self.load()
 	
 	def copy(self, new_id):
@@ -118,293 +96,136 @@ class Document:
 		cpy.loaded = True  # makes sure we never load data from files
 
 		cpy.label = self.label
-		cpy.text_lines = map(lambda line: line.copy(), self.text_lines)
-		cpy.h_lines = map(lambda line: line.copy(), self.h_lines)
-		cpy.v_lines = map(lambda line: line.copy(), self.v_lines)
 		cpy.size = self.size
+		cpy.feature_set_names = self.feature_set_names[:]
+		for feature_set in self.feature_sets:
+			cpy_feature_set = feature_set.copy()
+			cpy.feature_sets.append(cpy_feature_set)
+			cpy.feature_name_map[cpy_feature_set.name()] = cpy_feature_set
 
 		return cpy
 
-	def display(self):
-		''' print out all of the text lines '''
-		self._load_check()
-		print "Document %s" % self._id
-		for line in self.textLines:
-			print line
-		print
-	
-        def _load_check(self):
+	def _load_check(self):
 		if not self.loaded:
 			self.load()
 
 	def load(self):
-		lines = open(self.source_file, 'r').readlines()
+		f = open(self.source_file, 'r')
 
-		#self.label = lines[0] 
 		# forgot to get the basename in the file in extraction script
-		self._id = os.path.basename(lines[0].strip())
+		self._id = os.path.basename(f.readline().strip())
 
-		self.label = lines[1].strip()
+		self.label = f.readline().strip()
 
-		size_line = lines[2]
+		size_line = f.readline().strip()
 		tokens = size_line.split()
 		self.size = ( int(tokens[0]), int(tokens[1]) )
 
-		self.text_lines = list()
-		for x, line in enumerate(lines[4:], start=4):
-			line = line.strip()
-			if line == "":
-				break
-			tokens = line.split()
-			text = " ".join(tokens[4:])
-			pos = ( int(tokens[0]), int(tokens[1]) )
-			size = ( int(tokens[2]), int(tokens[3]) )
-			self.text_lines.append(components.TextLine(text, pos, size))
-		x += 1
+		assert f.readline().strip() == ""
 
+		if USE_TEXT:
+			feature_set = feature.TextLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, f)
+			self.feature_sets.append(feature_set)
+			name = feature_set.name()
+			self.feature_set_names.append(name)
+			self.feature_name_map[name] = feature_set
+		else:
+			utils.advance_to_blank(f)
 
-		self.h_lines = list()
-		self.v_lines = list()
-		orien = components.Line.HORIZONTAL
-		l = self.h_lines
-		for line in lines[x:]:
-			line = line.strip()
-			if line == "":
-				orien = components.Line.VERTICAL
-				l = self.v_lines
-				continue
-			tokens = line.split()
-			pos = ( int(tokens[0]), int(tokens[1]) )
-			length = int(tokens[2])
-			thick = int(tokens[3])
-			l.append(components.Line(orien, pos, length, thick))
+		if USE_HORZ:
+			feature_set = feature.GridLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, components.Line.HORIZONTAL, f)
+			self.feature_sets.append(feature_set)
+			name = feature_set.name()
+			self.feature_set_names.append(name)
+			self.feature_name_map[name] = feature_set
+		else:
+			utils.advance_to_blank(f)
+
+		if USE_VERT:
+			feature_set = feature.GridLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, components.Line.VERTICAL, f)
+			self.feature_sets.append(feature_set)
+			name = feature_set.name()
+			self.feature_set_names.append(name)
+			self.feature_name_map[name] = feature_set
+		else:
+			utils.advance_to_blank(f)
+
+		if USE_SURF:
+			feature_set = feature.SurfFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, f)
+			self.feature_sets.append(feature_set)
+			name = feature_set.name()
+			self.feature_set_names.append(name)
+			self.feature_name_map[name] = feature_set
+		else:
+			utils.advance_to_blank(f)
+
 		self.loaded = True
 
+	def display(self):
+		print "Doc: %s\tsize: %s" % (self._id, self.size)
+		for feature_set in self.feature_sets:
+			print
+			print feature_set.name()
+			feature_set.display()
+		print
 
-	_sim_names = ['text_line', 'h_line', 'v_line']
-	def similarity_vector(self, other):
-		''' returns a similarity vector '''
-		region_sims_by_name = self.similarity_mats_by_name(other)
-		global_scores_by_name = self.similarities_by_name(other)
-		vector = list()
-		for name in self._sim_names:
-			vector.append(global_scores_by_name[name])
-		for name in self._sim_names:
-			mat = region_sims_by_name[name]
-			for row in mat:
-				for val in row:
-					vector.append(val)
-		return vector
+	def global_region_sim(self, other):
+		''' returns all similarities as a vector '''
+		return utils.flatten(self._feature_compare_helper(lambda fs1, fs2: fs1.global_region_sim(fs2), other, 'all'))
 
-	def get_initial_vector_weights(self, other):
+	def global_region_weights(self):
+		''' returns default weights for all similarities '''
+		#return utils.norm_list(utils.flatten(self._feature_compare_helper(lambda fs1, not_used: [1] + utils.flatten(fs1.region_weights()), self, 'all')))
+		#return utils.norm_list(utils.flatten(map(lambda fs: [1] + utils.flatten(fs.region_weights()), self.feature_sets))) 
+		weights = list()
+		for fs in self.feature_sets:
+			region_weights = fs.region_weights()
+			weights.append([1] + utils.flatten(region_weights))
+		return utils.norm_list(utils.flatten(weights))
+			
+
+	def global_sim(self, other, feature='all'):
 		''' 
-		:param other: needed, but doesn't affect the weights returned
-		returns inital weights for use in the NNs 
+			returns the global sim score for the requested feature.
+			feature='all' causes a vector of all global scores to be returned
 		'''
-		region_weights_by_name = self.similarity_weights_by_name(other)
-		vector = list()
+		return self._feature_compare_helper(lambda fs1, fs2: fs1.global_sim(fs2), other, feature)
 
-		# for the global scores
-		for name in self._sim_names:
-			vector.append(1)
-		for name in self._sim_names:
-			mat = region_weights_by_name[name]
-			for row in mat:
-				for val in row:
-					vector.append(val)
-		return vector
-		
+	def region_sim(self, other, feature='all'):
+		''' 
+			returns the region sim scores for the requested feature as a matrix.
+			feature='all' causes a vector of all region scores to be returned
+		'''
+		return self._feature_compare_helper(lambda fs1, fs2: fs1.region_sim(fs2), other, feature)
 
-	def similarity(self, other):
-		''' alias for global_similarity '''
-		return self.global_similarity(other)
+	def region_weights(self, feature='all'):
+		''' 
+			returns the region weights for the requested feature as a matrix.
+			feature='all' causes a vector of all region weights to be returned
+		'''
+		return self._feature_compare_helper(lambda fs1, not_used: fs1.region_weights(), self, feature)
 
-	def global_similarity(self, other):
-		''' return the harmonic mean of the different similarity metrics between self and other '''
-		sims = self.similarities_by_name(other).values()
-		return utils.harmonic_mean_list(sims)
-                    
-	def similarities_by_name(self, other):
-		''' return dict {name_of_sim_metric : sim_val} '''
-		sims = dict()
-		funs = self.similarity_functions()
-		for fun in funs:
-			sims[fun] = funs[fun](other)
-		return sims
+	def region_sim_weights(self, other, feature='all'):
+		''' 
+			returns the region (sims, weights) for the requested feature as a matrix.
+			feature='all' causes a vector of all region (sims, weights) to be returned
+		'''
+		return self._feature_compare_helper(lambda fs1, fs2: fs1.region_sim_with_weights(fs2), other, feature)
 
-	def similarity_mats_by_name(self, other):
-		''' return dict {name_of_sim_metric : sim_mat} '''
-		sims = dict()
-		funs = self.similarity_mat_functions()
-		for fun in funs:
-			sims[fun] = funs[fun](other)
-		return sims
+	def _feature_compare_helper(self, fun, other, feature):
+		if feature == 'all':
+			return map(fun, self.feature_sets, other.feature_sets)
+		else:
+			feature_set1 = self.get_feature_set(feature)
+			feature_set2 = other.get_feature_set(feature)
+			return fun(feature_set1, feature_set2)
 
-	def similarity_weights_by_name(self, other):
-		''' return dict {name_of_sim_metric : weight_mat} '''
-		sims = dict()
-		funs = self.similarity_weight_functions()
-		for fun in funs:
-			sims[fun] = funs[fun](other)
-		return sims
+	def get_feature_set(self, name):
+		return self.feature_name_map[name]
 
-	def similarity_mats_weights_by_name(self, other):
-		''' return dict {name_of_sim_metric : weight_mat} '''
-		sims = dict()
-		funs = self.similarity_mat_weight_functions()
-		for fun in funs:
-			sims[fun] = funs[fun](other)
-		return sims
+	def get_feature_set_names(self):
+		return self.feature_set_names
 
-	def similarity_functions(self):
-		''' return dict {name_of_sim_metric : sim_function(other) } '''
-		funs = dict()
-		funs['text_line'] = (lambda other: self.text_line_similarity(other))
-		funs['h_line'] = (lambda other: self.h_line_similarity(other))
-		funs['v_line'] = (lambda other: self.v_line_similarity(other))
-		return funs
-
-	def similarity_mat_functions(self):
-		''' return dict {name_of_sim_metric : sim_function(other) } '''
-		funs = dict()
-		funs['text_line'] = (lambda other: self.text_line_similarity_mat(other)[0])
-		funs['h_line'] = (lambda other: self.h_line_similarity_mat(other)[0])
-		funs['v_line'] = (lambda other: self.v_line_similarity_mat(other)[0])
-		return funs
-
-	def similarity_mat_weight_functions(self):
-		''' return dict {name_of_sim_metric : sim_function(other) } '''
-		funs = dict()
-		funs['text_line'] = (lambda other: self.text_line_similarity_mat(other))
-		funs['h_line'] = (lambda other: self.h_line_similarity_mat(other))
-		funs['v_line'] = (lambda other: self.v_line_similarity_mat(other))
-		return funs
-
-	def similarity_weight_functions(self):
-		''' return dict {name_of_sim_metric : sim_function(other) } '''
-		funs = dict()
-		funs['text_line'] = (lambda other: self.text_line_similarity_mat(other)[1])
-		funs['h_line'] = (lambda other: self.h_line_similarity_mat(other)[1])
-		funs['v_line'] = (lambda other: self.v_line_similarity_mat(other)[1])
-		return funs
-
-	def similarity_function_names(self):
-		''' return a list of the sim function names '''
-		return ['text_line', 'h_line', 'v_line']
-
-	def text_line_similarity(self, other):
-		''' return the text line similarity '''
-		self._load_check()
-		other._load_check()
-		thresh_dist = _text_line_thresh_mult * max(max(self.size), max(other.size))  # % of largest dimension
-
-		matcher = text.TextLineMatcher(self.text_lines, other.text_lines, thresh_dist, ALLOW_PARTIAL_MATCHES)
-		#sim_mat = matcher.similarity_by_region(ROWS, COLS, self.size)
-		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
-
-		return matcher.similarity()
-
-	def line_similarity(self, other):
-		''' Combined horizontal and vertical line similarity (harmonic mean) [0-1] '''
-		h_sim = self.h_line_similarity(other)
-		v_sim = self.v_line_similarity(other)
-		return utils.harmonic_mean(h_sim, v_sim)
-
-	def h_line_similarity(self, other):
-		''' return horizontal line similarity score [0-1] '''
-		self._load_check()
-		other._load_check()
-
-		h_thresh_dist = _line_thresh_mult * max(self.size[0], other.size[0]) 
-		h_matcher = lines.LMatcher(self.h_lines, other.h_lines, h_thresh_dist, self.size)
-		#matches = h_matcher.get_matches()
-
-		#sim_mat = h_matcher.similarity_by_region(ROWS, COLS, self.size)
-		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
-
-		return h_matcher.similarity()
-
-	def v_line_similarity(self, other):
-		''' return vertical line similarity score [0-1] '''
-		self._load_check()
-		other._load_check()
-
-		v_thresh_dist = _line_thresh_mult * max(self.size[1], other.size[1]) 
-		v_matcher = lines.LMatcher(self.v_lines, other.v_lines, v_thresh_dist, self.size)
-
-		#sim_mat = v_matcher.similarity_by_region(ROWS, COLS, self.size)
-		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
-
-		return v_matcher.similarity()
-
-	def text_line_similarity_mat(self, other):
-		''' return the text line similarity matrix and weight mat'''
-		self._load_check()
-		other._load_check()
-		thresh_dist = _text_line_thresh_mult * max(max(self.size), max(other.size))  # % of largest dimension
-
-		matcher = text.TextLineMatcher(self.text_lines, other.text_lines, thresh_dist, ALLOW_PARTIAL_MATCHES)
-		sim_mat, weight_mat = matcher.similarity_by_region(ROWS, COLS, self.size)
-		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
-
-		return sim_mat, weight_mat
-
-	def h_line_similarity_mat(self, other):
-		''' return horizontal line similarity matrix and weight mat'''
-		self._load_check()
-		other._load_check()
-
-		h_thresh_dist = _line_thresh_mult * max(self.size[0], other.size[0]) 
-		h_matcher = lines.LMatcher(self.h_lines, other.h_lines, h_thresh_dist, self.size)
-
-		sim_mat, weight_mat = h_matcher.similarity_by_region(ROWS, COLS, self.size)
-		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
-		return sim_mat, weight_mat
-
-	def v_line_similarity_mat(self, other):
-		''' return vertical line similarity matrix and weight mat'''
-		self._load_check()
-		other._load_check()
-
-		v_thresh_dist = _line_thresh_mult * max(self.size[1], other.size[1]) 
-		v_matcher = lines.LMatcher(self.v_lines, other.v_lines, v_thresh_dist, self.size)
-
-		sim_mat, weight_mat = v_matcher.similarity_by_region(ROWS, COLS, self.size)
-		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
-		return sim_mat, weight_mat
-
-	def clear_text_matches(self):
-		''' reset the matched tag on all of the text lines '''
-		for line in self.text_lines:
-			line.matched = False
-
-	def _aggregate_text(self, other):
-		''' Take the text lines of other and merge them into this Document's text lines '''
-		thresh_dist = _text_line_thresh_mult * max(max(self.size), max(other.size))  # % of largest dimension
-		matcher = text.TextLineMatcher(self.text_lines, other.text_lines, thresh_dist, ALLOW_PARTIAL_MATCHES)
-
-		#print "BEFORE", id(self)
-		#for line in self.text_lines:
-		#	print line
-		self.text_lines = matcher.merge()
-		#print "\nAFTER", id(self)
-		#for line in self.text_lines:
-		#	print line
-
-	def _aggregate_h_lines(self, other):
-		''' Take the horizontal lines of other and merge them into this Document's text lines '''
-		h_thresh_dist = _line_thresh_mult * max(self.size[0], other.size[0]) 
-		h_matcher = lines.LMatcher(self.h_lines, other.h_lines, h_thresh_dist, self.size)
-		#ops = h_matcher.get_operations()
-		#h_matcher.print_ops(ops)
-		self.h_lines = h_matcher.get_merged_lines()
-
-	def _aggregate_v_lines(self, other):
-		''' Take the vertical lines of other and merge them into this Document's text lines '''
-		v_thresh_dist = _line_thresh_mult * max(self.size[1], other.size[1]) 
-		v_matcher = lines.LMatcher(self.v_lines, other.v_lines, v_thresh_dist, self.size)
-		self.v_lines = v_matcher.get_merged_lines()
-		
 	def aggregate(self, other):
 		'''
 		Merge other into self
@@ -414,10 +235,8 @@ class Document:
 		other._load_check()
 
 		self.size = (max(self.size[0], other.size[0]), max(self.size[1], other.size[1]))
-
-		self._aggregate_text(other)
-		self._aggregate_h_lines(other)
-		self._aggregate_v_lines(other)
+		for feature_set1, feature_set2 in zip(self.feature_sets, other.feature_sets):
+			feature_set1.aggregate(feature_set2)
 
 		self.prune()
 
@@ -426,40 +245,17 @@ class Document:
 		Decrements each text/horz/vert line by the parameterized amount.  Remove lines
 			that have counts below 0
 		'''
-		self._prune_text(0, _text_decay_amount)
-		self._prune_h_lines(0, _line_decay_amount)
-		self._prune_v_lines(0, _line_decay_amount)
+		for feature_set in self.feature_sets:
+			feature_set.prune()
 
 	def final_prune(self):
 		'''
 		When clustering is done, remove text/horz/vert lines that have realatively very low
 			counts
 		'''
-		get_prune_val = lambda lines: max(map(lambda line: line.count, lines)) / 10.0
-		if self.text_lines:
-			self._prune_text(get_prune_val(self.text_lines), _text_decay_amount)
-		if self.h_lines:
-			self._prune_h_lines(get_prune_val(self.h_lines), _line_decay_amount)
-		if self.v_lines:
-			self._prune_v_lines(get_prune_val(self.v_lines), _line_decay_amount)
+		for feature_set in self.feature_sets:
+			feature_set.prune_final()
 
-	def _prune_text(self, thresh, amount):
-		map(lambda line: line.decay(amount), self.text_lines)
-		self.text_lines = filter(lambda line: line.count > thresh, self.text_lines)
-
-	def _prune_h_lines(self, thresh, amount):
-		map(lambda line: line.decay(amount), self.h_lines)
-		tmp = filter(lambda line: line.count > thresh, self.h_lines)
-		#if not tmp:
-		#	print self.h_lines
-		self.h_lines = tmp
-
-	def _prune_v_lines(self, thresh, amount):
-		map(lambda line: line.decay(amount), self.v_lines)
-		tmp = filter(lambda line: line.count > thresh, self.v_lines)
-		#if not tmp:
-		#	print self.v_lines
-		self.v_lines = tmp
 
 	def draw(self, colortext=False):
 		'''
@@ -469,23 +265,7 @@ class Document:
 		self._load_check()
 		im = Image.new('RGB', self.size, 'white')
 		draw = ImageDraw.Draw(im)
-		colors = utils.colors
-		idx = 0
-		for line in self.h_lines:
-			color = 'orange' if line.matched else 'red'
-			draw.line( (utils.tup_int(line.pos), utils.tup_int( (line.pos[0] + line.length, line.pos[1]) )) ,
-						width=int(line.thickness * 2), fill=color)
-			draw.text( utils.tup_int(line.pos), "%.2f" % line.count, fill="black")
-		for line in self.v_lines:
-			color = 'purple' if line.matched else 'blue'
-			draw.line( (utils.tup_int(line.pos), utils.tup_int( (line.pos[0], line.pos[1] + line.length) )) ,
-						width=int(line.thickness * 2), fill=color)
-			draw.text( utils.tup_int(line.pos), "%.2f" % line.count, fill="black")
-		for line in self.text_lines:
-			fill = colors[idx % len(colors)] if colortext else "black"
-			draw.text(line.pos, line.text, font=utils.get_font(line.text, line.size[0]), fill=fill)
-			draw.text( line.pos, "%.2f" % line.count, fill="blue")
-			idx += 1
-
+		for feature_set in self.feature_sets:
+			feature_set.draw(draw)
 		return im
 		

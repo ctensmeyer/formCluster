@@ -779,7 +779,7 @@ class LMatcher(LineMatcher):
 		line.count = ((line1.count * line1.length) + (line2.count * line2.length)) / line.length
 		return line
 
-	def get_merged_lines(self):
+	def merge(self):
 		ops = self.get_operations()
 
 		# compute the average pos offset of the perfect matching pairs

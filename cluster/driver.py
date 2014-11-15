@@ -20,6 +20,10 @@ aggregate_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_
 #aggregate_dir = "../data/new/1911Wales/UK1911Census_EnglandWales_Household15Names_03_01"
 
 
+single_dir = "../data/new/Wales_SURF/UK1911Census_EnglandWales_Household15Names_03_01"
+single_file = "rg14_31702_0025_03.txt"
+second_dir = single_dir
+second_file = "rg14_31702_0059_03.txt"
 
 def get_data_dir(descrip):
 	if descrip.startswith("big"):
@@ -42,16 +46,18 @@ def get_data_dir(descrip):
 		return "../data/walestwoclass_small/"
 	if descrip.startswith("twoclass"):
 		return "../data/walestwoclass/"
+	if descrip.startswith("test"):
+		return "../data/test/"
 
 def get_confirm(descrip):
 	if descrip == "base":
-		return cluster.TestCONFIRM
+		return cluster.BaseCONFIRM
 	if descrip == "region":
-		return cluster.RegionalTestCONFIRM
+		return cluster.RegionalCONFIRM
 	if descrip == "weighted":
-		return cluster.RegionalWeightedTestCONFIRM
+		return cluster.RegionalWeightedCONFIRM
 	if descrip == "wavg":
-		return cluster.WavgNetTestCONFIRM
+		return cluster.WavgNetCONFIRM
 
 def cluster_known():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
@@ -152,12 +158,7 @@ def load_doc_test():
 	_doc = doc.get_doc(single_dir, single_file)
 	#_doc = doc.get_doc(second_dir, second_basename)
 	_doc._load_check()
-	for line in _doc.h_lines:
-		print line
-	for line in _doc.v_lines:
-		print line
-	for line in _doc.text_lines:
-		print line
+	_doc.display()
 	im = _doc.draw()
 	im.save("output/single_doc.png")
 
@@ -167,32 +168,41 @@ def cmp_test():
 	doc1._load_check()
 	doc2._load_check()
 
-	#print "DOC1 H-lines:"
-	#for line in doc1.h_lines:
-	#	print "\t%s" % line
-	#print
+	doc1.display()
+	doc2.display()
 
-	#print "DOC2 H-lines:"
-	#for line in doc2.h_lines:
-	#	print "\t%s" % line
-	#print
+	global_region_sims = doc1.global_region_sim(doc2)
+	global_region_sim_weights = doc1.global_region_sim_weights()
+	global_sims = doc1.global_sim(doc2)
+	region_sims = doc1.region_sim(doc2)
+	region_weights1 = doc1.region_weights()
+	region_weights2 = doc2.region_weights()
 
-	sims = doc1.similarities_by_name(doc2)
-	sim_mats = doc1.similarity_mats_by_name(doc2)
-	for name in sim_mats:
-		print name
-		sim_mat = sim_mats[name]
-		utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%.3f" % x))
+	for x, name in enumerate(doc1.feature_set_names):
 		print
+		print name
+		print "Global Sim:", global_sims[x]
+		print "Region Sims:"
+		print
+		utils.print_mat(utils.apply_mat(region_sims[x], lambda x: "%.3f" % x))
+		print
+		print "Region Weights doc1:"
+		print
+		utils.print_mat(utils.apply_mat(region_weights1[x], lambda x: "%.3f" % x))
+		print
+		print "Region Weights doc2:"
+		print
+		utils.print_mat(utils.apply_mat(region_weights2[x], lambda x: "%.3f" % x))
+
+	print "Sim Vector:"
+	print " ".join(map(lambda x: "%.2f" % x, global_region_sims))
+	print "Sim Weights:"
+	print " ".join(map(lambda x: "%.2f" % x, global_region_sim_weights))
 
 	doc1.draw().save("output/doc1.png")
 	doc2.draw().save("output/doc2.png")
-	#print sims
-	#print len(doc1.h_lines), len(doc1.v_lines)
-	#print len(doc2.h_lines), len(doc2.v_lines)
 	doc1.aggregate(doc2)
 	doc1.draw().save("output/combined.png")
-	#print len(doc1.h_lines), len(doc1.v_lines)
 
 def draw_all():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))

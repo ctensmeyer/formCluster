@@ -7,6 +7,7 @@ import multiprocessing
 import collections
 import itertools
 import random
+from constants import *
 
 class Cluster:
 	
@@ -114,7 +115,7 @@ class BaseCONFIRM(object):
 			cluster.center.final_prune()	
 
 	def doc_similarity(self, doc1, doc2):
-		return doc1.similarity(doc2)
+		return utils.harmonic_mean_list(doc1.global_sim(doc2))
 
 	def cluster_similarity(self, cluster1, cluster2):
 		return self.doc_similarity(cluster1.center, cluster2.center)
@@ -313,12 +314,12 @@ class RegionalCONFIRM(BaseCONFIRM):
 			much feature mass is in that region.  Treats each feature
 			type uniformly.
 		'''
-		region_scores_by_name = doc1.similarity_mats_weights_by_name(doc2)
+		region_sim_weights = doc1.region_sim_weights(doc2)
 		composite_regional_score = 0
-		for sim_mat, weight_mat in region_scores_by_name.values():
+		for sim_mat, weight_mat in region_sim_weights:
 			combined = utils.mult_mats([sim_mat, weight_mat])
 			s = sum(map(sum, combined))  # add up all entries in mat
-			composite_regional_score += s * 1.0 / len(region_scores_by_name)
+			composite_regional_score += s * 1.0 / len(region_sim_weights)
 		return composite_regional_score
 
 class PerfectRegionalCONFIRM(RegionalCONFIRM, PerfectCONFIRM):
@@ -337,33 +338,33 @@ class RegionalWeightedCONFIRM(RegionalCONFIRM):
 
 	def _add_cluster(self, _doc, member=True):
 		cluster = super(RegionalWeightedCONFIRM, self)._add_cluster(_doc, member)
-		cluster.region_weights = {metric: self._uniform_mat(doc.ROWS, doc.COLS) for metric in _doc.similarity_function_names()}
-		cluster.global_weights = {metric: 1 for metric in _doc.similarity_function_names()}
+		l = len(_doc.get_feature_set_names())
+		cluster.region_weights = [self._uniform_mat(REGION_ROWS, REGION_COLS) for metric in xrange(l)]
+		cluster.global_weights = [1] * l
 		return cluster
 
 	def cluster_doc_similarity(self, cluster, _doc):
-		sim_mats = cluster.center.similarity_mats_weights_by_name(_doc)
-		sim_scores = cluster.center.similarities_by_name(_doc)
-		composite_global_score = utils.wavg(sim_scores.values(), utils.norm_list(cluster.global_weights.values()))
+		region_sim_weights = cluster.center.region_sim_weights(_doc)
+		global_sims = cluster.center.global_sim(_doc)
+		composite_global_score = utils.wavg(global_sims, utils.norm_list(cluster.global_weights))
 		composite_regional_score = 0
-		for name in sim_mats:
-			mat, weights = sim_mats[name]
-			combined = utils.mult_mats([mat, utils.norm_mat(cluster.region_weights[name])])
+		for x in xrange(len(region_sim_weights)):
+			mat, weights = region_sim_weights[x]
+			combined = utils.mult_mats([mat, utils.norm_mat(cluster.region_weights[x])])
 			s = sum(map(sum, combined))  # add up all entries in mat
-			composite_regional_score += s * 1.0 / len(sim_mats)
+			composite_regional_score += s * 1.0 / len(region_sim_weights)
 		return (composite_global_score + composite_regional_score) / 2
 
 	def _add_to_cluster(self, cluster, _doc):
 		super(RegionalWeightedCONFIRM, self)._add_to_cluster(cluster, _doc)
-		#print "RegionalWeighted _add_to_cluster()"
 
 		# add in scores to get weights
-		sim_scores = cluster.center.similarities_by_name(_doc)
-		sim_mats = cluster.center.similarity_mats_weights_by_name(_doc)
-		for name in sim_scores:
-			cluster.global_weights[name] += sim_scores[name]
-			sim_mat = utils.mult_mats(sim_mats[name])
-			weight_mat = cluster.region_weights[name]
+		global_sims = cluster.center.global_sim(_doc)
+		region_sim_weights = cluster.center.region_sim_weights(_doc)
+		for x in xrange(len(global_sims)):
+			cluster.global_weights[x] += global_sims[x]
+			sim_mat = utils.mult_mats(region_sim_weights[x])
+			weight_mat = cluster.region_weights[x]
 			for r in xrange(len(weight_mat)):
 				for c in xrange(len(weight_mat[r])):
 					weight_mat[r][c] += sim_mat[r][c]
@@ -385,18 +386,18 @@ class WavgNetCONFIRM(RegionalCONFIRM):
 
 	def _add_cluster(self, _doc, member=True):
 		cluster = super(WavgNetCONFIRM, self)._add_cluster(_doc, member)
-		weights = _doc.get_initial_vector_weights(_doc)
+		weights = _doc.global_region_weights()
 		cluster.network = network.WeightedAverageNetwork(len(weights), weights, self.lr)
 		return cluster
 
 	def cluster_doc_similarity(self, cluster, _doc):
-		sim_vec = cluster.center.similarity_vector(_doc)
+		sim_vec = cluster.center.global_region_sim(_doc)
 		return cluster.network.wavg(sim_vec)
 		
 	def _add_to_cluster(self, cluster, _doc):
 		super(WavgNetCONFIRM, self)._add_to_cluster(cluster, _doc)
 		#print "WavgNet _add_to_cluster()"
-		sim_vec = cluster.center.similarity_vector(_doc)
+		sim_vec = cluster.center.global_region_sim(_doc)
 		cluster.network.learn(sim_vec, 1)
 
 	def get_cluster_sim_mat(self):
