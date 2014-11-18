@@ -26,38 +26,54 @@ second_dir = single_dir
 second_file = "rg14_31702_0059_03.txt"
 
 def get_data_dir(descrip):
-	if descrip.startswith("big"):
-		return "../data/new/1911Wales"
-	if descrip.startswith("wash_big"):
-		return "../data/new/WashStatePassLists"
-	if descrip.startswith("wash_small"):
-		return "../data/wash200"
-	if descrip.startswith("wash_medium"):
-		return "../data/wash500"
-	if descrip.startswith("medium"):
-		return "../data/wales1000/"
-	if descrip.startswith("small"):
-		return "../data/wales100/"
-	if descrip.startswith("very_small"):
-		return "../data/wales40/"
-	if descrip.startswith("custom"):
-		return "../data/walescustom/"
-	if descrip.startswith("twoclass_small"):
-		return "../data/walestwoclass_small/"
-	if descrip.startswith("twoclass"):
-		return "../data/walestwoclass/"
-	if descrip.startswith("test"):
-		return "../data/test/"
+	if descrip.startswith("wales_all"):
+		return "../data/current/1911Wales"
+	if descrip.startswith("wales_1000"):
+		return "../data/subsets/wales_1000"
+	if descrip.startswith("wales_500"):
+		return "../data/subsets/wales_500"
+	if descrip.startswith("wales_100"):
+		return "../data/subsets/wales_100"
+	if descrip.startswith("wales_20"):
+		return "../data/subsets/wales_20"
+
+	if descrip.startswith("wales_twoclass_all"):
+		return "../data/subsets/wales_twoclass_all"
+	if descrip.startswith("wales_twoclass_200"):
+		return "../data/subsets/wales_twoclass_200"
+
+	if descrip.startswith("wash_all"):
+		return "../data/current/WashStatePassLists"
+	if descrip.startswith("wash_1000"):
+		return "../data/subsets/wash_1000"
+	if descrip.startswith("wash_500"):
+		return "../data/subsets/wash_500"
+	if descrip.startswith("wash_100"):
+		return "../data/subsets/wash_100"
+	if descrip.startswith("wash_20"):
+		return "../data/subsets/wash_20"
 
 def get_confirm(descrip):
 	if descrip == "base":
-		return cluster.BaseCONFIRM
+		return cluster.BaseTestCONFIRM
 	if descrip == "region":
-		return cluster.RegionalCONFIRM
+		return cluster.RegionTestCONFIRM
 	if descrip == "weighted":
-		return cluster.RegionalWeightedCONFIRM
+		return cluster.RegionWeightedTestCONFIRM
 	if descrip == "wavg":
-		return cluster.WavgNetCONFIRM
+		return cluster.WavgNetTestCONFIRM
+
+	if descrip == "best":
+		return cluster.BestCONFIRM
+
+	if descrip == "perfect_base":
+		return cluster.PerfectCONFIRM
+	if descrip == "perfect_region":
+		return cluster.PerfectRegionCONFIRM
+	if descrip == "perfect_weighted":
+		return cluster.PerfectRegionWeightedCONFIRM
+	if descrip == "perfect_wavg":
+		return cluster.PerfectWavgNetCONFIRM
 
 def cluster_known():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
@@ -78,16 +94,17 @@ def cluster_known():
 	analyzer.print_all()
 
 def check_init():
-	docs = doc.get_docs_nested(get_data_dir("small"))
+	docs = doc.get_docs_nested(get_data_dir("test"))
 	random.seed(12345)
 	random.shuffle(docs)
-	confirm = cluster.MaxCliqueInitCONFIRM(docs, 7, 20)
+	confirm = cluster.MaxCliqueInitCONFIRM(docs, 2, 10)
 	confirm._init_clusters()
 
 	print
 	print "Cluster Sim Mat"
 	sim_mat = confirm.get_cluster_sim_mat()
 	utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%3.2f" % x))
+
 
 
 def double_cluster_known():

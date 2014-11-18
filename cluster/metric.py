@@ -254,6 +254,10 @@ class KnownClusterAnalyzer:
 		print
 		print "Comparing each Cluster to it's most similar other clusters"
 
+		if len(self.clusters) < 2:
+			print "There are less than two clusters"
+			return
+
 		cluster_sim_mat = self.confirm.get_cluster_sim_mat()
 		for row in cluster_sim_mat:
 			row.sort(reverse=True)

@@ -306,7 +306,7 @@ class AlmostPerfect2CONFIRM(AlmostPerfectCONFIRM):
 						new_cluster.members.append(_doc)
 		
 
-class RegionalCONFIRM(BaseCONFIRM):
+class RegionCONFIRM(BaseCONFIRM):
 
 	def doc_similarity(self, doc1, doc2):
 		'''
@@ -315,18 +315,18 @@ class RegionalCONFIRM(BaseCONFIRM):
 			type uniformly.
 		'''
 		region_sim_weights = doc1.region_sim_weights(doc2)
-		composite_regional_score = 0
+		composite_region_score = 0
 		for sim_mat, weight_mat in region_sim_weights:
 			combined = utils.mult_mats([sim_mat, weight_mat])
 			s = sum(map(sum, combined))  # add up all entries in mat
-			composite_regional_score += s * 1.0 / len(region_sim_weights)
-		return composite_regional_score
+			composite_region_score += s * 1.0 / len(region_sim_weights)
+		return composite_region_score
 
-class PerfectRegionalCONFIRM(RegionalCONFIRM, PerfectCONFIRM):
+class PerfectRegionCONFIRM(RegionCONFIRM, PerfectCONFIRM):
 	pass
 
-# inherits from regional confrim to get doc_similarity() for get_doc_sim_mat()
-class RegionalWeightedCONFIRM(RegionalCONFIRM):
+# inherits from region confrim to get doc_similarity() for get_doc_sim_mat()
+class RegionWeightedCONFIRM(RegionCONFIRM):
 	'''
 	Does automatic weighting of regions.  Feature weights are the sum of the feature
 		sim scores of the documents belonging to that cluster
@@ -337,7 +337,7 @@ class RegionalWeightedCONFIRM(RegionalCONFIRM):
 		return mat
 
 	def _add_cluster(self, _doc, member=True):
-		cluster = super(RegionalWeightedCONFIRM, self)._add_cluster(_doc, member)
+		cluster = super(RegionWeightedCONFIRM, self)._add_cluster(_doc, member)
 		l = len(_doc.get_feature_set_names())
 		cluster.region_weights = [self._uniform_mat(REGION_ROWS, REGION_COLS) for metric in xrange(l)]
 		cluster.global_weights = [1] * l
@@ -347,16 +347,16 @@ class RegionalWeightedCONFIRM(RegionalCONFIRM):
 		region_sim_weights = cluster.center.region_sim_weights(_doc)
 		global_sims = cluster.center.global_sim(_doc)
 		composite_global_score = utils.wavg(global_sims, utils.norm_list(cluster.global_weights))
-		composite_regional_score = 0
+		composite_region_score = 0
 		for x in xrange(len(region_sim_weights)):
 			mat, weights = region_sim_weights[x]
 			combined = utils.mult_mats([mat, utils.norm_mat(cluster.region_weights[x])])
 			s = sum(map(sum, combined))  # add up all entries in mat
-			composite_regional_score += s * 1.0 / len(region_sim_weights)
-		return (composite_global_score + composite_regional_score) / 2
+			composite_region_score += s * 1.0 / len(region_sim_weights)
+		return (composite_global_score + composite_region_score) / 2
 
 	def _add_to_cluster(self, cluster, _doc):
-		super(RegionalWeightedCONFIRM, self)._add_to_cluster(cluster, _doc)
+		super(RegionWeightedCONFIRM, self)._add_to_cluster(cluster, _doc)
 
 		# add in scores to get weights
 		global_sims = cluster.center.global_sim(_doc)
@@ -369,10 +369,10 @@ class RegionalWeightedCONFIRM(RegionalCONFIRM):
 				for c in xrange(len(weight_mat[r])):
 					weight_mat[r][c] += sim_mat[r][c]
 
-class PerfectRegionalWeightedCONFIRM(RegionalWeightedCONFIRM, PerfectCONFIRM):
+class PerfectRegionWeightedCONFIRM(RegionWeightedCONFIRM, PerfectCONFIRM):
 	pass
 
-class WavgNetCONFIRM(RegionalCONFIRM):
+class WavgNetCONFIRM(RegionCONFIRM):
 	'''
 	Uses a linear classifier to learn feature weights and calculate similarity.
 	Backprop with SGD updates.
@@ -412,6 +412,8 @@ class WavgNetCONFIRM(RegionalCONFIRM):
 			mat.append(row)
 		return mat
 
+class PerfectWavgNetCONFIRM(WavgNetCONFIRM, PerfectCONFIRM):
+	pass
 
 class CompetitiveWavgNetCONFIRM(WavgNetCONFIRM):
 	'''
@@ -488,17 +490,17 @@ class MaxCliqueInitCONFIRM(BaseCONFIRM):
 		sim_mat = utils.pairwise(sub_docs, 
 			lambda x, y: max(self.doc_similarity(x, y), self.doc_similarity(y, x)))
 
-		#print
-		#print "Doc Sim Mat"
-		#utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%3.2f" % x))
+		print
+		print "Doc Sim Mat"
+		utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%3.2f" % x))
 
 		idxs = utils.find_best_clique(sim_mat, self.num_clust)
 
-		#print 
-		#print "Cluster Labels:"
+		print 
+		print "Cluster Labels:"
 		for idx in idxs:
 			self._add_cluster(self.docs[idx], member=False)
-			#print idx, self.docs[idx].label
+			print idx, self.docs[idx].label
 
 class MaxClustersCONFIRM(BaseCONFIRM):
 	'''
@@ -528,7 +530,7 @@ class InfoCONFIRM(BaseCONFIRM):
 			sim_scores = self._get_cached_sim_scores(_doc)
 			cluster, similarity = self._most_similar_cluster(_doc)
 			cluster.set_label()
-			margin = max(map(lambda score: similarity - score if similarity != score else -1, sim_scores))
+			margin = min(map(lambda score: similarity - score if similarity != score else 1, sim_scores))
 			print "%d\t%s\t%s\t%s\t%d\t%.2f\t%.2f\t%s" % (self.num_clustered, _doc.label, _doc.label == cluster.label, 
 													cluster.label, self.clusters.index(cluster),
 													similarity, margin, " ".join(map(lambda x: "%.2f" % x, sim_scores)))
@@ -572,6 +574,8 @@ class AdaptiveThresholdCONFIRM(MaxCliqueInitCONFIRM):
 	def _init_clusters(self):
 		super(AdaptiveThresholdCONFIRM, self)._init_clusters()
 		sim_mat = self.get_cluster_sim_mat()
+		for x in xrange(len(sim_mat)):
+			del sim_mat[x][x]
 		#self.global_thresh = max(map(max, sim_mat))
 		self.global_thresh = utils.avg_val_mat(sim_mat)
 
@@ -723,16 +727,19 @@ class ParallelCONFIRM(BaseCONFIRM):
 class TestCONFIRM(MaxCliqueInitCONFIRM, RedistributePruningCONFIRM, TwoPassCONFIRM, InfoCONFIRM):
 	pass
 
-class RegionalTestCONFIRM(RegionalCONFIRM, TestCONFIRM):
+class BaseTestCONFIRM(TestCONFIRM):
 	pass
 
-class RegionalWeightedTestCONFIRM(RegionalWeightedCONFIRM, TestCONFIRM):
+class RegionTestCONFIRM(RegionCONFIRM, TestCONFIRM):
 	pass
 
-class WavgNetTestCONFIRM(AdaptiveThresholdCONFIRM, WavgNetCONFIRM, TestCONFIRM):
+class RegionWeightedTestCONFIRM(RegionWeightedCONFIRM, TestCONFIRM):
 	pass
 
-class BestCONFIRM(WavgNetCONFIRM, MaxCliqueInitCONFIRM, RedistributePruningCONFIRM, 
+class WavgNetTestCONFIRM(WavgNetCONFIRM, TestCONFIRM):
+	pass
+
+class BestCONFIRM(AdaptiveThresholdCONFIRM, WavgNetCONFIRM, MaxCliqueInitCONFIRM, RedistributePruningCONFIRM, 
 				MaxClustersCONFIRM, InfoCONFIRM, TwoPassCONFIRM):
 	pass
 

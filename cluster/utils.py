@@ -437,7 +437,7 @@ def find_best_clique(sim_mat, size):
 	x = 0
 	thresh = 0.05
 	while thresh <= 1:
-		while edges[x][2] <= thresh:
+		while x < len(edges) and edges[x][2] <= thresh:
 			G.add_edge(edges[x][0], edges[x][1])
 			x += 1
 		max_cliques = nx.find_cliques(G)

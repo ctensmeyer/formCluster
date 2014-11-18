@@ -590,9 +590,20 @@ class LMatcher(LineMatcher):
 				i -= 2
 				j -= 2
 			else:
+				print "ERROR"
+				self.print_ops(ops)
+				print op
+
+				print "First sequence"
+				for line1 in self.lines1:
+					print line1
+
+				print "Second sequence"
+				for line2 in self.lines2:
+					print line2
+
 				assert False  # NO_MATCH?
 		ops.reverse()
-		#self.print_ops(ops)
 		return ops
 
 	def combine_perfect(self, line1, line2, pos_offset):

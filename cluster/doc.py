@@ -171,12 +171,15 @@ class Document:
 
 	def global_region_sim(self, other):
 		''' returns all similarities as a vector '''
+		self._load_check()
+		other._load_check()
 		return utils.flatten(self._feature_compare_helper(lambda fs1, fs2: fs1.global_region_sim(fs2), other, 'all'))
 
 	def global_region_weights(self):
 		''' returns default weights for all similarities '''
 		#return utils.norm_list(utils.flatten(self._feature_compare_helper(lambda fs1, not_used: [1] + utils.flatten(fs1.region_weights()), self, 'all')))
 		#return utils.norm_list(utils.flatten(map(lambda fs: [1] + utils.flatten(fs.region_weights()), self.feature_sets))) 
+		self._load_check()
 		weights = list()
 		for fs in self.feature_sets:
 			region_weights = fs.region_weights()
@@ -189,6 +192,8 @@ class Document:
 			returns the global sim score for the requested feature.
 			feature='all' causes a vector of all global scores to be returned
 		'''
+		self._load_check()
+		other._load_check()
 		return self._feature_compare_helper(lambda fs1, fs2: fs1.global_sim(fs2), other, feature)
 
 	def region_sim(self, other, feature='all'):
@@ -196,6 +201,8 @@ class Document:
 			returns the region sim scores for the requested feature as a matrix.
 			feature='all' causes a vector of all region scores to be returned
 		'''
+		self._load_check()
+		other._load_check()
 		return self._feature_compare_helper(lambda fs1, fs2: fs1.region_sim(fs2), other, feature)
 
 	def region_weights(self, feature='all'):
@@ -203,6 +210,7 @@ class Document:
 			returns the region weights for the requested feature as a matrix.
 			feature='all' causes a vector of all region weights to be returned
 		'''
+		self._load_check()
 		return self._feature_compare_helper(lambda fs1, not_used: fs1.region_weights(), self, feature)
 
 	def region_sim_weights(self, other, feature='all'):
@@ -210,6 +218,8 @@ class Document:
 			returns the region (sims, weights) for the requested feature as a matrix.
 			feature='all' causes a vector of all region (sims, weights) to be returned
 		'''
+		self._load_check()
+		other._load_check()
 		return self._feature_compare_helper(lambda fs1, fs2: fs1.region_sim_with_weights(fs2), other, feature)
 
 	def _feature_compare_helper(self, fun, other, feature):
@@ -221,9 +231,11 @@ class Document:
 			return fun(feature_set1, feature_set2)
 
 	def get_feature_set(self, name):
+		self._load_check()
 		return self.feature_name_map[name]
 
 	def get_feature_set_names(self):
+		self._load_check()
 		return self.feature_set_names
 
 	def aggregate(self, other):
