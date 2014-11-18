@@ -1,10 +1,10 @@
 
-prefix=wales
-src_dir=../data/lines/1911Wales
+prefix=wash_
+src_dir=../data/current/WashStatePassLists
 
-for N in 40 100 1000
+for N in 20 100 500 1000
 do
-	out_dir=../data/$prefix${N}
+	out_dir=../data/subsets/$prefix${N}
 	rm -rf $out_dir
 	python create_test_data.py $src_dir $N $out_dir
 done
