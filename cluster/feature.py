@@ -181,9 +181,12 @@ class GridLineFeatureSet(LineFeatureSet):
 
 	def draw(self, draw):
 		for line in self.lines:
-			color = HORZ_COLOR if line.is_horizontal() else VERT_COLOR
-			draw.line( (utils.tup_int(line.pos), utils.tup_int( (line.pos[0], line.pos[1] + line.length) )) ,
-						width=int(line.thickness * 2), fill=color)
+			if line.is_horizontal():
+				draw.line( (utils.tup_int(line.pos), utils.tup_int( (line.pos[0] + line.length, line.pos[1]) )) ,
+							width=int(line.thickness * 2), fill=HORZ_COLOR)
+			else:
+				draw.line( (utils.tup_int(line.pos), utils.tup_int( (line.pos[0], line.pos[1] + line.length) )) ,
+							width=int(line.thickness * 2), fill=VERT_COLOR)
 			draw.text( utils.tup_int(line.pos), "%.2f" % line.count, fill=GRID_LINE_COUNT_COLOR)
 
 	def _get_decay(self):
