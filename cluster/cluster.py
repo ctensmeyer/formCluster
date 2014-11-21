@@ -202,8 +202,12 @@ class AnalysingCONFIRM(BaseCONFIRM):
 		pass
 
 class PruningCONFIRM(BaseCONFIRM):
+
+	def __init__(self, docs, min_size, **kwargs):
+		super(PruningCONFIRM, self).__init__(docs, **kwargs)
+		self.min_size = min_size
 	
-	def post_process_clusters(self, min_size=5, **kwargs):
+	def post_process_clusters(self, **kwargs):
 		''' 
 		Prune all clusters of size < minsize
 		:return: list of docs that were members of the pruned clusters
@@ -212,7 +216,7 @@ class PruningCONFIRM(BaseCONFIRM):
 		odd_docs = list()
 		clusters_to_remove = list()
 		for cluster in self.clusters:
-			if len(cluster.members) < min_size:
+			if len(cluster.members) < self.min_size:
 				odd_docs += cluster.members
 				clusters_to_remove.append(cluster)
 		for cluster in clusters_to_remove:
@@ -221,11 +225,11 @@ class PruningCONFIRM(BaseCONFIRM):
 
 class IsolatePruningCONFIRM(PruningCONFIRM):
 	
-	def post_process_clusters(self, min_size=5, **kwargs):
+	def post_process_clusters(self, **kwargs):
 		''' 
 		Take all docs in clusters of size < minsize and stick them in a single isolated cluster
 		'''
-		odd_docs = super(IsolatePruningCONFIRM, self).post_process_clusters(min_size, **kwargs)
+		odd_docs = super(IsolatePruningCONFIRM, self).post_process_clusters(**kwargs)
 		if odd_docs:
 			# make a single cluster of the oddballs
 			odd_cluster = self._add_cluster(odd_docs[0])
@@ -234,12 +238,12 @@ class IsolatePruningCONFIRM(PruningCONFIRM):
 
 class RedistributePruningCONFIRM(PruningCONFIRM):
 	
-	def post_process_clusters(self, min_size=5, **kwargs):
+	def post_process_clusters(self, **kwargs):
 		''' 
 		Take all docs in clusters of size < minsize and assign them to the most similar cluster
 			of size >= minsize
 		'''
-		odd_docs = super(RedistributePruningCONFIRM, self).post_process_clusters(min_size, **kwargs)
+		odd_docs = super(RedistributePruningCONFIRM, self).post_process_clusters(**kwargs)
 		for _doc in odd_docs:
 			cluster = self._most_similar_cluster(_doc)[0]
 			cluster.members.append(_doc)
@@ -502,6 +506,40 @@ class MaxCliqueInitCONFIRM(BaseCONFIRM):
 			self._add_cluster(self.docs[idx], member=False)
 			print idx, self.docs[idx].label
 
+class SupervisedInitCONFIRM(BaseCONFIRM):
+	'''
+	Uses the labels to initialize clusters
+	'''
+
+	def __init__(self, docs, instances_per_cluster=3, **kwargs):
+		super(SupervisedInitCONFIRM, self).__init__(docs, **kwargs)
+		self.instances_per_cluster = instances_per_cluster
+
+	def _init_clusters(self):
+		counter = collections.defaultdict(int)
+		self.used_docs = list()
+		label_to_cluster = dict()
+		for _doc in self.docs:
+			_doc._load_check()
+			label = _doc.label
+			if counter[label] == 0:
+				cluster = self._add_cluster(_doc, member=True)
+				counter[label] += 1
+				self.used_docs.append(_doc)
+				label_to_cluster[label] = cluster
+			elif counter[label] < self.instances_per_cluster:
+				self._add_to_cluster(label_to_cluster[label], _doc)
+				counter[label] += 1
+				self.used_docs.append(_doc)
+		for _doc in self.used_docs:
+			self.docs.remove(_doc)
+		self.num_clustered = len(self.used_docs)
+
+	def post_process_clusters(self):
+		self.docs = self.used_docs + self.docs
+		super(SupervisedInitCONFIRM, self).post_process_clusters()
+		
+
 class MaxClustersCONFIRM(BaseCONFIRM):
 	'''
 	Doesn't create a new cluster after maxK clusters has been reached
@@ -513,7 +551,6 @@ class MaxClustersCONFIRM(BaseCONFIRM):
 
 	def _sufficiently_similar(self, _doc, cluster, sim_score, **kwargs):
 		return sim_score > self.sim_thresh or len(self.clusters) > self.maxK
-		
 
 
 class InfoCONFIRM(BaseCONFIRM):
@@ -521,8 +558,8 @@ class InfoCONFIRM(BaseCONFIRM):
 	def _after_iteration(self, _doc, new_cluster, **kwargs):
 		print
 		print map(lambda x: len(x.members), self.clusters)
-		if hasattr(self, 'global_thresh'):
-			print "Global Thresh:", self.global_thresh
+		if hasattr(self, '_get_global_thresh'):
+			print "Global Thresh:", self._get_global_thresh()
 		if new_cluster:
 			cluster, similarity = self._most_similar_cluster(_doc)
 			print "%d New Cluster Top Sim: %.2f\t%s\t%s" % (self.num_clustered, similarity, _doc.label, _doc._id)
@@ -541,75 +578,161 @@ class InfoCONFIRM(BaseCONFIRM):
 			if hasattr(cluster, 'network'):
 				print "%s\t%s" % (x, " ".join(map(lambda w: "%.3f" % w, cluster.network.weights)))
 			if hasattr(cluster, 'local_thresh'):
-				print "%.2f\t%.2f" % (cluster.local_thresh, self._get_cluster_thresh(cluster))
+				print "%.2f\t%.2f" % (cluster.local_thresh, self._get_interpolated_thresh(cluster))
 		
 
-class AdaptiveThresholdCONFIRM(MaxCliqueInitCONFIRM):
+class InterpolatedThresholdCONFIRM(MaxCliqueInitCONFIRM):
 	'''
-	Each cluster has a similarity threshold that is interpolated with a global threshold
-		based on how many instances are in the cluster
-	The local similarity threshold is computed as 0.9 * the mean of the sim scores added to that cluster
-	The global similarity threshold is computed as 0.9 * the mean of all sim scores
+	This CONFIRM uses an Adaptive threshold that is interpolated between a global
+		threshold and a threshold local to each cluster.  The interpolation coefficient
+		of the global threshold has a half life of $A.
+	The particular global and local thresholds are defined in subclasses.
 	'''
 
-	def __init__(self, docs, A=10, N=10, **kwargs):
-		super(AdaptiveThresholdCONFIRM, self).__init__(docs, **kwargs)
-		#print "AdaptiveThresh __init__()"
+	def __init__(self, docs, A=10, **kwargs):
+		super(InterpolatedThresholdCONFIRM, self).__init__(docs, **kwargs)
 		self.A = A
-		#self.N = N
-		self.sim_sum = 0
-		self.margin_sum = 0
 
-	def _get_cluster_thresh(self, cluster):
+	# performs the interpolation
+	def _get_interpolated_thresh(self, cluster):
 		num = max(1, len(cluster.members))
-		l = 2 ** (- (num - 1) / self.A)
-		return l * self.global_thresh + (1 - l) * cluster.local_thresh
-
-	def _calc_local_thresh(self, cluster):
-		#mean = utils.avg(cluster.recent_sim_scores)
-		#std_dev = utils.stddev(cluster.recent_sim_scores, mean)
-		#cluster.local_thresh = mean - 0.1
-		cluster.local_thresh = (cluster.sim_sum - cluster.margin_sum) / len(cluster.members) 
+		l = 2 ** (- (num - 1) / float(self.A))
+		return l * self._get_global_thresh() + (1 - l) * self._get_cluster_thresh(cluster)
 
 	def _init_clusters(self):
-		super(AdaptiveThresholdCONFIRM, self)._init_clusters()
-		sim_mat = self.get_cluster_sim_mat()
-		for x in xrange(len(sim_mat)):
-			del sim_mat[x][x]
-		#self.global_thresh = max(map(max, sim_mat))
-		self.global_thresh = utils.avg_val_mat(sim_mat)
+		super(InterpolatedThresholdCONFIRM, self)._init_clusters()
+		self._init_global_thresh()
 
 	def _add_cluster(self, _doc, member=True):
-		#print "AT _add_cluster()"
-		cluster = super(AdaptiveThresholdCONFIRM, self)._add_cluster(_doc, member)
+		cluster = super(InterpolatedThresholdCONFIRM, self)._add_cluster(_doc, member)
+		self._init_cluster_thresh(cluster)
+		return cluster
+
+	# this is when updates to thresholds can occur
+	def _add_to_cluster(self, cluster, _doc):
+		super(InterpolatedThresholdCONFIRM, self)._add_to_cluster(cluster, _doc)
+		self._update_cluster_thresh(cluster, _doc)
+		self._update_global_thresh(cluster, _doc)
+
+	def _sufficiently_similar(self, _doc, cluster, sim_score, **kwargs):
+		return sim_score > self._get_interpolated_thresh(cluster)
+	
+	# The following methods must be overwritten
+	def _get_global_thresh(self):
+		pass
+
+	def _get_cluster_thresh(self, cluster):
+		pass
+
+	def _init_global_thresh(self):
+		pass
+
+	def _init_cluster_thresh(self, cluster):
+		pass
+	
+	def _update_cluster_thresh(self, cluster, _doc):
+		pass
+
+	def _update_global_thresh(self, cluster, _doc):
+		pass
+
+class OneNNInitGlobalThresholdCONFIRM(InterpolatedThresholdCONFIRM):
+
+	def __init__(self, docs, initial_thresh_weight=1, **kwargs):
+		super(OneNNInitGlobalThresholdCONFIRM, self).__init__(docs, **kwargs)
+		self.initial_thresh_weight = initial_thresh_weight
+	
+	def _init_global_thresh(self):
+		sub_docs = self.docs[:self.num_instances]
+		sim_mat = utils.pairwise(sub_docs, 
+			lambda x, y: max(self.doc_similarity(x, y), self.doc_similarity(y, x)))
+		for x in xrange(len(sim_mat)):
+			del sim_mat[x][x]
+		self.global_thresh = .7 #utils.avg(map(max, sim_mat))
+		print
+		print "INITIAL GLOBAL THRESH: ", self.global_thresh
+		tmp = utils.flatten(sim_mat)
+		tmp.sort()
+		print map(lambda x: "%.2f" % x, tmp)
+		print map(lambda x: "%.2f" % x, map(max, sim_mat))
+		print
+		self.sim_sum = self.global_thresh * self.initial_thresh_weight
+		self.num_counted = self.initial_thresh_weight
+
+class GlobalMarginThresholdCONFIRM(OneNNInitGlobalThresholdCONFIRM):
+
+	def _init_global_thresh(self):
+		super(GlobalMarginThresholdCONFIRM, self)._init_global_thresh()
+		self.margin_sum = 0
+
+	def _get_global_thresh(self):
+		return self.global_thresh
+	
+	def _update_global_thresh(self, cluster, _doc):
+		sim_score = self._cached_most_similar_val
+		margin = max(map(lambda x: sim_score - x if sim_score != x else 0, self._get_cached_sim_scores(_doc)))
+		self.sim_sum += sim_score
+		self.margin_sum += margin
+		self.num_counted += 1
+		self.global_thresh = (self.sim_sum - self.margin_sum) / self.num_counted
+
+
+class LocalMarginThresholdCONFIRM(InterpolatedThresholdCONFIRM):
+
+	def _init_cluster_thresh(self, cluster):
 		cluster.local_thresh = 0
-		#cluster.recent_sim_scores = list()
 		cluster.sim_sum = 0
 		cluster.margin_sum = 0
-		return cluster
-	
-	def _add_to_cluster(self, cluster, _doc):
-		super(AdaptiveThresholdCONFIRM, self)._add_to_cluster(cluster, _doc)
-		#print "AT _add_to_cluster()"
-		#cluster.recent_sim_scores.append(self._cached_most_similar_val)
-		#if len(cluster.recent_sim_scores) > self.N:
-		#	cluster.recent_sim_scores.pop(0)
-		#print "Updating thresholds"
+
+	def _get_cluster_thresh(self, cluster):
+		return cluster.local_thresh
+
+	def _update_cluster_thresh(self, cluster, _doc):
 		sim_score = self._cached_most_similar_val
 		margin = max(map(lambda x: sim_score - x if sim_score != x else 0, self._get_cached_sim_scores(_doc)))
 		cluster.sim_sum += sim_score
 		cluster.margin_sum += margin
-		self._calc_local_thresh(cluster)
-		self._set_global_thresh(sim_score, margin)
+		cluster.local_thresh = (cluster.sim_sum - cluster.margin_sum) / len(cluster.members) 
 
-	def _set_global_thresh(self, sim_score, margin):
+class MarginThresholdCONFIRM(LocalMarginThresholdCONFIRM, GlobalMarginThresholdCONFIRM):
+	pass
+
+class GlobalSimMultThresholdCONFIRM(OneNNInitGlobalThresholdCONFIRM):
+
+	def __init__(self, docs, global_thresh_mult=0.9, **kwargs):
+		super(GlobalSimMultThresholdCONFIRM, self).__init__(docs, **kwargs)
+		self.global_thresh_mult = global_thresh_mult
+	
+	def _get_global_thresh(self):
+		return self.global_thresh
+	
+	def _update_global_thresh(self, cluster, _doc):
+		sim_score = self._cached_most_similar_val
 		self.sim_sum += sim_score
-		self.margin_sum += margin
-		self.global_thresh = (self.sim_sum - self.margin_sum) / (self.num_clustered + 1)
+		self.num_counted += 1
+		self.global_thresh = self.global_thresh_mult * self.sim_sum / self.num_counted
 
-	def _sufficiently_similar(self, _doc, cluster, sim_score, **kwargs):
-		#print "AT _sufficiently_similar()"
-		return sim_score > self._get_cluster_thresh(cluster)
+class LocalSimMultThresholdCONFIRM(InterpolatedThresholdCONFIRM):
+	
+	def __init__(self, docs, local_thresh_mult=0.9, **kwargs):
+		super(LocalSimMultThresholdCONFIRM, self).__init__(docs, **kwargs)
+		self.local_thresh_mult = local_thresh_mult
+
+	def _init_cluster_thresh(self, cluster):
+		cluster.local_thresh = 0
+		cluster.sim_sum = 0
+
+	def _get_cluster_thresh(self, cluster):
+		return cluster.local_thresh
+
+	def _update_cluster_thresh(self, cluster, _doc):
+		sim_score = self._cached_most_similar_val
+		cluster.sim_sum += sim_score
+		cluster.local_thresh = self.local_thresh_mult * cluster.sim_sum / len(cluster.members) 
+
+class SimMultThresholdCONFIRM(GlobalSimMultThresholdCONFIRM, LocalSimMultThresholdCONFIRM):
+	pass
+
 
 class FastCONFIRM(BaseCONFIRM):
 	'''
@@ -739,7 +862,7 @@ class RegionWeightedTestCONFIRM(RegionWeightedCONFIRM, TestCONFIRM):
 class WavgNetTestCONFIRM(WavgNetCONFIRM, TestCONFIRM):
 	pass
 
-class BestCONFIRM(AdaptiveThresholdCONFIRM, WavgNetCONFIRM, MaxCliqueInitCONFIRM, RedistributePruningCONFIRM, 
+class BestCONFIRM(WavgNetCONFIRM, SimMultThresholdCONFIRM, RedistributePruningCONFIRM, 
 				MaxClustersCONFIRM, InfoCONFIRM, TwoPassCONFIRM):
 	pass
 
