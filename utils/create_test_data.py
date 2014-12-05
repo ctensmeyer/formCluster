@@ -1,8 +1,11 @@
 
+# Does the actual work in creating subsets of data.  See subsets.sh
+
 import shutil
 import random
 import sys
 import os
+
 
 
 
