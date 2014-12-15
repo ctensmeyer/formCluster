@@ -18,7 +18,7 @@ class KnownClusterAnalyzer:
 		self.clusters = confirm.get_clusters()
 		self.preprocess_clusters()
 
-		self.docs = confirm.get_docs()
+		self.docs = utils.flatten(map(lambda cluster: cluster.members, self.clusters))
 		self.all_labels = self.get_all_labels()
 		self.num_docs = len(self.docs)
 
@@ -42,7 +42,7 @@ class KnownClusterAnalyzer:
 
 	def draw_centers(self):
 		# make the appropriate directory
-		dir_name = os.path.join(_output_dir, str(datetime.datetime.now()).replace(' ', '_'))
+		dir_name = os.path.join(_output_dir, str(datetime.datetime.now()).replace(' ', '_') + "_".join(sys.argv[1:]))
 		try:
 			os.mkdir(dir_name)
 		except:
@@ -105,8 +105,8 @@ class KnownClusterAnalyzer:
 		self.print_label_conf_mat()
 		self.print_label_cluster_mat()
 		self.print_cluster_cohesion()
-		self.print_doc_cluster_sim_mat()
-		self.print_cluster_mismatches()
+		#self.print_doc_cluster_sim_mat()
+		#self.print_cluster_mismatches()
 		self.print_feature_eval()
 		self.print_cluster_separation()
 		self.print_region_info()

@@ -1,0 +1,80 @@
+# Label substitution file, to fix mislabeled instances
+
+# 1911Wales
+UK1911Census_EnglandWales_Household100Names_08_01 UK1911Census_EnglandWales_Household40Names_07_01
+
+
+# PADeaths
+FormTypeDate_1-5-07 Type1
+FormTypeDate_1-16-08 Type1
+FormTypeDate_2-14-0 Type1
+FormTypeDate_2-14-08 Type1
+FormTypeDate_3-26-09 Type1
+FormTypeDate_4-5-07 Type1
+FormTypeDate_5-16-07 Type1
+FormTypeDate_7-6-08 Type1
+FormTypeDate_8-10-08 Type1
+FormTypeDate_8-20-07 Type1
+FormTypeDate_8-25-08 Type1
+FormTypeDate_9-22-09 Type1
+FormTypeDate_10-21-07 Type1
+FormTypeDate_11-24-08 Type1
+
+FormTypeDate_1-7-13 Type2
+FormTypeDate_1-8-14 Type2
+FormTypeDate_1-12-10 Type2
+FormTypeDate_1-15-12 Type2
+FormTypeDate_1-15-13 Type2
+FormTypeDate_1-15-15 Type2
+FormTypeDate_1-20-16 Type2
+FormTypeDate_2-6-14 Type2
+FormTypeDate_2-15-18 Type2
+FormTypeDate_2-18-18 Type2
+FormTypeDate_2-23-11 Type2
+FormTypeDate_3-11-21 Type2
+FormTypeDate_3-19-19 Type2
+FormTypeDate_3-28-13 Type2
+FormTypeDate_4-12-12 Type2
+FormTypeDate_4-23-19 Type2
+FormTypeDate_4-25-11 Type2
+FormTypeDate_5-20-10 Type2
+FormTypeDate_6-20-10 Type2
+FormTypeDate_6-22-11 Type2
+FormTypeDate_9-5-12 Type2
+FormTypeDate_9-12-10 Type2
+FormTypeDate_10-2-13 Type2
+FormTypeDate_10-26-09 Type2
+FormTypeDate_12-16-10 Type2
+
+# The following block may be considered as Type2 also
+FormTypeDate_3-24-15 Type6
+FormTypeDate_3-24-22 Type6
+FormTypeDate_3-30-21 Type6
+FormTypeDate_4-6-20 Type6
+FormTypeDate_4-16-17 Type6
+FormTypeDate_4-27-14 Type6
+FormTypeDate_5-1-14 Type6
+FormTypeDate_5-17-25 Type6
+FormTypeDate_5-20-11 Type6
+FormTypeDate_7-17-15 Type6
+FormTypeDate_7-17-16 Type6
+FormTypeDate_7-18-17 Type6
+FormTypeDate_7-30-20 Type6
+FormTypeDate_8-5-22 Type6
+FormTypeDate_9-1-14 Type6
+FormTypeDate_10-14-1 Type6
+FormTypeDate_10-14-18 Type6
+FormTypeDate_10-26-16 Type6
+FormTypeDate_11-20-13 Type6
+FormTypeDate_12-10-13 Type6
+
+FormTypeDate_1-11-23 Type3
+
+FormTypeDate_2-16-15 Type4
+FormTypeDate_4-25-14 Type4
+FormTypeDate_6-28-18 Type4
+FormTypeDate_7-31-16 Type4
+
+FormTypeDate_2-20-17 Type5
+
+

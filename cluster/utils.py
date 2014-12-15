@@ -8,6 +8,7 @@ import collections
 import Levenshtein
 import cPickle
 import networkx as nx
+import numpy
 
 colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255),
 			 (255, 255, 0), (255, 0, 255), (0, 255, 255),
@@ -155,7 +156,7 @@ def harmonic_mean_list(l):
 
 
 def avg(l):
-	return float(sum(l)) / len(l) if len(l) else float('nan')
+	return float((sum(l)) / len(l)) if len(l) else float('nan')
 
 
 def wavg(l, w):
@@ -171,6 +172,9 @@ def stddev(l, mean=None):
 		mean = avg(l)
 	var = sum(map(lambda x: (x - mean) ** 2, l)) / len(l)
 	return math.sqrt(var)
+
+def median(l):
+	return numpy.median(numpy.array(l))
 	
 
 def levenstein(i, j, s, t):

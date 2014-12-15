@@ -6,8 +6,9 @@ import time
 import sys
 import os
 
-import metric
+import ncluster
 import cluster
+import metric
 import utils
 import lines
 import doc
@@ -53,6 +54,39 @@ def get_data_dir(descrip):
 	if descrip.startswith("wash_20"):
 		return "../data/subsets/wash_20"
 
+	if descrip.startswith("nist_all"):
+		return "../data/current/NIST"
+	if descrip.startswith("nist_1000"):
+		return "../data/subsets/nist_1000"
+	if descrip.startswith("nist_500"):
+		return "../data/subsets/nist_500"
+	if descrip.startswith("nist_100"):
+		return "../data/subsets/nist_100"
+	if descrip.startswith("nist_20"):
+		return "../data/subsets/nist_20"
+
+	if descrip.startswith("padeaths_all"):
+		return "../data/current/PADeaths"
+	if descrip.startswith("padeaths_1000"):
+		return "../data/subsets/padeaths_1000"
+	if descrip.startswith("padeaths_500"):
+		return "../data/subsets/padeaths_500"
+	if descrip.startswith("padeaths_100"):
+		return "../data/subsets/padeaths_100"
+	if descrip.startswith("padeaths_20"):
+		return "../data/subsets/padeaths_20"
+
+	if descrip.startswith("england_all"):
+		return "../data/current/1911England"
+	if descrip.startswith("england_1000"):
+		return "../data/subsets/england_1000"
+	if descrip.startswith("england_500"):
+		return "../data/subsets/england_500"
+	if descrip.startswith("england_100"):
+		return "../data/subsets/england_100"
+	if descrip.startswith("england_20"):
+		return "../data/subsets/england_20"
+
 def get_confirm(descrip):
 	if descrip == "base":
 		return cluster.BaseTestCONFIRM
@@ -75,23 +109,56 @@ def get_confirm(descrip):
 	if descrip == "perfect_wavg":
 		return cluster.PerfectWavgNetCONFIRM
 
+	if descrip == "kumar":
+		return ncluster.BestKumarCONFIRM
+
+	if descrip == "pipeline":
+		return ncluster.PipelineCONFIRM
+
 def cluster_known():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
 	random.seed(12345)
 	random.shuffle(docs)
 	sim_thresh = float(sys.argv[3])
-	#confirm = cluster.BaseCONFIRM(docs, sim_thresh)
-	#confirm = cluster.AdaptiveThresholdCONFIRM(docs, num_clust=5, num_instances=15, sim_thresh=sim_thresh)
-	#confirm = cluster.BestCONFIRM(docs, lr=0.02, min_size=5, sim_thresh=sim_thresh)
-	#confirm = cluster.TestCONFIRM(docs, min_membership=2, lr=0.02, min_size=2, sim_thresh=sim_thresh, num_clust=2, maxK=4)
+
 	factory = get_confirm(sys.argv[4])
-	confirm = factory(docs, min_membership=2, lr=0.02, min_size=2, sim_thresh=sim_thresh, num_clust=2, maxK=4)
+	confirm = factory(docs, 
+		sim_thresh=sim_thresh,  	# BaseCONFIRM
+		num_instances=3, 			# InitCONFIRMs, how many instances to examine to find $num_clust clusters
+		num_clust=2,  				# MaxCliqueCONFIRM, how many clusters try for
+		lr=0.02,  					# learning rate WavgNet
+		instances_per_cluster=10,  	# SupervisedInitCONFIRM, how many labeled instances start a cluster
+		min_size=2, 				# PruningCONFIRM, clusters under this size get pruned
+		maxK=4, 					# MaxClustersCONFIRM, max on created clusters (doesn't work)
+
+		num_initial_seeds=80, 		# KumarCONFIRM, how many seeds to start with
+		iterations=3,				# KumarCONFIRM, how many iterations to perform
+		num_seeds=80,               # KumarCONFIRM, how many seeds to get each iteration
+		cluster_range=(2,20),		# KumarCONFIRM, how many clusters to search over
+
+		seeds_per_batch=2,  		# MaxCliqueSeedsKumarCONFIRM, how many seeds to get per batch
+		batch_size=10,  			# MaxCliqueSeedsKumarCONFIRM, how many batches
+		num_per_seed=10,  			# SemiSupervisedKumarCONFIRM, how many docs/label to make seeds
+
+		init_subset=8000,			# PipelineCONFIRM, how many docs to initialize
+		min_membership=5, 			# PipelineCONFIRM, how many docs a cluster must have after initialization
+		z_threshold=-20,			# PipelineCONFIRM, the reject threshold for the greedy pass
+		use_labels=True,			# PipelineCONFIRM, Skips kumarconfirm init and uses the labels
+		)
+
 	confirm.cluster()
 	print
 	print
-	analyzer = metric.KnownClusterAnalyzer(confirm)
-	analyzer.draw_centers()
-	analyzer.print_all()
+
+	if hasattr(confirm, 'print_reject_analysis'):
+		confirm.print_reject_analysis()
+
+	if hasattr(confirm, 'print_analysis'):
+		confirm.print_analysis()
+	else:
+		analyzer = metric.KnownClusterAnalyzer(confirm)
+		analyzer.draw_centers()
+		analyzer.print_all()
 
 def check_init():
 	docs = doc.get_docs_nested(get_data_dir("test"))
@@ -131,11 +198,18 @@ def compare_true_templates():
 	#confirm = cluster.PerfectCONFIRM(docs)
 	confirm = cluster.BestPerfectCONFIRM(docs, lr=0.05)
 	confirm.cluster()
+	analyzer = metric.KnownClusterAnalyzer(confirm)
+	analyzer.print_all()
+	analyzer.draw_centers()
+	analyzer.clusters[0].center.push_away(analyzer.clusters[1].center)
+	print "PUSHING APART!"
 	print
 	print
 	analyzer = metric.KnownClusterAnalyzer(confirm)
 	analyzer.draw_centers()
 	analyzer.print_all()
+	print
+	print
 
 def aggreage_same():
 	docs = doc.get_docs(aggregate_dir)[0]

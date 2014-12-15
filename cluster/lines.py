@@ -585,8 +585,8 @@ class LMatcher(LineMatcher):
 				i -= 1
 				j -= 1
 			elif op == self.TRANSPOSE:
-				ops.append( (self.TRANSPOSE, self.lines1[i-1], self.lines2[j-2], (self.cost_mat[i][j] - self.cost_mat[i-2][j-2]) / 2.0) )
 				ops.append( (self.TRANSPOSE, self.lines1[i-2], self.lines2[j-1], (self.cost_mat[i][j] - self.cost_mat[i-2][j-2]) / 2.0) )
+				ops.append( (self.TRANSPOSE, self.lines1[i-1], self.lines2[j-2], (self.cost_mat[i][j] - self.cost_mat[i-2][j-2]) / 2.0) )
 				i -= 2
 				j -= 2
 			else:
@@ -851,6 +851,33 @@ class LMatcher(LineMatcher):
 			merged_lines.append(line)
 		sort_lines(merged_lines)
 		return merged_lines
+
+	def get_match_vector(self):
+		ops = self.get_operations()
+		vector = list()
+		for op_tup in ops:
+			op = op_tup[0]
+			if op == self.PERFECT or op == self.TRANSPOSE:
+				vector.append(1)
+
+			elif op in [self.DEL1, self.COFRAG]:
+				vector.append(0)
+
+			elif op == self.DEL2:
+				pass
+
+			elif op == self.CONNECT2:
+				vector.append( 1 -  (op_tup[4] / 2) / float(self.indel_cost(op_tup[2])))
+				vector.append( 1 -  (op_tup[4] / 2) / float(self.indel_cost(op_tup[3])))
+
+			elif op in [self.CONNECT1, self.CONTAINS1, self.CONTAINS2, self.OVERLAP]:
+				vector.append(1 - op_tup[-1] / float(self.indel_cost(op_tup[1])))
+
+			else:
+				assert False
+
+		assert len(vector) == len(self.lines1)
+		return vector
 
 	def print_ops(self, ops):
 		'''

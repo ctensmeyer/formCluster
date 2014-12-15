@@ -348,10 +348,35 @@ class TextLineMatcher:
 				merged_list.append(line)
 		return merged_list
 
+	def push_away(self, perc):
+		'''
+		Modifies both sequences.  
+		If everything matches, they can't get pushed apart
+		'''
+		matches = self.get_matches()
+		self._push_away_helper(self.lines1, perc)
+		self._push_away_helper(self.lines2, perc)
 
+	def _push_away_helper(self, lines, perc):
+		matched_weight = 0
+		unmatched_weight = 0
+		for line in lines:
+			if line.matched:
+				matched_weight += line.match_value()
+			else:
+				unmatched_weight += line.match_value()
+		if unmatched_weight == 0:
+			# cannot push apart because everything matched
+			return
+		redistribute_weight = matched_weight * perc
+		for line in lines:
+			if line.matched:
+				line.count *= (1 - perc)
+			else:
+				# rich get richer scheme
+				line.count += redistribute_weight * line.match_value() / unmatched_weight
 
-
-
-
-
+	def get_match_vector(self):
+		self.get_matches()
+		return map(lambda line: 1 if line.matched else 0, self.lines1)
 

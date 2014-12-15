@@ -426,8 +426,6 @@ class CompetitiveWavgNetCONFIRM(WavgNetCONFIRM):
 	'''
 	def _add_to_cluster(self, cluster, _doc):
 		super(WavgNetCONFIRM, self)._add_to_cluster(cluster, _doc)
-		sim_vec = cluster.center.similarity_vector(_doc)
-		cluster.network.learn(sim_vec, 1)
 
 		# competitive stage
 		similarities = self._cluster_sim_scores(_doc)
@@ -440,6 +438,17 @@ class CompetitiveWavgNetCONFIRM(WavgNetCONFIRM):
 			sim_vec2 = self.clusters[idx2].center.similarity_vector(_doc)
 			self.clusters[idx2].network.learn(sim_vec2, 0.2)
 		
+
+class PushAwayCONFIRM(BaseCONFIRM):
+	
+	def _add_to_cluster(self, cluster, _doc):
+		super(PushAwayCONFIRM, self)._add_to_cluster(cluster, _doc)
+
+		sim_score = self._cached_most_similar_val
+		margins = map(lambda x: sim_score - x if sim_score != x else 0, self._get_cached_sim_scores(_doc))
+		most_similar_cluster = self.clusters[utils.argmax(margins)]
+		cluster.center.push_away(most_similar_cluster.center)
+
 
 class PerfectCompetitiveWavgCONFIRM(CompetitiveWavgNetCONFIRM, PerfectCONFIRM):
 	pass
@@ -490,6 +499,7 @@ class MaxCliqueInitCONFIRM(BaseCONFIRM):
 		self.num_instances = num_instances
 
 	def _init_clusters(self):
+		super(MaxCliqueInitCONFIRM, self)._init_clusters()
 		sub_docs = self.docs[:self.num_instances]
 		sim_mat = utils.pairwise(sub_docs, 
 			lambda x, y: max(self.doc_similarity(x, y), self.doc_similarity(y, x)))
@@ -516,6 +526,7 @@ class SupervisedInitCONFIRM(BaseCONFIRM):
 		self.instances_per_cluster = instances_per_cluster
 
 	def _init_clusters(self):
+		super(SupervisedInitCONFIRM, self)._init_clusters()
 		counter = collections.defaultdict(int)
 		self.used_docs = list()
 		label_to_cluster = dict()
@@ -581,7 +592,7 @@ class InfoCONFIRM(BaseCONFIRM):
 				print "%.2f\t%.2f" % (cluster.local_thresh, self._get_interpolated_thresh(cluster))
 		
 
-class InterpolatedThresholdCONFIRM(MaxCliqueInitCONFIRM):
+class InterpolatedThresholdCONFIRM(BaseCONFIRM):
 	'''
 	This CONFIRM uses an Adaptive threshold that is interpolated between a global
 		threshold and a threshold local to each cluster.  The interpolation coefficient
@@ -643,7 +654,7 @@ class OneNNInitGlobalThresholdCONFIRM(InterpolatedThresholdCONFIRM):
 		self.initial_thresh_weight = initial_thresh_weight
 	
 	def _init_global_thresh(self):
-		sub_docs = self.docs[:self.num_instances]
+		sub_docs = self.docs[:20]
 		sim_mat = utils.pairwise(sub_docs, 
 			lambda x, y: max(self.doc_similarity(x, y), self.doc_similarity(y, x)))
 		for x in xrange(len(sim_mat)):
@@ -707,7 +718,11 @@ class GlobalSimMultThresholdCONFIRM(OneNNInitGlobalThresholdCONFIRM):
 		return self.global_thresh
 	
 	def _update_global_thresh(self, cluster, _doc):
-		sim_score = self._cached_most_similar_val
+		if hasattr(self, '_cached_most_similar_val'):
+			sim_score = self._cached_most_similar_val
+		else:
+			sim_score = self.cluster_doc_similarity(cluster, _doc)
+			self._cached_most_similar_val = sim_score
 		self.sim_sum += sim_score
 		self.num_counted += 1
 		self.global_thresh = self.global_thresh_mult * self.sim_sum / self.num_counted
@@ -726,7 +741,11 @@ class LocalSimMultThresholdCONFIRM(InterpolatedThresholdCONFIRM):
 		return cluster.local_thresh
 
 	def _update_cluster_thresh(self, cluster, _doc):
-		sim_score = self._cached_most_similar_val
+		if hasattr(self, '_cached_most_similar_val'):
+			sim_score = self._cached_most_similar_val
+		else:
+			sim_score = self.cluster_doc_similarity(cluster, _doc)
+			self._cached_most_similar_val = sim_score
 		cluster.sim_sum += sim_score
 		cluster.local_thresh = self.local_thresh_mult * cluster.sim_sum / len(cluster.members) 
 
@@ -862,8 +881,7 @@ class RegionWeightedTestCONFIRM(RegionWeightedCONFIRM, TestCONFIRM):
 class WavgNetTestCONFIRM(WavgNetCONFIRM, TestCONFIRM):
 	pass
 
-class BestCONFIRM(WavgNetCONFIRM, SimMultThresholdCONFIRM, RedistributePruningCONFIRM, 
-				MaxClustersCONFIRM, InfoCONFIRM, TwoPassCONFIRM):
+class BestCONFIRM(PushAwayCONFIRM, TestCONFIRM):
 	pass
 
 class BestPerfectCONFIRM(PerfectCONFIRM):

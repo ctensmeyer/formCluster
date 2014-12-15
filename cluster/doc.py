@@ -3,9 +3,12 @@ import Image
 import ImageDraw
 import utils
 import os
+import string
+import random
 
 import components
 import feature
+import label
 from constants import *
 
 
@@ -89,9 +92,11 @@ class Document:
 		if not LOAD_DOC_LAZY and self.source_file:
 			self.load()
 	
-	def copy(self, new_id):
+	def copy(self, new_id=None):
 		''' Make a deep copy of a document with a new_id '''
 		self._load_check()
+		if new_id is None:
+			new_id = ''.join(random.choice(string.digits) for i in range(10))
 		cpy = Document(new_id)
 		cpy.loaded = True  # makes sure we never load data from files
 
@@ -110,56 +115,60 @@ class Document:
 			self.load()
 
 	def load(self):
-		f = open(self.source_file, 'r')
+		try:
+			f = open(self.source_file, 'r')
 
-		# forgot to get the basename in the file in extraction script
-		self._id = os.path.basename(f.readline().strip())
+			# forgot to get the basename in the file in extraction script
+			self._id = os.path.basename(f.readline().strip())
 
-		self.label = f.readline().strip()
+			self.label = label.preprocess_label(f.readline().strip())
 
-		size_line = f.readline().strip()
-		tokens = size_line.split()
-		self.size = ( int(tokens[0]), int(tokens[1]) )
+			size_line = f.readline().strip()
+			tokens = size_line.split()
+			self.size = ( int(tokens[0]), int(tokens[1]) )
 
-		assert f.readline().strip() == ""
+			assert f.readline().strip() == ""
 
-		if USE_TEXT:
-			feature_set = feature.TextLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, f)
-			self.feature_sets.append(feature_set)
-			name = feature_set.name()
-			self.feature_set_names.append(name)
-			self.feature_name_map[name] = feature_set
-		else:
-			utils.advance_to_blank(f)
+			if USE_TEXT:
+				feature_set = feature.TextLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, f)
+				self.feature_sets.append(feature_set)
+				name = feature_set.name()
+				self.feature_set_names.append(name)
+				self.feature_name_map[name] = feature_set
+			else:
+				utils.advance_to_blank(f)
 
-		if USE_HORZ:
-			feature_set = feature.GridLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, components.Line.HORIZONTAL, f)
-			self.feature_sets.append(feature_set)
-			name = feature_set.name()
-			self.feature_set_names.append(name)
-			self.feature_name_map[name] = feature_set
-		else:
-			utils.advance_to_blank(f)
+			if USE_HORZ:
+				feature_set = feature.GridLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, components.Line.HORIZONTAL, f)
+				self.feature_sets.append(feature_set)
+				name = feature_set.name()
+				self.feature_set_names.append(name)
+				self.feature_name_map[name] = feature_set
+			else:
+				utils.advance_to_blank(f)
 
-		if USE_VERT:
-			feature_set = feature.GridLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, components.Line.VERTICAL, f)
-			self.feature_sets.append(feature_set)
-			name = feature_set.name()
-			self.feature_set_names.append(name)
-			self.feature_name_map[name] = feature_set
-		else:
-			utils.advance_to_blank(f)
+			if USE_VERT:
+				feature_set = feature.GridLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, components.Line.VERTICAL, f)
+				self.feature_sets.append(feature_set)
+				name = feature_set.name()
+				self.feature_set_names.append(name)
+				self.feature_name_map[name] = feature_set
+			else:
+				utils.advance_to_blank(f)
 
-		if USE_SURF:
-			feature_set = feature.SurfFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, f)
-			self.feature_sets.append(feature_set)
-			name = feature_set.name()
-			self.feature_set_names.append(name)
-			self.feature_name_map[name] = feature_set
-		else:
-			utils.advance_to_blank(f)
+			if USE_SURF:
+				feature_set = feature.SurfFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, f)
+				self.feature_sets.append(feature_set)
+				name = feature_set.name()
+				self.feature_set_names.append(name)
+				self.feature_name_map[name] = feature_set
+			else:
+				utils.advance_to_blank(f)
 
-		self.loaded = True
+			self.loaded = True
+		except:
+			print "Problem loading: ", self.source_file
+			exit()
 
 	def display(self):
 		print "Doc: %s\tsize: %s" % (self._id, self.size)
@@ -268,6 +277,22 @@ class Document:
 		for feature_set in self.feature_sets:
 			feature_set.prune_final()
 
+	def push_away(self, other):
+		'''
+		Makes two documents less similar to each other
+		'''
+		self._load_check()
+		other._load_check()
+		for feature_set1, feature_set2 in zip(self.feature_sets, other.feature_sets):
+			feature_set1.push_away(feature_set2)
+
+	def match_vector(self, other):
+		self._load_check()
+		other._load_check()
+		vectors = list()
+		for feature_set1, feature_set2 in zip(self.feature_sets, other.feature_sets):
+			vectors.append(feature_set1.match_vector(feature_set2))
+		return utils.flatten(vectors)
 
 	def draw(self, colortext=False):
 		'''

@@ -51,6 +51,12 @@ class FeatureSet(object):
 	def aggregate(self, other):
 		pass
 
+	def push_away(self, other):
+		pass
+
+	def match_vector(self, other):
+		pass
+
 
 class LineFeatureSet(FeatureSet):
 	
@@ -101,6 +107,11 @@ class LineFeatureSet(FeatureSet):
 	def aggregate(self, other):
 		matcher = self._get_matcher(other)
 		self.lines = matcher.merge()
+
+	def match_vector(self, other):
+		matcher = self._get_matcher(other)
+		return matcher.get_match_vector()
+
 		
 class TextLineFeatureSet(LineFeatureSet):
 	
@@ -143,7 +154,12 @@ class TextLineFeatureSet(LineFeatureSet):
 
 	def _get_decay(self):
 		return TEXT_DECAY 
-		
+
+	def push_away(self, other):
+		matcher = self._get_matcher(other)
+		matcher.push_away(PUSH_AWAY_PERC)
+
+
 class GridLineFeatureSet(LineFeatureSet):
 
 	def __init__(self, width, height, rows, cols, orien, f=None):
