@@ -30,7 +30,7 @@ _min_surf_features = 5000
 _codebook_size = 300
 _perc_docs_for_codebook = 0.05
 _max_surf_features = _codebook_size * 100
-_H_partitions = 3
+_H_partitions = 4
 _V_partitions = 4
 _use_k_medoids = True
 _max_k_medoids_iters = 30
@@ -51,7 +51,7 @@ _surf_instance_low = cv2.SURF(_surf_threshold_low)
 _surf_instance_low.upright = _surf_upright
 _surf_instance_low.extended = _surf_extended
 
-_number_of_clusters = 5
+_number_of_clusters = 80
 
 _print_interval = 20
 
@@ -102,6 +102,8 @@ class Instance:
 			#print len(self.pts)
 			#print self.deses.base is deses
 			del deses
+			del im
+			del kps
 
 	def calc_features(self, codebook):
 		# the most fine grained partitions
@@ -197,15 +199,15 @@ def load_instances(in_dir):
 
 	instances = list()
 	for sdir in os.listdir(in_dir):
-		if sdir not in ["UK1911Census_EnglandWales_Household15Names_03_01",
-						"UK1911Census_EnglandWales_Household15Names_06_01"]:
-			continue
+		#if sdir not in ["UK1911Census_EnglandWales_Household15Names_03_01",
+		#				"UK1911Census_EnglandWales_Household15Names_06_01"]:
+		#	continue
 		rdir = os.path.join(in_dir, sdir)
 		for im_file in os.listdir(rdir):
 			if im_file.endswith(_image_ext):
 				label = sdir
-				if label == "UK1911Census_EnglandWales_Household100Names_08_01":
-					label = "UK1911Census_EnglandWales_Household40Names_07_01"
+				#if label == "UK1911Census_EnglandWales_Household100Names_08_01":
+				#	label = "UK1911Census_EnglandWales_Household40Names_07_01"
 				instances.append(Instance(os.path.join(rdir, im_file), label))
 	random.shuffle(instances)
 
