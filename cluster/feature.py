@@ -112,6 +112,10 @@ class LineFeatureSet(FeatureSet):
 		matcher = self._get_matcher(other)
 		return matcher.get_match_vector()
 
+	def push_away(self, other):
+		matcher = self._get_matcher(other)
+		matcher.push_away(PUSH_AWAY_PERC)
+
 		
 class TextLineFeatureSet(LineFeatureSet):
 	
@@ -155,9 +159,6 @@ class TextLineFeatureSet(LineFeatureSet):
 	def _get_decay(self):
 		return TEXT_DECAY 
 
-	def push_away(self, other):
-		matcher = self._get_matcher(other)
-		matcher.push_away(PUSH_AWAY_PERC)
 
 
 class GridLineFeatureSet(LineFeatureSet):

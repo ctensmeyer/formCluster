@@ -879,6 +879,100 @@ class LMatcher(LineMatcher):
 		assert len(vector) == len(self.lines1)
 		return vector
 
+	def push_away(self, perc):
+		'''
+		Modifies both sequences.  
+		If everything matches, they can't get pushed apart
+		'''
+		ops = self.get_operations()
+		matched_weight1 = 0
+		unmatched_weight1 = 0
+		matched_weight2 = 0
+		unmatched_weight2 = 0
+		for op_tup in ops:
+			op = op_tup[0]
+			op_cost = op_tup[-1]
+			del_cost = float(sum(map(lambda line: self.indel_cost(line), op_tup[1:-1])))
+			match_perc = 1 - (op_cost / del_cost)
+
+			seq1_lines = list()
+			seq2_lines = list()
+			if op in [self.PERFECT, self.TRANSPOSE, self.CONTAINS1, self.CONTAINS2, self.OVERLAP, self.COFRAG]:
+				seq1_lines.append(op_tup[1])
+				seq2_lines.append(op_tup[2])
+			elif op == self.DEL1:
+				seq1_lines.append(op_tup[1])
+			elif op == self.DEL2:
+				seq2_lines.append(op_tup[1])
+			elif op == self.CONNECT1:
+				seq1_lines.append(op_tup[1])
+				seq2_lines.append(op_tup[2])
+				seq2_lines.append(op_tup[3])
+			elif op == self.CONNECT2:
+				seq2_lines.append(op_tup[1])
+				seq1_lines.append(op_tup[2])
+				seq1_lines.append(op_tup[3])
+
+			for line1 in seq1_lines:
+				line1_weight = self.indel_cost(line1)
+				matched_weight1 += line1_weight * match_perc
+				unmatched_weight1 += line1_weight * (1 - match_perc)
+			for line2 in seq2_lines:
+				line2_weight = self.indel_cost(line2)
+				matched_weight2 += line2_weight * match_perc
+				unmatched_weight2 += line2_weight * (1 - match_perc)
+
+		total_weight1 = matched_weight1 + unmatched_weight1
+		total_weight2 = matched_weight2 + unmatched_weight2
+		redistribute_weight1 = matched_weight1 * perc
+		redistribute_weight2 = matched_weight2 * perc
+
+		print "\nTotal Weight1: %.2f" % total_weight1
+		print "\tMatched Weight1: %.2f" % matched_weight1
+		print "\tUnMatched Weight1: %.2f" % unmatched_weight1
+		print "\tRedistributed Weight1: %.2f" % redistribute_weight1
+
+		print "\nTotal Weight2: %.2f" % total_weight2
+		print "\tMatched Weight2: %.2f" % matched_weight2
+		print "\tUnMatched Weight2: %.2f" % unmatched_weight2
+		print "\tRedistributed Weight2: %.2f\n" % redistribute_weight2
+
+		for op_tup in ops:
+			op = op_tup[0]
+			op_cost = op_tup[-1]
+			del_cost = float(sum(map(lambda line: self.indel_cost(line), op_tup[1:-1])))
+			match_perc = 1 - (op_cost / del_cost)
+
+			seq1_lines = list()
+			seq2_lines = list()
+			if op in [self.PERFECT, self.TRANSPOSE, self.CONTAINS1, self.CONTAINS2, self.OVERLAP, self.COFRAG]:
+				seq1_lines.append(op_tup[1])
+				seq2_lines.append(op_tup[2])
+			elif op == self.DEL1:
+				seq1_lines.append(op_tup[1])
+			elif op == self.DEL2:
+				seq2_lines.append(op_tup[1])
+			elif op == self.CONNECT1:
+				seq1_lines.append(op_tup[1])
+				seq2_lines.append(op_tup[2])
+				seq2_lines.append(op_tup[3])
+			elif op == self.CONNECT2:
+				seq2_lines.append(op_tup[1])
+				seq1_lines.append(op_tup[2])
+				seq1_lines.append(op_tup[3])
+
+			for line1 in seq1_lines:
+				match_diff = line1.count * match_perc * perc
+				unmatch_diff = (1 - match_perc) * redistribute_weight1 / unmatched_weight1
+				line1.count -= match_diff
+				line1.count += unmatch_diff
+			for line2 in seq2_lines:
+				match_diff = line2.count * match_perc * perc
+				unmatch_diff = (1 - match_perc) * redistribute_weight2 / unmatched_weight2
+				line2.count -= match_diff
+				line2.count += unmatch_diff
+
+
 	def print_ops(self, ops):
 		'''
 		Prints the series of operations nicely
