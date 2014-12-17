@@ -5,10 +5,12 @@ import utils
 import os
 import string
 import random
+import traceback
 
 import components
 import feature
 import label
+import blacklist
 from constants import *
 
 
@@ -32,11 +34,14 @@ def get_docs(_dir, pr=True):
 	for f in os.listdir(_dir):
 		if f.endswith(".txt"):
 			try:
+				if blacklist.contains(f[0:-4]):
+					continue
 				docs.append(get_doc(_dir, f))
 				num_loaded += 1
 				if pr and num_loaded % 10 == 0:
 					print "\tLoaded %d documents" % num_loaded
-			except:
+			except Exception, e:
+				traceback.print_exc()
 				num_exceptions += 1
 	if pr:
 		print "\t%d Docs read" % num_loaded
@@ -115,60 +120,60 @@ class Document:
 			self.load()
 
 	def load(self):
-		try:
-			f = open(self.source_file, 'r')
+		#try:
+		f = open(self.source_file, 'r')
 
-			# forgot to get the basename in the file in extraction script
-			self._id = os.path.basename(f.readline().strip())
+		# forgot to get the basename in the file in extraction script
+		self._id = os.path.basename(f.readline().strip())
 
-			self.label = label.preprocess_label(f.readline().strip())
+		self.label = label.preprocess_label(f.readline().strip())
 
-			size_line = f.readline().strip()
-			tokens = size_line.split()
-			self.size = ( int(tokens[0]), int(tokens[1]) )
+		size_line = f.readline().strip()
+		tokens = size_line.split()
+		self.size = ( int(tokens[0]), int(tokens[1]) )
 
-			assert f.readline().strip() == ""
+		assert f.readline().strip() == ""
 
-			if USE_TEXT:
-				feature_set = feature.TextLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, f)
-				self.feature_sets.append(feature_set)
-				name = feature_set.name()
-				self.feature_set_names.append(name)
-				self.feature_name_map[name] = feature_set
-			else:
-				utils.advance_to_blank(f)
+		if USE_TEXT:
+			feature_set = feature.TextLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, f)
+			self.feature_sets.append(feature_set)
+			name = feature_set.name()
+			self.feature_set_names.append(name)
+			self.feature_name_map[name] = feature_set
+		else:
+			utils.advance_to_blank(f)
 
-			if USE_HORZ:
-				feature_set = feature.GridLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, components.Line.HORIZONTAL, f)
-				self.feature_sets.append(feature_set)
-				name = feature_set.name()
-				self.feature_set_names.append(name)
-				self.feature_name_map[name] = feature_set
-			else:
-				utils.advance_to_blank(f)
+		if USE_HORZ:
+			feature_set = feature.GridLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, components.Line.HORIZONTAL, f)
+			self.feature_sets.append(feature_set)
+			name = feature_set.name()
+			self.feature_set_names.append(name)
+			self.feature_name_map[name] = feature_set
+		else:
+			utils.advance_to_blank(f)
 
-			if USE_VERT:
-				feature_set = feature.GridLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, components.Line.VERTICAL, f)
-				self.feature_sets.append(feature_set)
-				name = feature_set.name()
-				self.feature_set_names.append(name)
-				self.feature_name_map[name] = feature_set
-			else:
-				utils.advance_to_blank(f)
+		if USE_VERT:
+			feature_set = feature.GridLineFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, components.Line.VERTICAL, f)
+			self.feature_sets.append(feature_set)
+			name = feature_set.name()
+			self.feature_set_names.append(name)
+			self.feature_name_map[name] = feature_set
+		else:
+			utils.advance_to_blank(f)
 
-			if USE_SURF:
-				feature_set = feature.SurfFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, f)
-				self.feature_sets.append(feature_set)
-				name = feature_set.name()
-				self.feature_set_names.append(name)
-				self.feature_name_map[name] = feature_set
-			else:
-				utils.advance_to_blank(f)
+		if USE_SURF:
+			feature_set = feature.SurfFeatureSet(self.size[0], self.size[1], REGION_ROWS, REGION_COLS, f)
+			self.feature_sets.append(feature_set)
+			name = feature_set.name()
+			self.feature_set_names.append(name)
+			self.feature_name_map[name] = feature_set
+		else:
+			utils.advance_to_blank(f)
 
-			self.loaded = True
-		except:
-			print "Problem loading: ", self.source_file
-			exit()
+		self.loaded = True
+		#except:
+		#	print "Problem loading: ", self.source_file
+		#	exit()
 
 	def display(self):
 		print "Doc: %s\tsize: %s" % (self._id, self.size)
