@@ -368,13 +368,19 @@ class TextLineMatcher:
 		if unmatched_weight == 0:
 			# cannot push apart because everything matched
 			return
+		total_weight = matched_weight + unmatched_weight
 		redistribute_weight = matched_weight * perc
+
+		#print "\nTotal Weight: %.2f" % total_weight
+		#print "\tMatched Weight: %.2f" % matched_weight
+		#print "\tUnMatched Weight: %.2f" % unmatched_weight
+		#print "\tRedistributed Weight: %.2f" % redistribute_weight
 		for line in lines:
 			if line.matched:
 				line.count *= (1 - perc)
 			else:
 				# rich get richer scheme
-				line.count += redistribute_weight * line.match_value() / unmatched_weight
+				line.count += redistribute_weight / unmatched_weight
 
 	def get_match_vector(self):
 		self.get_matches()
