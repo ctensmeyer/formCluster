@@ -97,7 +97,7 @@ class LineFeatureSet(FeatureSet):
 			self._prune(self._get_decay(), 0)
 
 	def prune_final(self):
-		final_prune_thresh = max(self.lines, lambda line: line.count) / FINAL_PRUNE_DIV
+		final_prune_thresh = max(map(lambda line: line.count, self.lines)) / FINAL_PRUNE_DIV
 		self._prune(self._get_decay(), final_prune_thresh)
 
 	def _prune(self, amount, thresh):
