@@ -96,7 +96,7 @@ class LineFeatureSet(FeatureSet):
 		if DECAY:
 			self._prune(self._get_decay(), 0)
 
-	def final_prune(self):
+	def prune_final(self):
 		final_prune_thresh = max(self.lines, lambda line: line.count) / FINAL_PRUNE_DIV
 		self._prune(self._get_decay(), final_prune_thresh)
 
