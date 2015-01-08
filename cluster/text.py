@@ -110,10 +110,10 @@ class TextLineMatcher:
 		if utils.e_dist_sqr(complete.end_pos(), suffix.end_pos()) > self.dist_thresh_sqr:
 			return False
 
-		if not utils.ratio(complete.char_width(), suffix.char_width()) > self.SIZE_RATIO:
-			return False
+		#if not utils.ratio(complete.char_width(), suffix.char_width()) > self.SIZE_RATIO:
+		#	return False
 
-		edit_dist = Levenshtein.dist(complete.text[-1*suffix.N:], suffix.text)
+		edit_dist = Levenshtein.distance(complete.text[-1*suffix.N:], suffix.text)
 		norm = edit_dist / float(suffix.N)
 		return edit_dist <= 1 or norm <= TEXT_EDIT_DIST_THRESH
 
@@ -125,14 +125,14 @@ class TextLineMatcher:
 		if utils.e_dist_sqr(complete.pos, prefix.pos) > self.dist_thresh_sqr:
 			return False
 
-		if not utils.ratio(complete.char_width(), prefix.char_width()) > self.SIZE_RATIO:
-			return False
+		#if not utils.ratio(complete.char_width(), prefix.char_width()) > self.SIZE_RATIO:
+		#	return False
 
-		edit_dist = Levenshtein.dist(complete.text[:prefix.N], prefix.text)
+		edit_dist = Levenshtein.distance(complete.text[:prefix.N], prefix.text)
 		norm = edit_dist / float(prefix.N)
 		return edit_dist <= 1 or norm <= TEXT_EDIT_DIST_THRESH
 
-	def _find_partial_matches():
+	def _find_partial_matches(self):
 		''' Finds Prefix/Suffix matches among the unmatched lines '''
 		partial_matches = list()
 		for line1 in self.lines1:
@@ -149,7 +149,7 @@ class TextLineMatcher:
 					partial_matches.append( (self.SUFFIX1, line1, line2) )
 				if self.suffix_match(line2, line1):
 					partial_matches.append( (self.SUFFIX2, line1, line2) )
-		return parital_matches
+		return partial_matches
 
 	def _condense_matches(self, partials):
 		''' :param partials: list of tuples - (type, line1, line2) '''
@@ -204,11 +204,11 @@ class TextLineMatcher:
 		if self.matches is None:
 			matches = self._find_perfect_matches()
 			if self.do_partial_matches:
-				paritals = self._find_partial_matches()
+				partials = self._find_partial_matches()
 				condensed = self._condense_matches(partials)
 				# mark the matches
 				for match in condensed:
-					for line in match[1:]:
+					for line in match[1:-1]:
 						line.matched = True
 				matches += condensed
 			self.matches = matches

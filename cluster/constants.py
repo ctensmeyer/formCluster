@@ -5,7 +5,7 @@ import math
 LOAD_DOC_LAZY = False
 
 # prefix/suffix matching for edit distance in text lines
-PARTIAL_TEXT_MATCHES = False
+PARTIAL_TEXT_MATCHES = True
 
 # use weight decay when aggregating two document together - eventually phases out infrequent features
 DECAY = True
@@ -16,11 +16,11 @@ TEXT_DECAY = 1.0 / 15
 FINAL_PRUNE_DIV = 10.0
 
 # Push away constants
-PUSH_AWAY_PERC = 0.001
+PUSH_AWAY_PERC = 0.01
 
 # used to determine grid line offset tolerance when matching
 LINE_THRESH_MULT = 0.05
-TEXT_THRESH_MULT = 0.15
+TEXT_THRESH_MULT = 0.25
 
 # determines the partiioning of the images in regions
 REGION_ROWS = 4
@@ -46,6 +46,9 @@ USE_SURF = False
 # New Clustering constants
 NUM_TREES = 2000
 FUNCTION_NUM_FEATURES = lambda x: int(math.sqrt(x))
-RF_THREADS = 7
+RF_THREADS = 2
 SIZE_OF_RANDOM_DATA = 1
+
+REMOVE_DUP_FEATURES = True
+DUP_THRESH = 0.01
 

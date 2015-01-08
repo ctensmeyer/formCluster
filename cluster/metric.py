@@ -7,6 +7,8 @@ import math
 import sys
 import os
 
+import sklearn.metrics
+
 _counts = ['TP', 'TN', 'FP', 'FN']
 eps = 10e-10
 _output_dir = "output/"
@@ -30,6 +32,12 @@ class KnownClusterAnalyzer:
 				n = self.label_pr_mats[label][count]
 				self.total_counts[count] += n
 		#print json.dumps(self.label_pr_mats, indent=4)
+
+		labels = list(self.label_pr_mats.keys())
+		mapping = {label: labels.index(label) for label in labels}
+		self.true_labels = map(lambda _doc: mapping[_doc.label], self.docs)
+		self.predicted_labels = utils.flatten(map(lambda cluster: [mapping[cluster.label]] * len(cluster.members), self.clusters))
+
 
 	def preprocess_clusters(self):
 		self.clusters.sort(key=lambda cluster: len(cluster.members), reverse=True)
@@ -153,7 +161,7 @@ class KnownClusterAnalyzer:
 		print "CLUSTER SIM MATRICES:"
 
 		centers = map(lambda cluster: cluster.center, self.clusters)
-		feature_set_names = self.clusters[0].members[0].get_feature_set_names()
+		feature_set_names = self.docs[0].get_feature_set_names()
 		for name in feature_set_names:
 			print
 			print "Similarity Type: %s" % name
@@ -303,7 +311,7 @@ class KnownClusterAnalyzer:
 		print "\t\t%s     SIZE" % ("        ".join(sim_names))
 		for x, cluster in enumerate(self.clusters):
 			# list of lists
-			similarities = map(lambda doc: doc.global_sim(cluster.center), cluster.members)
+			similarities = map(lambda _doc: _doc.global_sim(cluster.center), cluster.members)
 			to_print = list()
 			for y in xrange(len(similarities[0])):
 				values = map(lambda row: row[y], similarities)
@@ -463,6 +471,7 @@ class KnownClusterAnalyzer:
 		print "\tV-measure: ", self.v_measure()
 		print "\t\tHomogeneity: ", self.homogeneity()
 		print "\t\tCompleteness: ", self.completeness()
+		print "\tARI: ", self.ari()
 		print "\tNum Clusters: ", len(self.clusters)
 		print "\tF1 Macro: ", self.F1_macro()
 		print "\tF1 Micro: ", self.F1_micro()
@@ -594,40 +603,46 @@ class KnownClusterAnalyzer:
 		return cluster_entropy
 
 	def v_measure(self):
-		h = self.homogeneity()
-		c = self.completeness()
-		return utils.harmonic_mean(h, c)
+		#h = self.homogeneity()
+		#c = self.completeness()
+		#return utils.harmonic_mean(h, c)
+		return sklearn.metrics.v_measure_score(self.true_labels, self.predicted_labels)
 
 	def completeness(self):
-		if len(self.clusters) == 1:
-			return 1.0
+		#if len(self.clusters) == 1:
+		#	return 1.0
 
-		# H(K|C)
-		num = 0.0
-		label_counts = self.get_true_doc_histogram()
-		for label in self.all_labels:
-			for cluster in self.clusters:
-				one = self.label_cluster_mat[label][cluster._id] / float(self.num_docs)
-				two = self.label_cluster_mat[label][cluster._id] / float(label_counts[label])
-				num += one * math.log(two + eps)
-		num *= -1
+		## H(K|C)
+		#num = 0.0
+		#label_counts = self.get_true_doc_histogram()
+		#for label in self.all_labels:
+		#	for cluster in self.clusters:
+		#		one = self.label_cluster_mat[label][cluster._id] / float(self.num_docs)
+		#		two = self.label_cluster_mat[label][cluster._id] / float(label_counts[label])
+		#		num += one * math.log(two + eps)
+		#num *= -1
 
-		return 1.0 - (num / self.cluster_entropy())
+		#return 1.0 - (num / self.cluster_entropy())
+		return sklearn.metrics.completeness_score(self.true_labels, self.predicted_labels)
 
 	def homogeneity(self):
-		if len(self.all_labels) == 1:
-			return 1.0
+		#if len(self.all_labels) == 1:
+		#	return 1.0
 
-		# H(C|K)
-		num = 0.0
-		for cluster in self.clusters:
-			for label in self.all_labels:
-				one = self.label_cluster_mat[label][cluster._id] / float(self.num_docs)
-				two = self.label_cluster_mat[label][cluster._id] / float(len(cluster.members))
-				num += one * math.log(two + eps)
-		num *= -1
-		
-		# H(C)
+		## H(C|K)
+		#num = 0.0
+		#for cluster in self.clusters:
+		#	for label in self.all_labels:
+		#		one = self.label_cluster_mat[label][cluster._id] / float(self.num_docs)
+		#		two = self.label_cluster_mat[label][cluster._id] / float(len(cluster.members))
+		#		num += one * math.log(two + eps)
+		#num *= -1
+		#
+		## H(C)
 
-		return 1.0 - (num / self.label_entropy())
+		#return 1.0 - (num / self.label_entropy())
+		return sklearn.metrics.homogeneity_score(self.true_labels, self.predicted_labels)
+
+	def ari(self):
+		return sklearn.metrics.adjusted_rand_score(self.true_labels, self.predicted_labels)
 

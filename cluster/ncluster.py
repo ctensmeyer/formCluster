@@ -12,6 +12,19 @@ import random
 import multiprocessing
 from constants import *
 
+def remove_duplicate_features(data_matrix, diff=0.01):
+	to_remove = list()
+	for col in xrange(data_matrix.shape[1]):
+		if col in to_remove:
+			continue
+		for col2 in xrange(col + 1, data_matrix.shape[1]):
+			dist = scipy.spatial.distance.cityblock(data_matrix[:,col], data_matrix[:,col2])  
+			norm_dist = dist / float(data_matrix.shape[0])
+			#print "%d, %d: %.3f, %.3f" % (col, col2, dist, norm_dist)
+			if norm_dist < diff:
+				to_remove.append(col2)
+	print "Removing %d/%d features" % (len(to_remove), data_matrix.shape[1])
+	return np.delete(data_matrix, to_remove, axis=1)
 
 def compute_random_matrix(data_matrix):
 	print "Constructing Random Training Set"
@@ -72,7 +85,9 @@ def spectral_cluster_cv(affinity_matrix, cluster_range):
 												assign_labels="discretize")
 		assignments = sc.fit_predict(affinity_matrix)
 		silhouette = sklearn.metrics.silhouette_score(dist_matrix, assignments, metric='precomputed')
-		print num_clusters, "%.3f" % silhouette
+		silhouette_samples = sklearn.metrics.silhouette_samples(dist_matrix, assignments, metric='precomputed')
+		num_positive = (silhouette_samples > 0).sum()
+		print "%d: %.3f %.3f%%" % (num_clusters, silhouette, num_positive * 100.0)
 		if silhouette > best_silhouette:
 			best_silhouette = silhouette
 			best_assignments = assignments
@@ -87,11 +102,14 @@ def spectral_cluster_all(affinity_matrix, cluster_range):
 	print "All Assignemnts Spectral Clustering"
 	print
 	for num_clusters in xrange(cluster_range[0], cluster_range[1] + 1):
+		#print num_clusters
 		sc = sklearn.cluster.SpectralClustering(n_clusters=num_clusters , affinity="precomputed",
 												assign_labels="discretize")
 		assignments = sc.fit_predict(affinity_matrix)
 		silhouette = sklearn.metrics.silhouette_score(dist_matrix, assignments, metric='precomputed')
-		all_assignments[num_clusters] = (assignments, silhouette)
+		silhouette_samples = sklearn.metrics.silhouette_samples(dist_matrix, assignments, metric='precomputed')
+		num_positive = (silhouette_samples > 0).sum()
+		all_assignments[num_clusters] = (assignments, silhouette, num_positive)
 	
 	return all_assignments
 
@@ -107,7 +125,7 @@ def form_clusters(instances, assignments):
 		cluster_map[assignment].members.append(instance)
 	clusters = cluster_map.values()
 	clusters = filter(lambda c: len(c.members), clusters)
-	map(lambda cluster: cluster.set_label(), clusters)
+	map(lambda _cluster: _cluster.set_label(), clusters)
 	return clusters
 
 
@@ -139,7 +157,7 @@ def kumar_cluster_cv(data_matrix, instances, cluster_range):
 	
 class KumarCONFIRM(cluster.BaseCONFIRM):
 	
-	def __init__(self, docs, iterations=2, num_initial_seeds=10, num_seeds=10, cluster_range=(2,10), **kwargs):
+	def __init__(self, docs, iterations=2, num_initial_seeds=10, num_seeds=10, cluster_range=(2,20), **kwargs):
 		super(KumarCONFIRM, self).__init__(docs, **kwargs)
 		self.num_initial_seeds = num_initial_seeds
 		self.iterations = iterations
@@ -167,15 +185,17 @@ class KumarCONFIRM(cluster.BaseCONFIRM):
 		best_acc = 0
 		best_assignments = 0
 		for num_clusters in all_assignments:
-			assignments, silhouette = all_assignments[num_clusters]
+			assignments, silhouette, num_positive = all_assignments[num_clusters]
 			self.clusters = form_clusters(instances, assignments)
 			analyzer = metric.KnownClusterAnalyzer(self)
 			accuracy = analyzer.accuracy()
 			v_measure = analyzer.v_measure()
-			print "%d: %2.1f%% %.3f %.3f" % (num_clusters, accuracy * 100, v_measure, silhouette)
+			print "%d: %2.1f%% %.3f %.3f %.3f%%" % (num_clusters, accuracy * 100, v_measure, silhouette, 100.0 * num_positive / len(self.docs))
 			if accuracy > best_acc:
 				best_acc = accuracy
 				best_assignments = assignments
+		print 
+		print "Best Acc: ", best_acc
 		clusters = form_clusters(instances, best_assignments)
 		return clusters
 
@@ -188,13 +208,20 @@ class KumarCONFIRM(cluster.BaseCONFIRM):
 			print "*" * 30
 			print
 			data_matrix = self._compute_features(seeds)
+			reduced = remove_duplicate_features(data_matrix, DUP_THRESH)
 			if iteration < (self.iterations - 1):
-				#self.clusters = self.kumar_cluster_cv_cheat(data_matrix, self.docs, self.cluster_range)
-				self.clusters = kumar_cluster(data_matrix, self.docs, self.num_seeds)
+				self.clusters = self.kumar_cluster_cv_cheat(data_matrix, self.docs, self.cluster_range)
+				#self.clusters = kumar_cluster(data_matrix, self.docs, self.num_seeds)
 				seeds = self._form_seeds()
 			else:
-				#self.clusters = self.kumar_cluster_cv_cheat(data_matrix, self.docs, self.cluster_range)
-				self.clusters = kumar_cluster(data_matrix, self.docs, self.num_seeds)
+				print self.cluster_range
+				self.clusters = self.kumar_cluster_cv_cheat(data_matrix, self.docs, self.cluster_range)
+				print
+				print "Reduced"
+				print
+				self.clusters = self.kumar_cluster_cv_cheat(reduced, self.docs, self.cluster_range)
+				#self.clusters = kumar_cluster(data_matrix, self.docs, self.num_seeds)
+			print "In KumarCONFIRM"
 			self.print_analysis()
 				
 
@@ -203,11 +230,11 @@ class KumarCONFIRM(cluster.BaseCONFIRM):
 
 	def _form_seeds(self):
 		seeds = list()
-		for cluster in self.clusters:
-			if not cluster.members:
+		for _cluster in self.clusters:
+			if not _cluster.members:
 				continue
-			seed = cluster.members[0].copy()
-			for _doc in cluster.members[1:]:
+			seed = _cluster.members[0].copy()
+			for _doc in _cluster.members[1:]:
 				seed.aggregate(_doc)
 			seed.final_prune()
 			seeds.append(seed)
@@ -348,13 +375,13 @@ class FastSeedKumarCONFIRM(KumarCONFIRM):
 	
 	def _form_seeds(self):
 		seeds = list()
-		for cluster in self.clusters:
-			if not cluster.members:
+		for _cluster in self.clusters:
+			if not _cluster.members:
 				continue
-			num_docs = int(len(cluster.members) * self.perc_docs)
+			num_docs = int(len(_cluster.members) * self.perc_docs)
 			num_docs = max(num_docs, self.min_docs)
-			num_docs = min(num_docs, len(cluster.members))
-			docs = random.sample(cluster.members, num_docs)
+			num_docs = min(num_docs, len(_cluster.members))
+			docs = random.sample(_cluster.members, num_docs)
 			seed = docs[0].copy()
 			for _doc in docs[1:]:
 				seed.aggregate(_doc)
@@ -373,7 +400,8 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 
 	def __init__(self, docs, init_subset=2000, min_membership=5, iterations=2, 
 				num_initial_seeds=10, num_seeds=10, z_threshold=-1, 
-				use_labels=True, **kwargs):
+				use_labels=True, use_ss=False, num_per_seed=1, cluster_range=(2,20),
+				**kwargs):
 		self.docs = docs
 		self.init_subset = init_subset
 		self.min_cluster_membership = min_membership
@@ -382,6 +410,97 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 		self.num_seeds = num_seeds
 		self.z_threshold = z_threshold
 		self.use_labels = use_labels
+		self.topN = 3
+		self.use_ss = use_ss
+		self.num_per_seed = num_per_seed
+		self.cluster_range = cluster_range
+	
+	def cluster_doc_similarity(self, cluster, _doc):
+		sim_vec = cluster.center.global_region_sim(_doc)
+		return cluster.network.wavg(sim_vec)
+
+	def get_cluster_sim_mat(self):
+		mat = []
+		for clust1 in self.clusters:
+			row = []
+			for clust2 in self.clusters:
+				if clust1 == clust2:
+					row.append(1.0)
+				else:
+					row.append(self.cluster_doc_similarity(clust1, clust2.center))
+			mat.append(row)
+		return mat
+
+	def push_apart_clusters_topN(self, N):
+		sim_mat = self.get_cluster_sim_mat()
+
+		# ordered pairs, lowest cluster idx is always first
+		pairs = set()
+		for clust1, row in enumerate(sim_mat):
+			score_idx = zip(row, range(len(row)))
+			score_idx.sort(key=lambda tup: tup[0], reverse=True)
+			for i in xrange(min(N, len(score_idx) - 1)):
+				# i + 1 to avoid the first entry, which should be clust1
+				clust2 = score_idx[i + 1][1]
+				if clust1 < clust2:
+					pairs.add( (clust1, clust2) )
+				else:
+					pairs.add( (clust2, clust1) )
+
+		for clust1, clust2 in pairs:
+			self.clusters[clust1].center.push_away(self.clusters[clust2].center)
+
+	def greedy(self, clusters):
+		for _cluster in clusters:
+			_cluster.members = list()
+
+		# greedy clustering
+		for _doc in self.docs:
+			_cluster = self.nearest_cluster(clusters, _doc)
+			#if _cluster != self.REJECT:
+			_cluster.members.append(_doc)
+		return clusters
+
+	def get_affinity_matrix(self):
+		if self.use_ss:
+			kumarConfirm = SemiSupervisedKumarCONFIRM(self.docs[:self.init_subset], num_per_seed=self.num_per_seed,
+											iterations=self.iterations, num_initial_seeds=self.num_initial_seeds, 
+											num_seeds=self.num_seeds, cluster_range=self.cluster_range)
+			seeds = kumarConfirm._choose_initial_seeds()
+
+		else:
+			kumarConfirm = KumarCONFIRM(self.docs[:self.init_subset], self.iterations, 
+											self.num_initial_seeds, self.num_seeds)
+			seeds = kumarConfirm._choose_initial_seeds()
+		print "Num Seeds: ", len(seeds)
+
+		data_matrix = self._compute_features(seeds)
+		if REMOVE_DUP_FEATURES:
+			data_matrix = remove_duplicate_features(data_matrix, DUP_THRESH)
+		random_matrix = compute_random_matrix(data_matrix)
+		rf = train_random_forest(data_matrix, random_matrix)
+		sim_matrix = compute_sim_mat(data_matrix, rf)
+		return sim_matrix
+
+	def cluster2(self):
+		affinity_matrix = self.get_affinity_matrix()
+		print self.cluster_range
+		for num_clusters in xrange(self.cluster_range[0], self.cluster_range[1] + 1):
+			assignments = spectral_cluster(affinity_matrix, num_clusters)
+			clusters = form_clusters(self.docs, assignments)
+			self.clusters = filter(lambda cluster: cluster.members, clusters)
+			analyzer = metric.KnownClusterAnalyzer(self)
+			acc = analyzer.accuracy()
+			print
+			print "NUM CLUSTERS: ", num_clusters
+			print
+			print "Init_Accuracy: ", acc
+
+			clusters = self.preprocess_clusters(clusters, do_prototypes=True)
+			clusters = self.greedy(clusters)
+			self.clusters = filter(lambda cluster: cluster.members, clusters)
+			self.print_reject_analysis()
+			
 
 	def cluster(self):
 		if self.use_labels:
@@ -392,53 +511,88 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 				label_to_list[label].append(_doc)
 			clusters = list()
 			for label in label_to_list:
-				clusters.append(cluster.Cluster(label_to_list[label], label_to_list[label][0], label))
+				clusters.append(cluster.Cluster(label_to_list[label], label_to_list[label][0]))
+		elif self.use_ss:
+			kumarConfirm = SemiSupervisedKumarCONFIRM(self.docs[:self.init_subset], num_per_seed=self.num_per_seed,
+											iterations=self.iterations, num_initial_seeds=self.num_initial_seeds, 
+											num_seeds=self.num_seeds, cluster_range=self.cluster_range)
+			kumarConfirm.cluster()
+			clusters = kumarConfirm.clusters
+
 		else:
-			kumarConfirm = BestKumarCONFIRM(self.docs[:self.init_subset], self.iterations, 
+			kumarConfirm = KumarCONFIRM(self.docs[:self.init_subset], self.iterations, 
 											self.num_initial_seeds, self.num_seeds)
 			kumarConfirm.cluster()
 			clusters = kumarConfirm.clusters
 
-		clusters = self.preprocess_clusters(clusters)
+		for _cluster in clusters:
+			_cluster.original_members = _cluster.members[:]
 
-		# greedy clustering with reject option based on thresholds
-		self.rejected_docs = list()
-		# clear assignments
-		for cluster in clusters:
-			cluster.members = list()
-		for _doc in self.docs:
-			cluster = self.nearest_cluster(clusters, _doc)
-			if cluster != self.REJECT:
-				cluster.members.append(_doc)
-			else:
-				self.rejected_docs.append(_doc)
-		clusters = filter(lambda cluster: cluster.members, clusters)
 		self.clusters = clusters
-		return clusters
+
+
+		for _i in xrange(1):
+			print
+			print "*" * 30
+			print "ITERATION %d" % _i
+			print "*" * 30
+			print
+			if _i:
+				self.push_apart_clusters_topN(self.topN)
+			self.clusters = self.preprocess_clusters(self.clusters, do_prototypes=(_i == 0))
+
+			for x, _cluster in enumerate(self.clusters):
+				print "\nCluster %d: %s, size: %d" % (x, _cluster.label, len(_cluster.original_members))
+				if hasattr(_cluster, 'network'):
+					print "\t" + (" ".join(map(lambda w: "%.3f" % w, _cluster.network.weights)))
+				if hasattr(_cluster, 'mean'):
+					print "\t%.2f\t%.2f" % (_cluster.mean, _cluster.stddev)
+			#self.print_reject_analysis(draw=True)
+
+			# greedy clustering with reject option based on thresholds
+			#self.rejected_docs = list()
+
+			# clear assignments
+			for _cluster in self.clusters:
+				_cluster.members = list()
+
+			# greedy clustering
+			for _doc in self.docs:
+				_cluster = self.nearest_cluster(clusters, _doc)
+				#if _cluster != self.REJECT:
+				_cluster.members.append(_doc)
+				#else:
+				#	self.rejected_docs.append(_doc)
+			print "In PipelineKumarCONFIRM"
+			self.print_full_analysis(draw=True)
+
+		self.clusters = filter(lambda _cluster: _cluster.members, self.clusters)
+		return self.clusters
 
 	def nearest_cluster(self, clusters, _doc):
 		sim_scores = list()
 		#z_scores = list()
-		for cluster in clusters:
-			sim_score = self.cluster_doc_similarity(cluster, _doc)
-			#z_score = (sim_score - cluster.mean) / cluster.stddev
+		for _cluster in clusters:
+			sim_score = self.cluster_doc_similarity(_cluster, _doc)
+			#z_score = (sim_score - _cluster.mean) / _cluster.stddev
 			sim_scores.append(sim_score)
 			#z_scores.append(z_score)
-		cluster = clusters[utils.argmax(sim_scores)]
-		sim_score = max(sim_scores)
-		z_score = (sim_score - cluster.mean) / cluster.stddev
-		if z_score > self.z_threshold:
-			return cluster
-		else:
-			return self.REJECT
+		_cluster = clusters[utils.argmax(sim_scores)]
+		return _cluster
+		#sim_score = max(sim_scores)
+		#z_score = (sim_score - _cluster.mean) / _cluster.stddev
+		#if z_score > self.z_threshold:
+		#	return _cluster
+		#else:
+		#	return self.REJECT
 
-	def print_reject_analysis(self):
-		if self.rejected_docs:
-			reject_cluster = cluster.Cluster(self.rejected_docs, center=self.rejected_docs[0])
-			self.clusters.append(reject_cluster)
-			print "REJECT Analysis"
-		else:
-			print "No rejected documents"
+	def print_reject_analysis(self, draw=False):
+		#if self.rejected_docs:
+		#	reject_cluster = cluster.Cluster(self.rejected_docs, center=self.rejected_docs[0])
+		#	self.clusters.append(reject_cluster)
+		#	print "REJECT Analysis"
+		#else:
+		#	print "No rejected documents"
 
 		analyzer = metric.KnownClusterAnalyzer(self)
 		analyzer.print_general_info()
@@ -447,53 +601,63 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 		analyzer.print_label_cluster_mat()
 		analyzer.print_label_info()
 		analyzer.print_metric_info()
+		if draw:
+			analyzer.draw_centers()
 
-		if self.rejected_docs:
-			print "END REJECT Analysis"
-			self.clusters.remove(reject_cluster)
+		#if self.rejected_docs:
+		#	print "END REJECT Analysis"
+		#	self.clusters.remove(reject_cluster)
+
+	def print_full_analysis(self, draw=False):
+		analyzer = metric.KnownClusterAnalyzer(self)
+		analyzer.print_all()
+		if draw:
+			analyzer.draw_centers()
 
 
-	def preprocess_clusters(self, clusters):
+	def preprocess_clusters(self, clusters, do_prototypes=True):
 		'''
 		Forms clusters that will be fixed for greedy assignment of the remaining docs
 		'''
 		# remove too small clusters
-		clusters = filter(lambda cluster: len(cluster.members) >= self.min_cluster_membership, clusters)
+		clusters = filter(lambda _cluster: len(_cluster.members) >= self.min_cluster_membership, clusters)
 
-		self._form_prototypes(clusters)
+		if do_prototypes:
+			self._form_prototypes(clusters)
 		#self._push_apart_prototypes(clusters)
 		self._compute_feature_weights(clusters)
-		self._compute_sim_scores(clusters)
-		self._estimate_cluster_thresholds(clusters)
+		#self._compute_sim_scores(clusters)
+		#self._estimate_cluster_thresholds(clusters)
 		return clusters
 
-	def cluster_doc_similarity(self, cluster, _doc):
-		sim_vec = cluster.center.global_region_sim(_doc)
-		return cluster.network.wavg(sim_vec)
+	def cluster_doc_similarity(self, _cluster, _doc):
+		sim_vec = _cluster.center.global_region_sim(_doc)
+		return _cluster.network.wavg(sim_vec)
 
 	def _compute_sim_scores(self, clusters):
 		'''
 		Computes the sim scores for all docs to their cluster center
 		'''
-		for cluster in clusters:
-			cluster.sim_scores = list()
-			for _doc in cluster.members:
-				cluster.sim_scores.append(self.cluster_doc_similarity(cluster, _doc))
+		for _cluster in clusters:
+			_cluster.sim_scores = list()
+			for _doc in _cluster.original_members:
+				_cluster.sim_scores.append(self.cluster_doc_similarity(_cluster, _doc))
 
 	def _compute_feature_weights(self, clusters):
 		'''
 		Standard ML problem.  Take the data and compute weights (hopefully to generalize)
 		'''
-		for cluster in clusters:
+		for _cluster in clusters:
 			weights = None
-			for _doc in cluster.members:
-				sim_vec = cluster.center.global_region_sim(_doc)
+			#for _doc in _cluster.original_members:
+			for _doc in _cluster.members:
+				sim_vec = _cluster.center.global_region_sim(_doc)
 				if weights is None:
 					weights = sim_vec[:]
 				else:
 					for x in xrange(len(weights)):
 						weights[x] += sim_vec[x]
-			cluster.network = network.WeightedAverageNetwork(len(weights), weights, default_lr=0)
+			_cluster.network = network.WeightedAverageNetwork(len(weights), weights, default_lr=0)
 
 	# another idea for this is to use not just the positive scores, but to use the negative ones
 	#  and use 1D logistic regression.  Of course that presupposes that all clusters are separate
@@ -502,14 +666,14 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 		'''
 		Uses the cluster sim scores to estimate cluster thresholds
 		'''
-		for cluster in clusters:
-			#median = utils.median(cluster.sim_scores)
-			mean = utils.avg(cluster.sim_scores)
-			stddev = utils.stddev(cluster.sim_scores, mean=mean)
+		for _cluster in clusters:
+			#median = utils.median(_cluster.sim_scores)
+			mean = utils.avg(_cluster.sim_scores)
+			stddev = utils.stddev(_cluster.sim_scores, mean=mean)
 			if stddev == 0:
-				print cluster.sim_scores
-			cluster.mean = mean
-			cluster.stddev = stddev
+				print _cluster.sim_scores
+			_cluster.mean = mean
+			_cluster.stddev = stddev
 
 	# we might want to do merging at this point if things are too similar
 	def _push_apart_prototypes(self, clusters):
@@ -523,12 +687,29 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 		'''
 		Aggregates all cluster members together in order to create cluster centers
 		'''
-		for cluster in clusters:
-			prototype = cluster.members[0].copy()
-			for _doc in cluster.members[1:]:
+		for _cluster in clusters:
+			prototype = _cluster.members[0].copy()
+			for _doc in _cluster.members[1:]:
 				prototype.aggregate(_doc)
 			prototype.final_prune()
-			cluster.center = prototype
+			_cluster.center = prototype
+
+	def _compute_features(self, seeds):
+		num_features = 0
+		_doc = self.docs[0]
+		vectors = list()
+		for seed in seeds:
+			vectors.append(seed.match_vector(_doc))
+		num_features = sum(map(len, vectors))
+		feature_mat = np.zeros( (len(self.docs), num_features) )
+		for x, _doc in enumerate(self.docs):
+			offset = 0
+			for seed in seeds:
+				vector = seed.match_vector(_doc)
+				feature_mat[x,offset:offset + len(vector)] = vector
+				offset += len(vector)
+		print feature_mat
+		return feature_mat
 		
 		
 

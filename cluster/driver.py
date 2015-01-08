@@ -13,16 +13,13 @@ import utils
 import lines
 import doc
 
-single_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
-single_file = "rg14_31702_0069_03.txt"
-second_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
-second_file = "rg14_31704_0055_03.txt"
-aggregate_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
-#aggregate_dir = "../data/new/1911Wales/UK1911Census_EnglandWales_Household15Names_03_01"
+aggregate_dir = "../data/subsets/wales_100/UK1911Census_EnglandWales_Household15Names_03_01"
 
-
-single_dir = "../data/new/Wales_SURF/UK1911Census_EnglandWales_Household15Names_03_01"
+single_dir = "../data/subsets/wales_20/UK1911Census_EnglandWales_Household15Names_03_01"
 single_file = "rg14_31702_0025_03.txt"
+#second_dir = "../data/subsets/wales_100/UK1911Census_EnglandWales_Household40Names_07_01"
+#second_file = "rg14_32127_0667_07.txt"
+
 second_dir = single_dir
 second_file = "rg14_31702_0059_03.txt"
 
@@ -42,6 +39,8 @@ def get_data_dir(descrip):
 		return "../data/subsets/wales_twoclass_all"
 	if descrip.startswith("wales_twoclass_200"):
 		return "../data/subsets/wales_twoclass_200"
+	if descrip.startswith("wales_twoclass_100"):
+		return "../data/subsets/wales_twoclass_100"
 
 	if descrip.startswith("wash_all"):
 		return "../data/current/WashStatePassLists"
@@ -78,6 +77,8 @@ def get_data_dir(descrip):
 
 	if descrip.startswith("england_all"):
 		return "../data/current/1911England"
+	if descrip.startswith("england_5000"):
+		return "../data/subsets/england_5000"
 	if descrip.startswith("england_1000"):
 		return "../data/subsets/england_1000"
 	if descrip.startswith("england_500"):
@@ -112,6 +113,9 @@ def get_confirm(descrip):
 	if descrip == "kumar":
 		return ncluster.BestKumarCONFIRM
 
+	if descrip == "sskumar":
+		return ncluster.SemiSupervisedKumarCONFIRM
+
 	if descrip == "pipeline":
 		return ncluster.PipelineCONFIRM
 
@@ -119,11 +123,13 @@ def cluster_known():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
 	random.seed(12345)
 	random.shuffle(docs)
-	sim_thresh = float(sys.argv[3])
+	param = int(sys.argv[3])
+	param2 = int(sys.argv[5])
+	param3 = int(sys.argv[6])
 
 	factory = get_confirm(sys.argv[4])
 	confirm = factory(docs, 
-		sim_thresh=sim_thresh,  	# BaseCONFIRM
+		sim_thresh=param,		 	# BaseCONFIRM
 		num_instances=3, 			# InitCONFIRMs, how many instances to examine to find $num_clust clusters
 		num_clust=2,  				# MaxCliqueCONFIRM, how many clusters try for
 		lr=0.02,  					# learning rate WavgNet
@@ -131,29 +137,30 @@ def cluster_known():
 		min_size=2, 				# PruningCONFIRM, clusters under this size get pruned
 		maxK=4, 					# MaxClustersCONFIRM, max on created clusters (doesn't work)
 
-		num_initial_seeds=80, 		# KumarCONFIRM, how many seeds to start with
-		iterations=3,				# KumarCONFIRM, how many iterations to perform
-		num_seeds=80,               # KumarCONFIRM, how many seeds to get each iteration
-		cluster_range=(2,20),		# KumarCONFIRM, how many clusters to search over
+		num_initial_seeds=param, 	# KumarCONFIRM, how many seeds to start with
+		iterations=1,				# KumarCONFIRM, how many iterations to perform
+		num_seeds=param,            # KumarCONFIRM, how many seeds to get each iteration
+		cluster_range=(2,20),	 	# KumarCONFIRM, how many clusters to search over
 
 		seeds_per_batch=2,  		# MaxCliqueSeedsKumarCONFIRM, how many seeds to get per batch
 		batch_size=10,  			# MaxCliqueSeedsKumarCONFIRM, how many batches
-		num_per_seed=10,  			# SemiSupervisedKumarCONFIRM, how many docs/label to make seeds
+		num_per_seed=param,			# SemiSupervisedKumarCONFIRM, how many docs/label to make seeds
 
-		init_subset=8000,			# PipelineCONFIRM, how many docs to initialize
-		min_membership=5, 			# PipelineCONFIRM, how many docs a cluster must have after initialization
-		z_threshold=-20,			# PipelineCONFIRM, the reject threshold for the greedy pass
-		use_labels=True,			# PipelineCONFIRM, Skips kumarconfirm init and uses the labels
+		init_subset=30000,			# PipelineCONFIRM, how many docs to initialize
+		min_membership=1, 			# PipelineCONFIRM, how many docs a cluster must have after initialization
+		z_threshold=-50,			# PipelineCONFIRM, the reject threshold for the greedy pass
+		use_labels=False,			# PipelineCONFIRM, Skips kumarconfirm init and uses the labels
+		use_ss=param3
 		)
 
 	confirm.cluster()
 	print
 	print
+	#exit()
 
 	if hasattr(confirm, 'print_reject_analysis'):
 		confirm.print_reject_analysis()
-
-	if hasattr(confirm, 'print_analysis'):
+	elif hasattr(confirm, 'print_analysis'):
 		confirm.print_analysis()
 	else:
 		analyzer = metric.KnownClusterAnalyzer(confirm)
@@ -263,7 +270,7 @@ def cmp_test():
 	doc2.display()
 
 	global_region_sims = doc1.global_region_sim(doc2)
-	global_region_sim_weights = doc1.global_region_sim_weights()
+	global_region_weights = doc1.global_region_weights()
 	global_sims = doc1.global_sim(doc2)
 	region_sims = doc1.region_sim(doc2)
 	region_weights1 = doc1.region_weights()
@@ -288,10 +295,16 @@ def cmp_test():
 	print "Sim Vector:"
 	print " ".join(map(lambda x: "%.2f" % x, global_region_sims))
 	print "Sim Weights:"
-	print " ".join(map(lambda x: "%.2f" % x, global_region_sim_weights))
+	print " ".join(map(lambda x: "%.2f" % x, global_region_weights))
 
 	doc1.draw().save("output/doc1.png")
 	doc2.draw().save("output/doc2.png")
+	#doc1.push_away(doc2)
+	#doc1.draw().save("output/doc1_pushed.png")
+	#doc2.draw().save("output/doc2_pushed.png")
+
+	#doc1.push_away(doc2)
+
 	doc1.aggregate(doc2)
 	doc1.draw().save("output/combined.png")
 

@@ -7,8 +7,8 @@ UK1911Census_EnglandWales_Household100Names_08_01 UK1911Census_EnglandWales_Hous
 UK1911Census_EnglandWales_Household100Names_05_01 UK1911Census_EnglandWales_Household40Names_04_01
 UK1911Census_EnglandWales_Institution40Names_15_01 UK1911Census_EnglandWales_Household40Names_04_01
 UK1911Census_EnglandWales_Institution100Names_16_01 UK1911Census_EnglandWales_Household40Names_04_01
-UK1911Census_EnglandWales_Institution200Names_27_02 UK1911Census_EnglandWales_Household40Names_05_02
-UK1911Census_EnglandWales_Institution200Names_28_02 UK1911Census_EnglandWales_Household40Names_05_02
+UK1911Census_EnglandWales_Institution200Names_27_02 UK1911Census_EnglandWales_Household100Names_05_02
+UK1911Census_EnglandWales_Institution200Names_28_02 UK1911Census_EnglandWales_Household100Names_05_02
 UK1911Census_EnglandWales_Institution400Names_29_01 UK1911Census_EnglandWales_Institution200Names_27_01
 UK1911Census_EnglandWales_Institution400Names_29_02 UK1911Census_EnglandWales_Household100Names_05_02
 UK1911Census_EnglandWales_Institution800Names_31_01 UK1911Census_EnglandWales_Institution200Names_27_01
@@ -64,6 +64,7 @@ FormTypeDate_10-26-09 Type2
 FormTypeDate_12-16-10 Type2
 
 # The following block may be considered as Type2 also
+FormTypeDate_1-16-15 Type6
 FormTypeDate_3-24-15 Type6
 FormTypeDate_3-24-22 Type6
 FormTypeDate_3-30-21 Type6
@@ -71,8 +72,8 @@ FormTypeDate_4-6-20 Type6
 FormTypeDate_4-16-17 Type6
 FormTypeDate_4-27-14 Type6
 FormTypeDate_5-1-14 Type6
-FormTypeDate_5-17-25 Type6
-FormTypeDate_5-20-11 Type6
+FormTypeDate_5-17-15 Type6
+FormTypeDate_5-20-21 Type6
 FormTypeDate_7-17-15 Type6
 FormTypeDate_7-17-16 Type6
 FormTypeDate_7-18-17 Type6
@@ -84,6 +85,7 @@ FormTypeDate_10-14-18 Type6
 FormTypeDate_10-26-16 Type6
 FormTypeDate_11-20-13 Type6
 FormTypeDate_12-10-13 Type6
+Type6 Type2
 
 FormTypeDate_1-11-23 Type3
 

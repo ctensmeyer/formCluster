@@ -927,15 +927,18 @@ class LMatcher(LineMatcher):
 		redistribute_weight1 = matched_weight1 * perc
 		redistribute_weight2 = matched_weight2 * perc
 
-		print "\nTotal Weight1: %.2f" % total_weight1
-		print "\tMatched Weight1: %.2f" % matched_weight1
-		print "\tUnMatched Weight1: %.2f" % unmatched_weight1
-		print "\tRedistributed Weight1: %.2f" % redistribute_weight1
+		#print "\nTotal Weight1: %.2f" % total_weight1
+		#print "\tMatched Weight1: %.2f" % matched_weight1
+		#print "\tUnMatched Weight1: %.2f" % unmatched_weight1
+		#print "\tRedistributed Weight1: %.2f" % redistribute_weight1
 
-		print "\nTotal Weight2: %.2f" % total_weight2
-		print "\tMatched Weight2: %.2f" % matched_weight2
-		print "\tUnMatched Weight2: %.2f" % unmatched_weight2
-		print "\tRedistributed Weight2: %.2f\n" % redistribute_weight2
+		#print "\nTotal Weight2: %.2f" % total_weight2
+		#print "\tMatched Weight2: %.2f" % matched_weight2
+		#print "\tUnMatched Weight2: %.2f" % unmatched_weight2
+		#print "\tRedistributed Weight2: %.2f\n" % redistribute_weight2
+
+		if redistribute_weight1 == 0 or redistribute_weight2 == 0:
+			return
 
 		for op_tup in ops:
 			op = op_tup[0]

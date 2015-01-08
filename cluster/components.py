@@ -164,7 +164,7 @@ class TextLine(Feature):
 
 	def aggregate_as_prefix(self, other):
 		''' self is a prefix of other '''
-		self.members.append(other.text[0:self.N])
+		self.members[other.text[0:self.N]] += 1
 		weights = [self.count, other.count / 2]
 		x = utils.wavg([self.pos[0], other.pos[0]], weights)
 		y = utils.wavg([self.pos[1], other.pos[1]], weights)
@@ -178,7 +178,7 @@ class TextLine(Feature):
 
 	def aggregate_as_suffix(self, other):
 		''' self is a suffix of other '''
-		self.members.append(other.text[-1 * self.N:])
+		self.members[other.text[-1 * self.N:]] += 1
 		weights = [self.count, other.count / 2]
 		x = utils.wavg([self.pos[0], other.pos[0] + (other.size[0] * (self.N / float(other.N)))], weights)
 		y = utils.wavg([self.pos[1], other.pos[1]], weights)

@@ -1,5 +1,5 @@
 
-_label_file = "./labels.txt"
+_label_file = "/home/chris/formCluster/cluster/labels.txt"
 _label_dict = dict()
 _loaded = False
 
