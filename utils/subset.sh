@@ -1,10 +1,10 @@
 
 # Creates subsets of the data
 
-prefix=wash_
-src_dir=../data/current/WashStatePassLists
+prefix=england_
+src_dir=../data/current/1911England
 
-for N in 20 100 500 1000
+for N in 20 100 500 1000 5000
 do
 	out_dir=../data/subsets/$prefix${N}
 	rm -rf $out_dir

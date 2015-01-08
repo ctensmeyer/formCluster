@@ -17,7 +17,7 @@ def main(indir):
 			for ext in expected_ext:
 				f = _id + ext
 				if not os.path.exists(os.path.join(rdir, f)):
-					print os.path.join(sdir, _id)# + " is missing " + f
+					print os.path.join(sdir, _id) + " is missing " + f
 
 
 

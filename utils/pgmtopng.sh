@@ -4,7 +4,8 @@
 
 function handle_dir {
 	echo $1
-	mogrify -format png ephemeral:$1/*.pgm
+	#mogrify -format png ephemeral:$1/*.pgm
+	mogrify -format png $1/*.pgm
 }
 export -f handle_dir
 
