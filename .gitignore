@@ -7,3 +7,4 @@ data
 cluster/archive/*
 cluster/err/*
 cluster/output/*
+kumar/*.txt

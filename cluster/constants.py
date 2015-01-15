@@ -43,12 +43,17 @@ USE_HORZ = True
 USE_VERT = True
 USE_SURF = False
 
+#USE_TEXT = False
+#USE_HORZ = False
+#USE_VERT = False
+#USE_SURF = True
+
 # New Clustering constants
 NUM_TREES = 2000
 FUNCTION_NUM_FEATURES = lambda x: int(math.sqrt(x))
 RF_THREADS = 2
 SIZE_OF_RANDOM_DATA = 1
 
-REMOVE_DUP_FEATURES = True
+REMOVE_DUP_FEATURES = False
 DUP_THRESH = 0.01
 
