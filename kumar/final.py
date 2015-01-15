@@ -27,8 +27,8 @@ _surf_threshold = 10000
 _num_surf_features = 10000
 
 # Codebook & Features
-_codebook_sizes = [100, 200]
-_num_trials = 2
+_codebook_sizes = [100, 200, 300, 400, 500]
+_num_trials = 10
 _perc_docs_for_codebook = 0.05
 _num_surf_features_codebook = 30000
 _max_k_medoids_iters = 30
@@ -36,8 +36,8 @@ _H_partitions = 4
 _V_partitions = 3
 
 # Random Forest
-_num_trees = 2000
-_rf_threads = 7
+_num_trees = 4000
+_rf_threads = 6
 _perc_random_data = 1
 
 # Spectral Clustering
