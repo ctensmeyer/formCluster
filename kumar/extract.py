@@ -27,13 +27,13 @@ _surf_threshold = 30000
 _num_surf_features = 10000
 
 # Codebook & Features
-_codebook_sizes = [100, 200, 300, 400, 500]
+_codebook_sizes = [100, 300, 500, 750]
 _num_trials = 10
 _perc_docs_for_codebook = 0.05
 _num_surf_features_codebook = 30000
 _max_k_medoids_iters = 30
-_H_partitions = 4
-_V_partitions = 3
+_H_partitions = 3
+_V_partitions = 4
 
 # not parameters
 _num_histograms = ( (2 ** (_H_partitions) - 1) + (2 ** (_V_partitions) - 1) - 1 )

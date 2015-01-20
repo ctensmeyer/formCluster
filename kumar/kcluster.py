@@ -23,7 +23,7 @@ _num_histograms = 21
 
 # Random Forest
 _num_trees = 4000
-_rf_threads = 8
+_rf_threads = 2
 _perc_random_data = 1
 
 # Spectral Clustering
@@ -39,6 +39,7 @@ _recorded_metrics = ['Matrix_File', 'Codebook_Size', 'Trial_Num', 'Num_Clusters'
 
 _out = open(_output_file, 'w')
 _out.write("%s\n" % "\t".join(_recorded_metrics))
+_verbose = True
 
 
 def compute_random_matrix(data_matrix):
@@ -91,6 +92,38 @@ def calc_acc(true_labels, predicted_labels):
 
 	return num_correct / float(len(true_labels))
 
+def form_clusters(true_labels, predicted_labels):
+	cluster_map = dict()
+	class Mock:
+		pass
+	for x in xrange(predicted_labels.max() + 1):
+		m = Mock()
+		m.label = None
+		cluster_map[x] = cluster.Cluster(list(), m, x)
+	count = 0
+	for true, predicted in zip(true_labels, predicted_labels):
+		m = Mock()
+		m._id = count
+		count += 1
+		m.label = true
+		cluster_map[predicted].members.append(m)
+	clusters = cluster_map.values()
+	map(lambda cluster: cluster.set_label(), clusters)
+	return clusters
+
+def print_analysis(clusters):
+	class Mock:
+		pass
+	m = Mock()
+	m.get_clusters = lambda: clusters
+	analyzer = metric.KnownClusterAnalyzer(m)
+	analyzer.print_general_info()
+	analyzer.print_histogram_info()
+	analyzer.print_label_conf_mat()
+	analyzer.print_label_cluster_mat()
+	analyzer.print_label_info()
+	analyzer.print_metric_info()
+
 def main(in_dir):
 
 	data_matrix_files = list()
@@ -119,11 +152,16 @@ def main(in_dir):
 			acc = calc_acc(true_labels, predicted_labels)
 			h, c, v = sklearn.metrics.homogeneity_completeness_v_measure(true_labels, predicted_labels)
 			ari = sklearn.metrics.adjusted_rand_score(true_labels, predicted_labels)
-			silhouette = sklearn.metrics.silhouette_score(sim_mat, predicted_labels, metric='precomputed')
+			silhouette = sklearn.metrics.silhouette_score(1 - sim_mat, predicted_labels, metric='precomputed')
 			f = os.path.basename(data_matrix_file)
-			_out.write("%s\n" % "\t".join([f] +
+			s = ("%s\n" % "\t".join([f] +
 				map(lambda x: "%d" % x, [codebook_size, y, num_clusters, _num_trees]) +
 				map(lambda x: "%.3f" % x, [acc, v, c, h, ari, silhouette])))
+			_out.write(s)
+			if _verbose:
+				print s
+				clusters = form_clusters(true_labels, predicted_labels)
+				print_analysis(clusters)
 	_out.close()
 
 

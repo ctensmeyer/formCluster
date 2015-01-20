@@ -71,7 +71,6 @@ def main(infile, outdir):
 	write(d, outdir)
 
 
-
 if __name__ == "__main__":
 	infile = sys.argv[1]
 	outdir = sys.argv[2]
