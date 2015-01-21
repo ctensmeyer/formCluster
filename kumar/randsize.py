@@ -19,16 +19,16 @@ np.set_printoptions(precision=2, linewidth=200, suppress=True)
 
 # this must be set carefully so the size of the codebook comes out right
 _num_histograms = 21
-_num_trials = 2
+_num_trials = 5
 
 # Random Forest
-_num_trees = 100
-_rf_threads = 1
-#_percs_random_data = [.1, .25, .5, 1., 1.5, 2, 3]
-_percs_random_data = [.1, 1., 2]
+_num_trees = 1000
+_rf_threads = 4
+_percs_random_data = [.1, .25, .5, 1., 1.5, 2, 3]
+#_percs_random_data = [.1, 1., 2]
 
 # Spectral Clustering
-_cluster_range = (2, int(sys.argv[3]))
+_cluster_range = (5, int(sys.argv[3]))
 _assignment_method = 'discretize'
 
 # not parameters
@@ -166,7 +166,7 @@ def main(in_dir):
 						print s
 						clusters = form_clusters(true_labels, predicted_labels)
 						print_analysis(clusters)
-					work_items_completed += 1
+				work_items_completed += 1
 	_out.close()
 
 
