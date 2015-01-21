@@ -277,6 +277,39 @@ def calc_acc(true_labels, predicted_labels):
 
 	return num_correct / float(len(true_labels))
 
+def form_clusters(instances, assignments):
+	print "Forming Clusters"
+	cluster_map = dict()
+	class Mock:
+		pass
+	for x in xrange(_number_of_clusters):
+		m = Mock()
+		m.label = None
+		cluster_map[x] = cluster.Cluster(list(), m, x)
+	for instance, assignment in zip(instances, assignments):
+		m = Mock()
+		m._id = instance[0]
+		m.label = instance[1]
+		cluster_map[assignment].members.append(m)
+	clusters = cluster_map.values()
+	map(lambda cluster: cluster.set_label(), clusters)
+	print "Done\n"
+	return clusters
+
+def print_analysis(instances, clusters):
+	class Mock:
+		pass
+	m = Mock()
+	m.get_clusters = lambda: clusters
+	m.get_docs = lambda: instances
+	analyzer = metric.KnownClusterAnalyzer(m)
+	analyzer.print_general_info()
+	analyzer.print_histogram_info()
+	analyzer.print_label_conf_mat()
+	analyzer.print_label_cluster_mat()
+	analyzer.print_label_info()
+	analyzer.print_metric_info()
+
 def main(in_dir):
 	instances = load_instances(in_dir)
 	true_labels = map(lambda tup: tup[1], instances)
@@ -305,9 +338,12 @@ def main(in_dir):
 				h, c, v = sklearn.metrics.homogeneity_completeness_v_measure(true_labels, predicted_labels)
 				ari = sklearn.metrics.adjusted_rand_score(true_labels, predicted_labels)
 				silhouette = sklearn.metrics.silhouette_score(sim_mat, predicted_labels, metric='precomputed')
-				_out.write("%s\n" % "\t".join(
+				s = "%s\n" % "\t".join(
 					map(lambda x: "%d" % x, [codebook_size, trial, num_clusters, _num_trees]) +
 					map(lambda x: "%.3f" % x, [acc, v, c, h, ari, silhouette])))
+				_out.write(s)
+				print s
+				clusters = form_clusters(
 	_out.close()
 
 
