@@ -23,7 +23,7 @@ def cluster(distances, k=3, maxIters=100000, indent=2):
 	# Until the medoids stop updating, do the following:
 	while not ((old_medoids == curr_medoids).all()):
 		# Assign each point to cluster with closest medoid.
-		print "%sIteration %d" % (indent * "\t", iter_num)
+		#print "%sIteration %d" % (indent * "\t", iter_num)
 		iter_num += 1
 		clusters = assign_points_to_clusters(curr_medoids, distances)
 

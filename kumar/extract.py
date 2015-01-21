@@ -23,27 +23,17 @@ _image_ext = ".jpg"
 # SURF Extraction
 _surf_upright = True
 _surf_extended = False
-_surf_threshold = 10000
+_surf_threshold = 30000
 _num_surf_features = 10000
 
 # Codebook & Features
-_codebook_sizes = [100, 200, 300, 400, 500]
+_codebook_sizes = [100, 300, 500, 750]
 _num_trials = 10
 _perc_docs_for_codebook = 0.05
 _num_surf_features_codebook = 30000
 _max_k_medoids_iters = 30
-_H_partitions = 4
-_V_partitions = 3
-
-# Random Forest
-_num_trees = 4000
-_rf_threads = 6
-_perc_random_data = 1
-
-# Spectral Clustering
-_cluster_range = (2, int(sys.argv[3]))
-_assignment_method = 'discretize'
-
+_H_partitions = 3
+_V_partitions = 4
 
 # not parameters
 _num_histograms = ( (2 ** (_H_partitions) - 1) + (2 ** (_V_partitions) - 1) - 1 )
@@ -52,12 +42,6 @@ _surf_instance.upright = _surf_upright
 _surf_instance.extended = _surf_extended
 _surf_features = dict()
 _print_interval = 20
-_output_file = sys.argv[2]
-_recorded_metrics = ['Codebook_Size', 'Trial_Num', 'Num_Clusters', 'Num_Trees', 
-					'Acc', 'V-measure', 'Completeness', 'Homogeneity', 'ARI', 'Silhouette']
-
-_out = open(_output_file, 'w')
-_out.write("%s\n" % "\t".join(_recorded_metrics))
 
 
 def calc_surf_features(im_file):
@@ -73,7 +57,7 @@ def calc_surf_features(im_file):
 			_surf_instance.hessianThreshold /= 2
 			kps, deses = _surf_instance.detectAndCompute(im, None)
 		pts = np.array(map(lambda kp: kp.pt, kps[:_num_surf_features]))
-		deses = deses[:_num_surf_features]
+		deses = deses[:_num_surf_features] + 0
 		_surf_features[im_file] = (pts, deses, width, height)
 	return _surf_features[im_file]
 	
@@ -179,10 +163,8 @@ def load_instances(in_dir):
 	return instances
 
 def sample_surf_features(instances):
-	print "Getting Surf Features for Codebook Construction"
 	num_to_sample = int(len(instances) * _perc_docs_for_codebook)
 	sampled_instances = random.sample(instances, num_to_sample)
-	print "\tSampling Features from %d instances" % num_to_sample
 	list_sampled_features = list()
 	for instance in sampled_instances:
 		deses = calc_surf_features(instance[0])[1]
@@ -192,7 +174,6 @@ def sample_surf_features(instances):
 	return sampled_features[:_num_surf_features_codebook]
 
 def construct_codebook(instances, codebook_size):
-	print "Constructing Codebook"
 
 	surf_feature_samples = sample_surf_features(instances)
 
@@ -202,11 +183,9 @@ def construct_codebook(instances, codebook_size):
 	indices = kmedoids.cluster(distances, k=codebook_size, maxIters=_max_k_medoids_iters)[1]
 	codebook = surf_feature_samples[indices]
 
-	print "Done\n"
 	return codebook
 
 def compute_features(instances, codebook):
-	print "Computing histogram features for each instance"
 
 	features = list()
 	total = len(instances)
@@ -214,104 +193,49 @@ def compute_features(instances, codebook):
 		features.append(calc_features(instance[0], codebook))
 	features = np.array(features)
 
-	print "Done\n"
 	return features
 
 
-def compute_random_matrix(data_matrix):
-	print "Constructing Random Training Set"
-
-	rand_shape = (int(data_matrix.shape[0] * _perc_random_data), data_matrix.shape[1])
-	rand_mat = np.zeros(rand_shape)
-	#np.random.seed(12345)
-	for col in xrange(rand_mat.shape[1]):
-		vals = data_matrix[:,col]
-		for row in xrange(rand_mat.shape[0]):
-			rand_mat[row, col] = np.random.choice(vals)
-
-	print "Done\n"
-	return rand_mat
-
-def train_classifier(real_data, fake_data):
-	print "Training Random Forest"
-
-	rf = sklearn.ensemble.RandomForestClassifier(n_estimators=_num_trees, max_features='auto',
-												bootstrap=False, n_jobs=_rf_threads)
-	combined_data = np.concatenate( (real_data, fake_data) )
-	labels = np.concatenate( (np.ones(real_data.shape[0]), np.zeros(fake_data.shape[0])) )
-	rf.fit(combined_data, labels)
-
-	print "Done\n"
-	return rf
-
-def compute_sim_mat(data_matrix, random_forest):
-	print "Computing the Similarity Matrix"
-
-	leaf_nodes = random_forest.apply(data_matrix)
-	sim_mat = scipy.spatial.distance.pdist(leaf_nodes, "hamming")
-	sim_mat = scipy.spatial.distance.squareform(sim_mat)
-	sim_mat = 1 - sim_mat
-
-	print "Done\n"
-	return sim_mat
-
-def spectral_cluster(affinity_matrix, num_clusters):
-	print "Performing Spectral Clustering"
-
-	sc = sklearn.cluster.SpectralClustering(n_clusters=num_clusters, affinity="precomputed",
-											assign_labels=_assignment_method)
-	assignments = sc.fit_predict(affinity_matrix)
-
-	print "Done\n"
-	return assignments
-
-def calc_acc(true_labels, predicted_labels):
-	_num_clusters = predicted_labels.max() + 1
-	counters = {x: collections.Counter() for x in xrange(_num_clusters)}
-	for true_label, predicted_label in zip(true_labels, predicted_labels):
-		counters[predicted_label][true_label] += 1
-
-	num_correct = 0
-	for counter in counters.values():
-		num_correct += counter.most_common(1)[0][1]
-
-	return num_correct / float(len(true_labels))
-
-def main(in_dir):
+def main(in_dir, out_dir):
+	try:
+		os.makedirs(out_dir)
+	except:
+		pass
 	instances = load_instances(in_dir)
-	true_labels = map(lambda tup: tup[1], instances)
+	true_labels = np.array(map(lambda tup: tup[1], instances))
+	np.save(os.path.join(out_dir, "labels.npy"), true_labels)
 	print "Num Instanes", len(instances)
 
 	for x, instance in enumerate(instances):
 		calc_surf_features(instance[0])
 		if x % _print_interval == 0:
-			print "\t%d/%d (%2.1f%%) Documents processed" % (x, len(instances), 100.0 * x / len(instances))
+			print "\t%d/%d (%2.1f%%) Images processed" % (x, len(instances), 100.0 * x / len(instances))
 
-	total_trials = len(_codebook_sizes) * _num_trials
-	for y, codebook_size in enumerate(_codebook_sizes):
+	codebook_params = list()
+	for codebook_size in _codebook_sizes:
 		for trial in xrange(_num_trials):
-			trial_num = trial + y * len(_codebook_sizes)
-			print "\t%d/%d (%2.1f%%) Trials processed" % (trial_num, total_trials, 100.0 * trial_num / total_trials)
+			codebook_params.append(codebook_size)
+			
+	num_codebooks = len(codebook_params)
+	print
+	print "Num Codebooks:", num_codebooks
+	print codebook_params
+	total_trials = len(_codebook_sizes) * _num_trials
+	for y, codebook_size in enumerate(codebook_params):
+		print "\t%d/%d (%2.1f%%) Codebooks processed" % (y, num_codebooks, 100.0 * y / num_codebooks)
 
-			codebook = construct_codebook(instances, codebook_size)
-			data_matrix = compute_features(instances, codebook)
-			random_matrix = compute_random_matrix(data_matrix)
-			random_forest = train_classifier(data_matrix, random_matrix)
-			sim_mat = compute_sim_mat(data_matrix, random_forest)
-
-			for num_clusters in xrange(_cluster_range[0], _cluster_range[1] + 1):
-				predicted_labels = spectral_cluster(sim_mat, num_clusters)
-				acc = calc_acc(true_labels, predicted_labels)
-				h, c, v = sklearn.metrics.homogeneity_completeness_v_measure(true_labels, predicted_labels)
-				ari = sklearn.metrics.adjusted_rand_score(true_labels, predicted_labels)
-				silhouette = sklearn.metrics.silhouette_score(sim_mat, predicted_labels, metric='precomputed')
-				_out.write("%s\n" % "\t".join(
-					map(lambda x: "%d" % x, [codebook_size, trial, num_clusters, _num_trees]) +
-					map(lambda x: "%.3f" % x, [acc, v, c, h, ari, silhouette])))
-	_out.close()
+		codebook = None
+		while codebook is None:
+			try:
+				codebook = construct_codebook(instances, codebook_size)
+			except:
+				print "Creating Codebook failed, trying again"
+		data_matrix = compute_features(instances, codebook)
+		np.save(os.path.join(out_dir, "data_matrix_%d.npy" % y), data_matrix)
 
 
 if __name__ == "__main__":
 	in_dir = sys.argv[1]
-	main(in_dir)
+	out_dir = sys.argv[2]
+	main(in_dir, out_dir)
 

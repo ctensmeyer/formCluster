@@ -66,6 +66,8 @@ def get_data_dir(descrip):
 
 	if descrip.startswith("padeaths_all"):
 		return "../data/current/PADeaths"
+	if descrip.startswith("padeaths_2000"):
+		return "../data/subsets/padeaths_2000"
 	if descrip.startswith("padeaths_1000"):
 		return "../data/subsets/padeaths_1000"
 	if descrip.startswith("padeaths_500"):
@@ -140,7 +142,7 @@ def cluster_known():
 		num_initial_seeds=param, 	# KumarCONFIRM, how many seeds to start with
 		iterations=1,				# KumarCONFIRM, how many iterations to perform
 		num_seeds=param,            # KumarCONFIRM, how many seeds to get each iteration
-		cluster_range=(2,20),	 	# KumarCONFIRM, how many clusters to search over
+		cluster_range=(10,15),	 	# KumarCONFIRM, how many clusters to search over
 
 		seeds_per_batch=2,  		# MaxCliqueSeedsKumarCONFIRM, how many seeds to get per batch
 		batch_size=10,  			# MaxCliqueSeedsKumarCONFIRM, how many batches
@@ -153,10 +155,10 @@ def cluster_known():
 		use_ss=param3
 		)
 
-	confirm.cluster()
+	confirm.cluster2()
 	print
 	print
-	#exit()
+	exit()
 
 	if hasattr(confirm, 'print_reject_analysis'):
 		confirm.print_reject_analysis()
@@ -238,16 +240,15 @@ def aggreage_same():
 		print "************* Adding in doc %d ********************" % x
 		print _doc._id
 		print
+		im = _doc.draw()
+		im.save("output/aggregate/doc_%d.png" % x)
+
 		if template is None:
 			template = _doc
 		else:
 			template.aggregate(_doc)
 			im = template.draw()
 			im.save("output/aggregate/template_%d.png" % x)
-			print
-			print "IN DRIVER", id(template)
-			for line in template.text_lines:
-				print line
 	template.final_prune()
 	im = template.draw()
 	im.save("output/aggregate/template_final.png")

@@ -3,17 +3,18 @@ import os
 import sys
 import cv2
 import math
+import label
 import random
 import shutil
 import metric
 import cPickle
 import cluster
 import kmedoids
-import collections
 import numpy as np
-import scipy.spatial.distance
-import sklearn.ensemble
+import collections
 import sklearn.cluster
+import sklearn.ensemble
+import scipy.spatial.distance
 
 np.set_printoptions(precision=2, linewidth=200, suppress=True)
 
@@ -22,7 +23,7 @@ _image_ext = ".jpg"
 # Model Parameters
 _surf_upright = True
 _surf_extended = False
-_surf_threshold = 10000
+_surf_threshold = 8000
 _surf_threshold_low = 3000
 _num_surf_features = 10000
 _min_surf_features = 5000
@@ -30,7 +31,7 @@ _min_surf_features = 5000
 _codebook_size = 300
 _perc_docs_for_codebook = 0.05
 _max_surf_features = _codebook_size * 100
-_H_partitions = 4
+_H_partitions = 3
 _V_partitions = 4
 _use_k_medoids = True
 _max_k_medoids_iters = 30
@@ -41,6 +42,8 @@ print "Num Features", _num_features
 
 _num_trees = 2000
 _num_tree_features = int(math.sqrt(_num_features))
+_rf_threads = 8
+_perc_random_data = float(sys.argv[2])
 
 
 _surf_instance = cv2.SURF(_surf_threshold)
@@ -51,7 +54,7 @@ _surf_instance_low = cv2.SURF(_surf_threshold_low)
 _surf_instance_low.upright = _surf_upright
 _surf_instance_low.extended = _surf_extended
 
-_number_of_clusters = 80
+_number_of_clusters = int(sys.argv[3])
 
 _print_interval = 20
 
@@ -79,109 +82,201 @@ try:
 except:
 	pass
 
-class Instance:
+def calc_surf_features(im_file):
+	im = cv2.imread(im_file, 0)
+	height = im.shape[0]
+	width = im.shape[1]
+	# surf_features[0] is the array of keypoints
+	# surf_features[1] is the array of descriptors
+	kps, deses = _surf_instance.detectAndCompute(im, None)
+	if len(kps) < _min_surf_features:
+		kps, deses = _surf_instance_low.detectAndCompute(im, None)
+	pts = np.array(map(lambda kp: kp.pt, kps[:_num_surf_features]))
+	deses = deses[:_num_surf_features] + 0
+	return pts, deses, width, height
 	
-	def __init__(self, im_file, label):
-		self.im_file = im_file
-		self.label = label
-		self._id = os.path.splitext(im_file)[0]
-		self.surf_features = None
+def calc_features(im_file, codebook):
+	# calc the surf features
+	pts, deses, width, height = calc_surf_features(im_file)
 
-	def calc_surf_features(self):
-		if self.surf_features is None:
-			im = cv2.imread(self.im_file, 0)
-			self.height = im.shape[0]
-			self.width = im.shape[1]
-			# surf_features[0] is the array of keypoints
-			# surf_features[1] is the array of descriptors
-			kps, deses = _surf_instance.detectAndCompute(im, None)
-			if len(kps) < _min_surf_features:
-				kps, deses = _surf_instance_low.detectAndCompute(im, None)
-			self.pts = np.array(map(lambda kp: kp.pt, kps[:_num_surf_features]))
-			self.deses = deses[:_num_surf_features] + 0
-			#print len(self.pts)
-			#print self.deses.base is deses
-			del deses
-			del im
-			del kps
+	# the most fine grained partitions
+	horz_histos = np.zeros(2 ** (_H_partitions - 1) * _codebook_size)
+	vert_histos = np.zeros(2 ** (_V_partitions - 1) * _codebook_size)
+	horz_stride = (width / 2 ** (_H_partitions - 1)) + 1
+	vert_stride = (height / 2 ** (_V_partitions - 1)) + 1
 
-	def calc_features(self, codebook):
-		# the most fine grained partitions
-		horz_histos = np.zeros(2 ** (_H_partitions - 1) * _codebook_size)
-		vert_histos = np.zeros(2 ** (_V_partitions - 1) * _codebook_size)
-		self.calc_surf_features()
-		horz_stride = (self.width / 2 ** (_H_partitions - 1)) + 1
-		vert_stride = (self.height / 2 ** (_V_partitions - 1)) + 1
+	#print "Image dims", (width, height)
+	#print "horz_stride", horz_stride
+	#print "vert_stride", vert_stride
+	#print "horz_histo shape", horz_histos.shape
+	#print "vert_histo shape", vert_histos.shape
 
-		#print "Image dims", (self.width, self.height)
-		#print "horz_stride", horz_stride
-		#print "vert_stride", vert_stride
-		#print "horz_histo shape", horz_histos.shape
-		#print "vert_histo shape", vert_histos.shape
+	closest_code = lambda feature: scipy.spatial.distance.cdist(codebook, [feature], metric='cityblock').argmin()
 
-		closest_code = lambda feature: scipy.spatial.distance.cdist(codebook, [feature], metric='cityblock').argmin()
+	# populate the most fine grained partitions
+	for pt, des in zip(pts, deses):
+		#print pt
+		#print des
+		idx = closest_code(des)
+		#print "Closest code:", idx
+		horz_histos[idx + ( int(pt[0] / horz_stride)  * _codebook_size)] += 1
+		vert_histos[idx + ( int(pt[1] / vert_stride)  * _codebook_size)] += 1
 
-		# populate the most fine grained partitions
-		for pt, des in zip(self.pts, self.deses):
-			#print pt
-			#print des
-			idx = closest_code(des)
-			#print "Closest code:", idx
-			horz_histos[idx + ( int(pt[0] / horz_stride)  * _codebook_size)] += 1
-			vert_histos[idx + ( int(pt[1] / vert_stride)  * _codebook_size)] += 1
+	#print "Horz Histo:"
+	#print horz_histos
+	#print
+	#print "Vert Histo:"
+	#print vert_histos
 
-		#print "Horz Histo:"
-		#print horz_histos
-		#print
-		#print "Vert Histo:"
-		#print vert_histos
+	# aggregate the statistics
+	histos = np.zeros(_num_features)
+	histo_offset = 0
+	stride = 1
+	while stride <= horz_histos.shape[0] / _codebook_size:
+		horz_offset = 0
+		while horz_offset < horz_histos.shape[0] / _codebook_size:
+			horz_cur = horz_offset
+			while horz_cur < (horz_offset + stride):
+				histos[histo_offset * _codebook_size : (histo_offset + 1) * _codebook_size] += (
+					horz_histos[horz_cur * _codebook_size: (horz_cur + 1) * _codebook_size])
+				horz_cur += 1
+			horz_offset += stride
+			histo_offset += 1
+		stride *= 2
+	stride = 1
+	while stride < vert_histos.shape[0] / _codebook_size:
+		vert_offset = 0
+		while vert_offset < vert_histos.shape[0] / _codebook_size:
+			vert_cur = vert_offset
+			while vert_cur < (vert_offset + stride):
+				histos[histo_offset * _codebook_size : (histo_offset + 1) * _codebook_size] += (
+					vert_histos[vert_cur * _codebook_size: (vert_cur + 1) * _codebook_size])
+				vert_cur += 1
+			vert_offset += stride
+			histo_offset += 1
+		stride *= 2
 
-		# aggregate the statistics
-		histos = np.zeros(_num_features)
-		histo_offset = 0
-		stride = 1
-		while stride <= horz_histos.shape[0] / _codebook_size:
-			horz_offset = 0
-			while horz_offset < horz_histos.shape[0] / _codebook_size:
-				horz_cur = horz_offset
-				while horz_cur < (horz_offset + stride):
-					histos[histo_offset * _codebook_size : (histo_offset + 1) * _codebook_size] += (
-						horz_histos[horz_cur * _codebook_size: (horz_cur + 1) * _codebook_size])
-					horz_cur += 1
-				horz_offset += stride
-				histo_offset += 1
-			stride *= 2
-		stride = 1
-		while stride < vert_histos.shape[0] / _codebook_size:
-			vert_offset = 0
-			while vert_offset < vert_histos.shape[0] / _codebook_size:
-				vert_cur = vert_offset
-				while vert_cur < (vert_offset + stride):
-					histos[histo_offset * _codebook_size : (histo_offset + 1) * _codebook_size] += (
-						vert_histos[vert_cur * _codebook_size: (vert_cur + 1) * _codebook_size])
-					vert_cur += 1
-				vert_offset += stride
-				histo_offset += 1
-			stride *= 2
+	#print
+	#print "Whole Histo"
+	#print histos
 
-		#print
-		#print "Whole Histo"
-		#print histos
+	# normalize
+	for offset in xrange(_num_features / _codebook_size):
+		s = histos[offset * _codebook_size : (offset + 1) * _codebook_size].sum()
+		if s:
+			histos[offset * _codebook_size : (offset + 1) * _codebook_size] /= float(s)
+	features = histos
 
-		# normalize
-		for offset in xrange(_num_features / _codebook_size):
-			s = histos[offset * _codebook_size : (offset + 1) * _codebook_size].sum()
-			if s:
-				histos[offset * _codebook_size : (offset + 1) * _codebook_size] /= float(s)
-		self.features = histos
+	#print
+	#print "Normalized"
+	#print self.features
+	#exit()
+	return features
 
-		#print
-		#print "Normalized"
-		#print self.features
-		#exit()
-		return self.features
+#class Instance:
+#	
+#	def __init__(self, im_file, _label):
+#		self.im_file = im_file
+#		self.label = label.preprocess_label(_label)
+#		self._id = os.path.splitext(im_file)[0]
+#		self.surf_features = None
+#
+#	def calc_surf_features(self):
+#		if self.surf_features is None:
+#			im = cv2.imread(self.im_file, 0)
+#			self.height = im.shape[0]
+#			self.width = im.shape[1]
+#			# surf_features[0] is the array of keypoints
+#			# surf_features[1] is the array of descriptors
+#			kps, deses = _surf_instance.detectAndCompute(im, None)
+#			if len(kps) < _min_surf_features:
+#				kps, deses = _surf_instance_low.detectAndCompute(im, None)
+#			self.pts = np.array(map(lambda kp: kp.pt, kps[:_num_surf_features]))
+#			self.deses = deses[:_num_surf_features] + 0
+#			#print len(self.pts)
+#			#print self.deses.base is deses
+#			del deses
+#			del im
+#			del kps
+#
+#	def calc_features(self, codebook):
+#		# the most fine grained partitions
+#		horz_histos = np.zeros(2 ** (_H_partitions - 1) * _codebook_size)
+#		vert_histos = np.zeros(2 ** (_V_partitions - 1) * _codebook_size)
+#		self.calc_surf_features()
+#		horz_stride = (self.width / 2 ** (_H_partitions - 1)) + 1
+#		vert_stride = (self.height / 2 ** (_V_partitions - 1)) + 1
+#
+#		#print "Image dims", (self.width, self.height)
+#		#print "horz_stride", horz_stride
+#		#print "vert_stride", vert_stride
+#		#print "horz_histo shape", horz_histos.shape
+#		#print "vert_histo shape", vert_histos.shape
+#
+#		closest_code = lambda feature: scipy.spatial.distance.cdist(codebook, [feature], metric='cityblock').argmin()
+#
+#		# populate the most fine grained partitions
+#		for pt, des in zip(self.pts, self.deses):
+#			#print pt
+#			#print des
+#			idx = closest_code(des)
+#			#print "Closest code:", idx
+#			horz_histos[idx + ( int(pt[0] / horz_stride)  * _codebook_size)] += 1
+#			vert_histos[idx + ( int(pt[1] / vert_stride)  * _codebook_size)] += 1
+#
+#		#print "Horz Histo:"
+#		#print horz_histos
+#		#print
+#		#print "Vert Histo:"
+#		#print vert_histos
+#
+#		# aggregate the statistics
+#		histos = np.zeros(_num_features)
+#		histo_offset = 0
+#		stride = 1
+#		while stride <= horz_histos.shape[0] / _codebook_size:
+#			horz_offset = 0
+#			while horz_offset < horz_histos.shape[0] / _codebook_size:
+#				horz_cur = horz_offset
+#				while horz_cur < (horz_offset + stride):
+#					histos[histo_offset * _codebook_size : (histo_offset + 1) * _codebook_size] += (
+#						horz_histos[horz_cur * _codebook_size: (horz_cur + 1) * _codebook_size])
+#					horz_cur += 1
+#				horz_offset += stride
+#				histo_offset += 1
+#			stride *= 2
+#		stride = 1
+#		while stride < vert_histos.shape[0] / _codebook_size:
+#			vert_offset = 0
+#			while vert_offset < vert_histos.shape[0] / _codebook_size:
+#				vert_cur = vert_offset
+#				while vert_cur < (vert_offset + stride):
+#					histos[histo_offset * _codebook_size : (histo_offset + 1) * _codebook_size] += (
+#						vert_histos[vert_cur * _codebook_size: (vert_cur + 1) * _codebook_size])
+#					vert_cur += 1
+#				vert_offset += stride
+#				histo_offset += 1
+#			stride *= 2
+#
+#		#print
+#		#print "Whole Histo"
+#		#print histos
+#
+#		# normalize
+#		for offset in xrange(_num_features / _codebook_size):
+#			s = histos[offset * _codebook_size : (offset + 1) * _codebook_size].sum()
+#			if s:
+#				histos[offset * _codebook_size : (offset + 1) * _codebook_size] /= float(s)
+#		self.features = histos
+#
+#		#print
+#		#print "Normalized"
+#		#print self.features
+#		#exit()
+#		return self.features
 		
 
+# an instance is a (im_filename, label) tuple
 def load_instances(in_dir):
 	print "Loading Instances"
 	if _read_cache and os.path.exists(_cache_instances_file):
@@ -205,10 +300,10 @@ def load_instances(in_dir):
 		rdir = os.path.join(in_dir, sdir)
 		for im_file in os.listdir(rdir):
 			if im_file.endswith(_image_ext):
-				label = sdir
-				#if label == "UK1911Census_EnglandWales_Household100Names_08_01":
-				#	label = "UK1911Census_EnglandWales_Household40Names_07_01"
-				instances.append(Instance(os.path.join(rdir, im_file), label))
+				_label = label.preprocess_label(sdir)
+				#instances.append(Instance(os.path.join(rdir, im_file), label))
+				instances.append( (os.path.join(rdir, im_file), _label) )
+	#random.seed(123456)
 	random.shuffle(instances)
 
 	if _write_cache:
@@ -228,12 +323,10 @@ def sample_surf_features(instances):
 	print "\tSampling Features from %d instances" % num_to_sample
 	list_sampled_features = list()
 	for x in xrange(num_to_sample):
-		instances[x].calc_surf_features()
-		list_sampled_features.append(instances[x].deses)
+		deses = calc_surf_features(instances[x][0])[1]
+		list_sampled_features.append(deses)
 		if x % _print_interval == 0:
 			print "\t\t%d/%d (%2.1f%%) Documents processed" % (x, num_to_sample, 100.0 * x / num_to_sample)
-	for _ in list_sampled_features:
-		print _
 	sampled_features = np.concatenate(list_sampled_features)
 	np.random.shuffle(sampled_features)
 	return sampled_features[:_max_surf_features]
@@ -298,7 +391,7 @@ def compute_features(instances, codebook):
 	features = list()
 	total = len(instances)
 	for x, instance in enumerate(instances):
-		features.append(instance.calc_features(codebook))
+		features.append(calc_features(instance[0], codebook))
 		if x % _print_interval == 0:
 			print "\t\t%d/%d (%2.1f%%) Documents processed" % (x, total, 100.0 * x / total)
 	features = np.array(features)
@@ -313,18 +406,9 @@ def compute_features(instances, codebook):
 			print "\tCould not write to cache:", e
 		f.close()
 
-	if _write_cache:
-		print "\tWriting Instances to Cache"
-		f = open(_cache_instances_file, 'w')
-		try:
-			cPickle.dump(instances, f)
-		except Exception as e:
-			print "\tCould not write to cache:", e
-		f.close()
-	print "Done\n"
-
 	print "Done\n"
 	return features
+
 
 def compute_random_matrix(data_matrix):
 	print "Constructing Random Training Set"
@@ -342,7 +426,9 @@ def compute_random_matrix(data_matrix):
 			print "\tComputing From scratch"
 			f.close()
 
-	rand_mat = np.zeros_like(data_matrix)
+	rand_shape = (int(data_matrix.shape[0] * _perc_random_data), data_matrix.shape[1])
+	rand_mat = np.zeros(rand_shape)
+	#np.random.seed(12345)
 	for col in xrange(rand_mat.shape[1]):
 		vals = data_matrix[:,col]
 		for row in xrange(rand_mat.shape[0]):
@@ -379,7 +465,7 @@ def train_classifier(real_data, fake_data):
 
 
 	rf = sklearn.ensemble.RandomForestClassifier(n_estimators=_num_trees, max_features=_num_tree_features,
-												bootstrap=False, n_jobs=6)
+												bootstrap=False, n_jobs=_rf_threads)
 	combined_data = np.concatenate( (real_data, fake_data) )
 	labels = np.concatenate( (np.ones(real_data.shape[0]), np.zeros(fake_data.shape[0])) )
 	rf.fit(combined_data, labels)
@@ -465,12 +551,15 @@ def form_clusters(instances, assignments):
 	cluster_map = dict()
 	class Mock:
 		pass
-	m = Mock()
-	m.label = None
 	for x in xrange(_number_of_clusters):
+		m = Mock()
+		m.label = None
 		cluster_map[x] = cluster.Cluster(list(), m, x)
 	for instance, assignment in zip(instances, assignments):
-		cluster_map[assignment].members.append(instance)
+		m = Mock()
+		m._id = instance[0]
+		m.label = instance[1]
+		cluster_map[assignment].members.append(m)
 	clusters = cluster_map.values()
 	map(lambda cluster: cluster.set_label(), clusters)
 	print "Done\n"
@@ -507,9 +596,7 @@ def get_clusters(in_dir):
 	print
 
 	clusters = form_clusters(instances, cluster_assignments) 
-
-	for cluster in clusters:
-		print cluster._id, cluster.label, collections.Counter(map(lambda instance: instance.label, cluster.members))
+	clusters = filter(lambda cluster: cluster.members, clusters)
 
 	return instances, clusters
 

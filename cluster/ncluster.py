@@ -18,6 +18,8 @@ def remove_duplicate_features(data_matrix, diff=0.01):
 		if col in to_remove:
 			continue
 		for col2 in xrange(col + 1, data_matrix.shape[1]):
+			if col2 in to_remove:
+				continue
 			dist = scipy.spatial.distance.cityblock(data_matrix[:,col], data_matrix[:,col2])  
 			norm_dist = dist / float(data_matrix.shape[0])
 			#print "%d, %d: %.3f, %.3f" % (col, col2, dist, norm_dist)
@@ -157,7 +159,7 @@ def kumar_cluster_cv(data_matrix, instances, cluster_range):
 	
 class KumarCONFIRM(cluster.BaseCONFIRM):
 	
-	def __init__(self, docs, iterations=2, num_initial_seeds=10, num_seeds=10, cluster_range=(2,20), **kwargs):
+	def __init__(self, docs, iterations=2, num_initial_seeds=10, num_seeds=10, cluster_range=(10,15), **kwargs):
 		super(KumarCONFIRM, self).__init__(docs, **kwargs)
 		self.num_initial_seeds = num_initial_seeds
 		self.iterations = iterations
@@ -400,7 +402,7 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 
 	def __init__(self, docs, init_subset=2000, min_membership=5, iterations=2, 
 				num_initial_seeds=10, num_seeds=10, z_threshold=-1, 
-				use_labels=True, use_ss=False, num_per_seed=1, cluster_range=(2,20),
+				use_labels=True, use_ss=False, num_per_seed=1, cluster_range=(10,15),
 				**kwargs):
 		self.docs = docs
 		self.init_subset = init_subset
