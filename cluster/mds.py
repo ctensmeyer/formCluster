@@ -15,13 +15,111 @@ class shapeArray:
         self.shape=[len(data), len(data[0])]
 
 
-def docReduction(docs,N=2):
+def docReduction(docs,dim=2):
     similarities = utils.pairwise(docs, lambda x,y: x.similarity(y))
-    return reduction(similarities, N)
+    return reduction(similarities, dim)
+
+def hierarchyReduction(hierarchy, dim = 2, classic=False):
+    
+    if(hierarchy.representatives == None):
+        return
+    
+    docs = map(lambda x: x.center, hierarchy.representatives)
+
+    if (hierarchy.center != None):
+        docs.append(hierarchy.center)
+    
+    if (hierarchy.simMat == None):
+        hierarchy.simMat = utils.pairwise(docs, lambda x,y: x.similarity(y))
+    
+    points = []
+    if(classic):
+        points = classicMDS(hierarchy.simMat,dim)
+    else:
+        points = reduction(hierarchy.simMat,dim)
+        
+    if (hierarchy.center != None):    
+        hierarchy.centerPos = points[-1]
+        hierarchy.mdsPos = points[:-1]
+    else:
+        hierarchy.mdsPos = points[:]
+        
+    map(lambda x: hierarchyReduction(x,dim), hierarchy.representatives)
 
 
-def classicMDS(simMat):
-    return None
+def getMat(value, n):
+    return [[value] * n for i in range(n)]
+
+
+def stress(D, X, distance=utils.euclideanDistance):
+    
+    denominator = 0.0
+    numerator = 0.0
+    
+    for i in range(len(D)):
+        for j in range(i,len(D)):
+            d = D[i][j]
+            f = distance(X[i],X[j])
+            numerator += (f- d) ** 2
+            denominator += d ** 2
+    return np.sqrt(numerator/denominator)
+
+def classicMDS(simMat, dim = 2):
+    dis = map(lambda x: map(lambda y: 1-y, x), simMat)
+    
+    D = np.array(dis)
+    
+    
+    n = len(D)
+    Ones = np.array(getMat(1, n))
+    
+    I = np.array(getMat(0,n))
+    
+    for x in range(n):
+        I[x][x] = 1
+
+
+    J = np.matrix(I - (1/float(n))*Ones)
+    
+    P = np.matrix(D*D)
+    
+    B = -0.5 * J * P * J
+    
+
+    W,V = np.linalg.eigh(B)
+
+    top = [0] * dim
+    
+    w = W[:]
+    
+    w = sorted(w, reverse=True)
+    
+
+    idx = np.where(W == w[0])
+    vectors = V[:,idx[0]]
+    values = W[idx]
+    
+    for i in range(1,dim):
+        idx = np.where(W == w[i])
+        vectors = np.append(vectors, V[:,idx[0]], axis = 1)
+        values = np.append(values, W[idx])
+            
+        
+        
+
+    
+    L = np.array(getMat(0.0,dim))
+    for i in range(dim):
+        L[i,i] = values[i]
+        
+    L = np.sqrt(L)
+
+
+    X = np.array(vectors * L)
+    
+    print "Stress:", stress(dis,X)
+    
+    return X
 
 def reduction(simMat,N=2):
 
@@ -36,7 +134,8 @@ def reduction(simMat,N=2):
     
     #Run MDS
     fit = mds.fit(mat)
-    print "Stress:", fit.stress_
+    print "Approximate Stress:", fit.stress_
+    print "Stress:", stress(dis, fit.embedding_)
 
     return fit.embedding_
 
@@ -53,7 +152,7 @@ def main(args):
     #clustering = utils.load_obj(path)
 
     #docs = clustering[C].members
-    docs = doc.get_docs_nested(driver.get_data_dir("very_small"))
+    docs = doc.get_docs_nested(driver.get_data_dir("small"))
 
     print "Calculating Pairwise Similarities"
     similarities = utils.pairwise(docs, lambda x,y: x.similarity(y))
@@ -61,8 +160,11 @@ def main(args):
     #print "INITIAL SIMILARITIES:"
     #utils.print_mat(similarities)
 
+    #similarities = [[0,93,82,133],[93,0,52,60],[82,52,0,111],[133,60,111,0]]
+
     print "Starting MDS"
-    pos = reduction(similarities)
+    #pos = reduction(similarities)
+    pos = classicMDS(similarities)
 
     print "MDS:"
     utils.print_mat(pos)

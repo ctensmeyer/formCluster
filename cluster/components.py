@@ -1,4 +1,5 @@
 
+import collections
 import dictionary
 import utils
 import math
@@ -71,6 +72,28 @@ class Line(Feature):
 		'''
 		return Feature.match_value(self) * math.log(self.length)
 
+	def truncate(self, size):
+		'''
+		:param size: (width, height)
+		Truncates the endpoints of the line to be within the rectangle defined by size
+		'''
+		if self.pos[0] < 0:
+			self.pos = (0, self.pos[1])
+		if self.pos[1] < 0:
+			self.pos = (self.pos[0], 0)
+		if self.is_horizontal() and (self.pos[0] + self.length) >= size[0]:
+			self.length = size[0] - self.pos[0] - 1
+			#print "Truncating: ", self
+		elif self.is_vertical() and (self.pos[1] + self.length) >= size[1]:
+			self.length = size[1] - self.pos[1] - 1
+			#print "Truncating: ", self
+
+	def end_pos(self):
+		if self.orien == Line.HORIZONTAL:
+			return (self.pos[0], self.pos[1] + self.length)
+		else:
+			return (self.pos[0] + self.length, self.pos[1])
+
 	def length_range(self, offset=0):
 		return (self.pos[1-self.orien] + offset, self.pos[1-self.orien] + self.length + offset)
 		
@@ -84,7 +107,7 @@ class TextLine(Feature):
 
 	MATCHING_THRESH = 0.20
 	
-	def __init__(self, chars, position, size):
+	def __init__(self, text, position, size):
 		'''
 		:param text: str, contents of the text line (length N) from OCR
 		:param confidences: list(float) confidence measure of each character
@@ -92,41 +115,86 @@ class TextLine(Feature):
 		:param size: (x, y) width and height of the bounding rectangle
 		'''
 		Feature.__init__(self)
-		self.chars = chars
-		self.set_text()
+		self.text = text
 		self.pos = position
 		self.size = size
-		#self.width = size[0]
-		#self.height = size[1]
 		self.N = len(self.text)
-		self.members = list()  # for template string medians
+		self.members = collections.Counter()
+		self.members[self.text] += 1
+
+	def find_median(self):
+		most_common = self.members.most_common(2);
+
+		# we have a tie for the mode
+		if most_common[0][1] == most_common[0][0]:
+			# account for prefix/suffix stuff too
+			#text = map(lambda ele: ele if isinstance(ele, str) else ele[0] + ele[1], self.members)
+			#print "\t", text
+			return Levenshtein.median(self.members.keys(), self.members.values())
+		else:
+			return most_common[0][0]
 
 	def aggregate(self, other):
-		if not self.members:
-			self.members.append(self.text)
-		self.members.append(other.text)
+		self.members[other.text] += 1
 		weights = [self.count, other.count]
 		x = utils.wavg([self.pos[0], other.pos[0]], weights)
 		y = utils.wavg([self.pos[1], other.pos[1]], weights)
 		w = utils.wavg([self.size[0], other.size[0]], weights)
-		h = utils.wavg([self.size[0], other.size[0]], weights)
+		h = utils.wavg([self.size[1], other.size[1]], weights)
 		self.pos = (x, y)
 		self.size = (w, h)
-		self.text = Levenshtein.median(self.members)
+		self.text = self.find_median()
 		self.N = len(self.text)
 		self.count += other.count
 		# because we are taking the median string, the chars no longer matter
-		if hasattr(self, "chars"):
-			del self.chars
+
+	def aggregate_partial(self, prefix, suffix):
+		''' aggregate self with a prefix and a suffix text lines '''
+		self.members[prefix.text + suffix.text] += 1
+		weights = [self.count, (prefix.count + suffix.count) / 2.0]
+		x = utils.wavg([self.pos[0], prefix.pos[0]], weights)
+		y = utils.wavg([self.pos[1], prefix.pos[1]], weights)
+		w = utils.wavg([self.size[0], prefix.size[0] + suffix.size[0]], weights)
+		h = utils.wavg([self.size[1], (prefix.size[1] + suffix.size[1]) / 2.0], weights)
+		self.pos = (x, y)
+		self.size = (w, h)
+		self.text = self.find_median()
+		self.N = len(self.text)
+		self.count += weights[1]
+
+	def aggregate_as_prefix(self, other):
+		''' self is a prefix of other '''
+		self.members[other.text[0:self.N]] += 1
+		weights = [self.count, other.count / 2]
+		x = utils.wavg([self.pos[0], other.pos[0]], weights)
+		y = utils.wavg([self.pos[1], other.pos[1]], weights)
+		w = utils.wavg([self.size[0], other.size[0] * (self.N / float(other.N)) ], weights)
+		h = utils.wavg([self.size[1], other.size[1]], weights)
+		self.pos = (x, y)
+		self.size = (w, h)
+		self.text = self.find_median()
+		self.N = len(self.text)
+		self.count += weights[1]
+
+	def aggregate_as_suffix(self, other):
+		''' self is a suffix of other '''
+		self.members[other.text[-1 * self.N:]] += 1
+		weights = [self.count, other.count / 2]
+		x = utils.wavg([self.pos[0], other.pos[0] + (other.size[0] * (self.N / float(other.N)))], weights)
+		y = utils.wavg([self.pos[1], other.pos[1]], weights)
+		w = utils.wavg([self.size[0], other.size[0] * self.N / float(other.N) ], weights)
+		h = utils.wavg([self.size[1], other.size[1]], weights)
+		self.pos = (x, y)
+		self.size = (w, h)
+		self.text = self.find_median()
+		self.N = len(self.text)
+		self.count += weights[1]
 
 	def copy(self):
-		chars_copy = list()
-		for char in self.chars:
-			chars_copy.append(char.copy())
-		cpy = TextLine(chars_copy, self.pos, self.size)
+		cpy = TextLine(self.text, self.pos, self.size)
 		cpy.count = self.count
 		cpy.weight = self.weight
-		cpy.members = list(self.members)
+		cpy.members = collections.Counter(self.members)
 		return cpy
 
 	def match_value(self):
@@ -136,52 +204,17 @@ class TextLine(Feature):
 		'''
 		return Feature.match_value(self) * self.N
 
-	def set_text(self):
-		if self.chars:
-			ul = self.pos = self.chars[0].pos
-			br = self.chars[-1].pos2
-			self.size = (br[0] - ul[0], br[1] - ul[1])
-		self.text = "".join(map(lambda char: char.val, self.chars))
-		self.N = len(self.text)
-		
 	def __str__(self):
 		return "text: %r pos: %s size: %s" % (self.text, self.pos, self.size)
 
 	def __repr__(self):
 		return self.__str__()
 		
-	def filter_nonalpha(self):
-		for x in xrange(self.N):
-			c = self.chars[x].val
-			if ord(c) > 127 or not (c.isalpha() or c.isspace()):
-				self.chars[x].val = ' '
-		self.set_text()
-
-	def has_dict_word(self, min_len=3):
-		for word in self.text.split():
-			if dictionary.is_word(word) and len(word) >= min_len:
-				return True
-		return False
-
-	def trim(self):
-		while self.chars and self.chars[0].val.isspace():
-			self.chars.pop(0)
-		while self.chars and self.chars[-1].val.isspace():
-			self.chars.pop(-1)
-		self.set_text()
-
-	def condense_space(self):
-		new_chars = []
-		prev_space = False
-		for x in xrange(self.N):
-			if not (prev_space and self.chars[x].val.isspace()):
-				new_chars.append(self.chars[x])
-			prev_space = self.chars[x].val.isspace()
-		self.chars = new_chars
-		self.set_text()
-
 	def end_pos(self):
 		return (self.pos[0] + self.size[0], self.pos[1])
+
+	def bottom_right(self):
+		return (self.pos[0] + self.size[0], self.pos[1] + self.size[1])
 
 	def char_width(self):
 		return float(self.size[0]) / self.N
@@ -199,41 +232,3 @@ class TextLine(Feature):
 			return TextLine.SUFFIX_MATCH
 		return TextLine.NO_MATCH
 
-
-class Char:
-
-	bool_labels = ['wordStart', 'wordFromDictionary', 'wordNormal',
-						'wordNumeric', 'wordIdentifier', 'wordPenalty']
-	int_labels = ['charConfidence', 'serifProbability', 'meanStrokeWidth']
-	
-	#def __init__(self, value, d):
-	def __init__(self, value, ul, br):
-		self.val = value
-		#self.attributes = d.copy()
-		#l = d['l']
-		#t = d['t']
-		#r = d['r']
-		#b = d['b']
-		#self.pos = (l, t)
-		self.pos = ul
-		self.pos2 = br
-
-		# Not currently used for anything
-		#self.size = (r - l, b - t)
-		#self.area = self.size[0] * self.size[1]
-		#for bool_label in Char.bool_labels:
-		#	if bool_label in self.attributes:
-		#		self.attributes[bool_label] = bool(self.attributes[bool_label])
-		#	else:
-		#		self.attributes[bool_label] = False
-
-	def copy(self):
-		#return Char(self.val, self.attributes)
-		return Char(self.val, self.pos, self.pos2)
-
-	#def get_attr(self, attr):
-	#	return self.attributes.get(attr)
-	#
-	#def set_attr(self, attr, val):
-	#	self.attributes[attr] = val
-		

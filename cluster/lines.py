@@ -139,13 +139,15 @@ class LMatcher(LineMatcher):
 				 CONTAINS2: "Contains2", OVERLAP: "Overlap", CONNECT1: "Connect1", CONNECT2: "Connect2",
 				 COFRAG: "Cofrag", TRANSPOSE: "Transpose", DEL1: "Del1", DEL2: "Del2", NO_MATCH: "No_Match"}
 
-	def __init__(self, lines1, lines2, dist_thresh):
+	def __init__(self, lines1, lines2, dist_thresh, size):
 		LineMatcher.__init__(self, lines1, lines2)
+		self.size = size
 		self.dist_thresh = dist_thresh
 		self.offset_thresh = dist_thresh / 2
 		self.colinear_thresh = dist_thresh / 5.0
 		self.tables_built = False
 		self.match_cost_table = [[None] * (len(self.lines2)+1) for i in range(len(self.lines1)+1)]
+		self.sort()
 
 	def _table_check(self):
 		'''
@@ -341,7 +343,7 @@ class LMatcher(LineMatcher):
 		else:
 			return self.NO_MATCH_COST, self.NO_MATCH
 
-	#@profile	
+	#@profile(sort='tottime')
 	def build_tables(self):
 		self.init_tables()
 		for i in xrange(1, len(self.lines1) + 1):
@@ -412,6 +414,118 @@ class LMatcher(LineMatcher):
 			self.op_mat[0][j] = self.DEL2
 			self.cost_mat[0][j] = self.cost_mat[0][j-1] + self.indel_cost(self.lines2[j-1])
 
+	def _get_region(self, pos, width, height):
+		row = int(pos[1]) / height
+		col = int(pos[0]) / width
+		return (row, col)
+
+	def _get_regions(self, line, width, height):
+		r, c = self._get_region(line.pos, width, height)
+		regions = list()
+		if line.is_horizontal():
+			
+			# first region is partial
+			first_len = width - (line.pos[0] % width)
+			regions.append( (r, c, min(first_len, line.length) / float(line.length)) )
+			c += 1
+			remaining = line.length - first_len
+
+			# middle regions are complete
+			while remaining >= width:
+				regions.append( (r, c, width / float(line.length)) )
+				remaining -= width
+				c += 1
+			# last region may be partial or even empty
+			if remaining > 0:
+				regions.append( (r, c, remaining / float(line.length)) )
+		else:
+			first_len = height - (line.pos[1] % height)
+			regions.append( (r, c, min(first_len, line.length) / float(line.length)) )
+			r += 1
+			remaining = line.length - first_len
+
+			# middle regions are complete
+			while remaining >= height:
+				regions.append( (r, c, height / float(line.length)) )
+				remaining -= height
+				r += 1
+			# last region may be partial or even empty
+			if remaining > 0:
+				regions.append( (r, c, remaining / float(line.length)) )
+
+		return regions
+
+	def _update_region_mats(self, line, actual_cost, total_mat, actual_mat, width, height, rows, cols):
+		# note that the matching cost can exceed the indel cost of the one line
+		# I don't expect that to happen often because the prototype lines have high counts
+		#print line
+		#print "\t", width, height
+		#print "\t", actual_cost 
+		del_cost = max(actual_cost, self.indel_cost(line))
+		regions = self._get_regions(line, width, height)
+		#for region in regions:
+			#print "\t", region
+		for r, c, p in regions:
+			if r >= rows or c >= cols or r < 0 or c < 0:
+				continue
+			total_mat[r][c] += p * del_cost
+			actual_mat[r][c] += p * actual_cost
+
+	def similarity_by_region(self, rows, cols, size):
+		'''
+		:param rows: int number of rows
+		:param cols: int number of cols
+		:param size: (int, int) size of image1
+		:return: list(list(float(0-1))) matrix of regional percentage matches
+		'''
+		#print size
+		#print rows, cols
+		ops = self.get_operations()
+		width = (size[0] / cols) + 1
+		height = (size[1] / rows) + 1
+		total_cost_mat = [([0] * cols) for r in xrange(rows)]
+		actual_cost_mat = [([0] * cols) for r in xrange(rows)]
+		for op_tup in ops:
+			op = op_tup[0]
+			if op in  [self.PERFECT, self.DEL1, self.CONTAINS1, self.CONTAINS2, 
+					   self.CONNECT1, self.OVERLAP, self.COFRAG]:
+				line1 = op_tup[1]
+				actual_cost = op_tup[-1]
+				self._update_region_mats(line1, actual_cost, total_cost_mat, actual_cost_mat, width, height, rows, cols)
+
+			elif op == self.DEL2:
+				pass
+
+			elif op == self.CONNECT2:
+				line11 = op_tup[2]
+				line12 = op_tup[3]
+				actual_cost = op_tup[-1]
+				# split responsibility down the middle
+				self._update_region_mats(line11, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height, rows, cols)
+				self._update_region_mats(line12, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height, rows, cols)
+
+			elif op == self.TRANSPOSE:
+				line11 = op_tup[1]
+				line12 = op_tup[2]
+				actual_cost = op_tup[-1]
+				# split responsibility down the middle
+				self._update_region_mats(line11, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height, rows, cols)
+				self._update_region_mats(line12, actual_cost / 2, total_cost_mat, actual_cost_mat, width, height, rows, cols)
+			else:
+				assert False
+
+		perc_mat = [([0] * cols) for r in xrange(rows)]
+		total = 0
+		for r in xrange(rows):
+			for c in xrange(cols):
+				perc_mat[r][c] = 1 - actual_cost_mat[r][c] / total_cost_mat[r][c] if total_cost_mat[r][c] else 0 #float('NaN')
+				total += total_cost_mat[r][c]
+		weight_mat = [([0] * cols) for r in xrange(rows)]
+		for r in xrange(rows):
+			for c in xrange(cols):
+				weight_mat[r][c] = total_cost_mat[r][c] / total
+		return perc_mat, weight_mat
+
 	def similarity(self):
 		self._table_check()
 		total1 = sum(map(lambda line: line.length * line.count, self.lines1))
@@ -471,14 +585,25 @@ class LMatcher(LineMatcher):
 				i -= 1
 				j -= 1
 			elif op == self.TRANSPOSE:
-				ops.append( (self.TRANSPOSE, self.lines1[i-1], self.lines2[j-2], (self.cost_mat[i][j] - self.cost_mat[i-2][j-2]) / 2.0) )
 				ops.append( (self.TRANSPOSE, self.lines1[i-2], self.lines2[j-1], (self.cost_mat[i][j] - self.cost_mat[i-2][j-2]) / 2.0) )
+				ops.append( (self.TRANSPOSE, self.lines1[i-1], self.lines2[j-2], (self.cost_mat[i][j] - self.cost_mat[i-2][j-2]) / 2.0) )
 				i -= 2
 				j -= 2
 			else:
+				print "ERROR"
+				self.print_ops(ops)
+				print op
+
+				print "First sequence"
+				for line1 in self.lines1:
+					print line1
+
+				print "Second sequence"
+				for line2 in self.lines2:
+					print line2
+
 				assert False  # NO_MATCH?
 		ops.reverse()
-		#self.print_ops(ops)
 		return ops
 
 	def combine_perfect(self, line1, line2, pos_offset):
@@ -665,7 +790,7 @@ class LMatcher(LineMatcher):
 		line.count = ((line1.count * line1.length) + (line2.count * line2.length)) / line.length
 		return line
 
-	def get_merged_lines(self):
+	def merge(self):
 		ops = self.get_operations()
 
 		# compute the average pos offset of the perfect matching pairs
@@ -693,6 +818,7 @@ class LMatcher(LineMatcher):
 
 			elif op == self.CONNECT2:
 				line1, line2 = self.combine_connect2(op_tup, pos_offset)
+				line1.truncate(self.size)
 				merged_lines.append(line1)
 				line = line2
 
@@ -708,6 +834,7 @@ class LMatcher(LineMatcher):
 			elif op == self.COFRAG:
 				line1 = self.combine_del(op_tup[1], (0, 0))
 				line2 = self.combine_del(op_tup[2], pos_offset)
+				line1.truncate(self.size)
 				merged_lines.append(line1)
 				line = line2
 			else:
@@ -720,9 +847,134 @@ class LMatcher(LineMatcher):
 			#	print "\t\t", l
 			#print "\t\tCombined:", line
 			#print
+			line.truncate(self.size)
 			merged_lines.append(line)
 		sort_lines(merged_lines)
 		return merged_lines
+
+	def get_match_vector(self):
+		ops = self.get_operations()
+		vector = list()
+		for op_tup in ops:
+			op = op_tup[0]
+			if op == self.PERFECT or op == self.TRANSPOSE:
+				vector.append(1)
+
+			elif op in [self.DEL1, self.COFRAG]:
+				vector.append(0)
+
+			elif op == self.DEL2:
+				pass
+
+			elif op == self.CONNECT2:
+				vector.append( 1 -  (op_tup[4] / 2) / float(self.indel_cost(op_tup[2])))
+				vector.append( 1 -  (op_tup[4] / 2) / float(self.indel_cost(op_tup[3])))
+
+			elif op in [self.CONNECT1, self.CONTAINS1, self.CONTAINS2, self.OVERLAP]:
+				vector.append(1 - op_tup[-1] / float(self.indel_cost(op_tup[1])))
+
+			else:
+				assert False
+
+		assert len(vector) == len(self.lines1)
+		return vector
+
+	def push_away(self, perc):
+		'''
+		Modifies both sequences.  
+		If everything matches, they can't get pushed apart
+		'''
+		ops = self.get_operations()
+		matched_weight1 = 0
+		unmatched_weight1 = 0
+		matched_weight2 = 0
+		unmatched_weight2 = 0
+		for op_tup in ops:
+			op = op_tup[0]
+			op_cost = op_tup[-1]
+			del_cost = float(sum(map(lambda line: self.indel_cost(line), op_tup[1:-1])))
+			match_perc = 1 - (op_cost / del_cost)
+
+			seq1_lines = list()
+			seq2_lines = list()
+			if op in [self.PERFECT, self.TRANSPOSE, self.CONTAINS1, self.CONTAINS2, self.OVERLAP, self.COFRAG]:
+				seq1_lines.append(op_tup[1])
+				seq2_lines.append(op_tup[2])
+			elif op == self.DEL1:
+				seq1_lines.append(op_tup[1])
+			elif op == self.DEL2:
+				seq2_lines.append(op_tup[1])
+			elif op == self.CONNECT1:
+				seq1_lines.append(op_tup[1])
+				seq2_lines.append(op_tup[2])
+				seq2_lines.append(op_tup[3])
+			elif op == self.CONNECT2:
+				seq2_lines.append(op_tup[1])
+				seq1_lines.append(op_tup[2])
+				seq1_lines.append(op_tup[3])
+
+			for line1 in seq1_lines:
+				line1_weight = self.indel_cost(line1)
+				matched_weight1 += line1_weight * match_perc
+				unmatched_weight1 += line1_weight * (1 - match_perc)
+			for line2 in seq2_lines:
+				line2_weight = self.indel_cost(line2)
+				matched_weight2 += line2_weight * match_perc
+				unmatched_weight2 += line2_weight * (1 - match_perc)
+
+		total_weight1 = matched_weight1 + unmatched_weight1
+		total_weight2 = matched_weight2 + unmatched_weight2
+		redistribute_weight1 = matched_weight1 * perc
+		redistribute_weight2 = matched_weight2 * perc
+
+		#print "\nTotal Weight1: %.2f" % total_weight1
+		#print "\tMatched Weight1: %.2f" % matched_weight1
+		#print "\tUnMatched Weight1: %.2f" % unmatched_weight1
+		#print "\tRedistributed Weight1: %.2f" % redistribute_weight1
+
+		#print "\nTotal Weight2: %.2f" % total_weight2
+		#print "\tMatched Weight2: %.2f" % matched_weight2
+		#print "\tUnMatched Weight2: %.2f" % unmatched_weight2
+		#print "\tRedistributed Weight2: %.2f\n" % redistribute_weight2
+
+		if redistribute_weight1 == 0 or redistribute_weight2 == 0:
+			return
+
+		for op_tup in ops:
+			op = op_tup[0]
+			op_cost = op_tup[-1]
+			del_cost = float(sum(map(lambda line: self.indel_cost(line), op_tup[1:-1])))
+			match_perc = 1 - (op_cost / del_cost)
+
+			seq1_lines = list()
+			seq2_lines = list()
+			if op in [self.PERFECT, self.TRANSPOSE, self.CONTAINS1, self.CONTAINS2, self.OVERLAP, self.COFRAG]:
+				seq1_lines.append(op_tup[1])
+				seq2_lines.append(op_tup[2])
+			elif op == self.DEL1:
+				seq1_lines.append(op_tup[1])
+			elif op == self.DEL2:
+				seq2_lines.append(op_tup[1])
+			elif op == self.CONNECT1:
+				seq1_lines.append(op_tup[1])
+				seq2_lines.append(op_tup[2])
+				seq2_lines.append(op_tup[3])
+			elif op == self.CONNECT2:
+				seq2_lines.append(op_tup[1])
+				seq1_lines.append(op_tup[2])
+				seq1_lines.append(op_tup[3])
+
+			for line1 in seq1_lines:
+				match_diff = line1.count * match_perc * perc
+				unmatch_diff = (1 - match_perc) * redistribute_weight1 / unmatched_weight1
+				line1.count -= match_diff
+				line1.count += unmatch_diff
+			for line2 in seq2_lines:
+				match_diff = line2.count * match_perc * perc
+				unmatch_diff = (1 - match_perc) * redistribute_weight2 / unmatched_weight2
+				line2.count -= match_diff
+				line2.count += unmatch_diff
+
 
 	def print_ops(self, ops):
 		'''

@@ -1,49 +1,185 @@
 
 import datetime
+import random
 import shutil
 import time
 import sys
 import os
 
-import metric
+import ncluster
 import cluster
+import metric
 import utils
 import lines
 import doc
 
-#data_dir = "../data/full/1911Wales/"
-data_dir = "../data/wales100/"
-single_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
-single_basename = "rg14_31707_0073_03"
-second_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
-second_basename = "rg14_31707_0213_03"
-aggregate_dir = "../data/wales100/UK1911Census_EnglandWales_Household15Names_03_01"
-#aggregate_dir = "../data/full/1911Wales/UnClassified"
+aggregate_dir = "../data/subsets/wales_100/UK1911Census_EnglandWales_Household15Names_03_01"
 
+single_dir = "../data/subsets/wales_20/UK1911Census_EnglandWales_Household15Names_03_01"
+single_file = "rg14_31702_0025_03.txt"
+#second_dir = "../data/subsets/wales_100/UK1911Census_EnglandWales_Household40Names_07_01"
+#second_file = "rg14_32127_0667_07.txt"
+
+second_dir = single_dir
+second_file = "rg14_31702_0059_03.txt"
 
 def get_data_dir(descrip):
-	if descrip == "big":
-		return "../data/lines/1911Wales"
-		#return "../data/full/WashStatePassLists"
-	if descrip == "medium":
-		return "../data/wales1000/"
-	if descrip == "small":
-		return "../data/wales100/"
-	if descrip == "very_small":
-		return "../data/wales40/"
+	if descrip.startswith("wales_all"):
+		return "../data/current/1911Wales"
+	if descrip.startswith("wales_1000"):
+		return "../data/subsets/wales_1000"
+	if descrip.startswith("wales_500"):
+		return "../data/subsets/wales_500"
+	if descrip.startswith("wales_100"):
+		return "../data/subsets/wales_100"
+	if descrip.startswith("wales_20"):
+		return "../data/subsets/wales_20"
+
+	if descrip.startswith("wales_twoclass_all"):
+		return "../data/subsets/wales_twoclass_all"
+	if descrip.startswith("wales_twoclass_200"):
+		return "../data/subsets/wales_twoclass_200"
+	if descrip.startswith("wales_twoclass_100"):
+		return "../data/subsets/wales_twoclass_100"
+
+	if descrip.startswith("wash_all"):
+		return "../data/current/WashStatePassLists"
+	if descrip.startswith("wash_1000"):
+		return "../data/subsets/wash_1000"
+	if descrip.startswith("wash_500"):
+		return "../data/subsets/wash_500"
+	if descrip.startswith("wash_100"):
+		return "../data/subsets/wash_100"
+	if descrip.startswith("wash_20"):
+		return "../data/subsets/wash_20"
+
+	if descrip.startswith("nist_all"):
+		return "../data/current/NIST"
+	if descrip.startswith("nist_1000"):
+		return "../data/subsets/nist_1000"
+	if descrip.startswith("nist_500"):
+		return "../data/subsets/nist_500"
+	if descrip.startswith("nist_100"):
+		return "../data/subsets/nist_100"
+	if descrip.startswith("nist_20"):
+		return "../data/subsets/nist_20"
+
+	if descrip.startswith("padeaths_all"):
+		return "../data/current/PADeaths"
+	if descrip.startswith("padeaths_1000"):
+		return "../data/subsets/padeaths_1000"
+	if descrip.startswith("padeaths_500"):
+		return "../data/subsets/padeaths_500"
+	if descrip.startswith("padeaths_100"):
+		return "../data/subsets/padeaths_100"
+	if descrip.startswith("padeaths_20"):
+		return "../data/subsets/padeaths_20"
+
+	if descrip.startswith("england_all"):
+		return "../data/current/1911England"
+	if descrip.startswith("england_5000"):
+		return "../data/subsets/england_5000"
+	if descrip.startswith("england_1000"):
+		return "../data/subsets/england_1000"
+	if descrip.startswith("england_500"):
+		return "../data/subsets/england_500"
+	if descrip.startswith("england_100"):
+		return "../data/subsets/england_100"
+	if descrip.startswith("england_20"):
+		return "../data/subsets/england_20"
+
+def get_confirm(descrip):
+	if descrip == "base":
+		return cluster.BaseTestCONFIRM
+	if descrip == "region":
+		return cluster.RegionTestCONFIRM
+	if descrip == "weighted":
+		return cluster.RegionWeightedTestCONFIRM
+	if descrip == "wavg":
+		return cluster.WavgNetTestCONFIRM
+
+	if descrip == "best":
+		return cluster.BestCONFIRM
+
+	if descrip == "perfect_base":
+		return cluster.PerfectCONFIRM
+	if descrip == "perfect_region":
+		return cluster.PerfectRegionCONFIRM
+	if descrip == "perfect_weighted":
+		return cluster.PerfectRegionWeightedCONFIRM
+	if descrip == "perfect_wavg":
+		return cluster.PerfectWavgNetCONFIRM
+
+	if descrip == "kumar":
+		return ncluster.BestKumarCONFIRM
+
+	if descrip == "sskumar":
+		return ncluster.SemiSupervisedKumarCONFIRM
+
+	if descrip == "pipeline":
+		return ncluster.PipelineCONFIRM
 
 def cluster_known():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
-	epsilon = float(sys.argv[3])
-	organizer = cluster.TemplateSorter(docs)
-	organizer.go(epsilon)
-	organizer.prune_clusters()
-	clusters = organizer.get_clusters()
+	random.seed(12345)
+	random.shuffle(docs)
+	param = int(sys.argv[3])
+	param2 = int(sys.argv[5])
+	param3 = int(sys.argv[6])
+
+	factory = get_confirm(sys.argv[4])
+	confirm = factory(docs, 
+		sim_thresh=param,		 	# BaseCONFIRM
+		num_instances=3, 			# InitCONFIRMs, how many instances to examine to find $num_clust clusters
+		num_clust=2,  				# MaxCliqueCONFIRM, how many clusters try for
+		lr=0.02,  					# learning rate WavgNet
+		instances_per_cluster=10,  	# SupervisedInitCONFIRM, how many labeled instances start a cluster
+		min_size=2, 				# PruningCONFIRM, clusters under this size get pruned
+		maxK=4, 					# MaxClustersCONFIRM, max on created clusters (doesn't work)
+
+		num_initial_seeds=param, 	# KumarCONFIRM, how many seeds to start with
+		iterations=1,				# KumarCONFIRM, how many iterations to perform
+		num_seeds=param,            # KumarCONFIRM, how many seeds to get each iteration
+		cluster_range=(2,20),	 	# KumarCONFIRM, how many clusters to search over
+
+		seeds_per_batch=2,  		# MaxCliqueSeedsKumarCONFIRM, how many seeds to get per batch
+		batch_size=10,  			# MaxCliqueSeedsKumarCONFIRM, how many batches
+		num_per_seed=param,			# SemiSupervisedKumarCONFIRM, how many docs/label to make seeds
+
+		init_subset=30000,			# PipelineCONFIRM, how many docs to initialize
+		min_membership=1, 			# PipelineCONFIRM, how many docs a cluster must have after initialization
+		z_threshold=-50,			# PipelineCONFIRM, the reject threshold for the greedy pass
+		use_labels=False,			# PipelineCONFIRM, Skips kumarconfirm init and uses the labels
+		use_ss=param3
+		)
+
+	confirm.cluster()
 	print
 	print
-	analyzer = metric.KnownClusterAnalyzer(clusters)
-	analyzer.draw_centers()
-	analyzer.print_all()
+	#exit()
+
+	if hasattr(confirm, 'print_reject_analysis'):
+		confirm.print_reject_analysis()
+	elif hasattr(confirm, 'print_analysis'):
+		confirm.print_analysis()
+	else:
+		analyzer = metric.KnownClusterAnalyzer(confirm)
+		analyzer.draw_centers()
+		analyzer.print_all()
+
+def check_init():
+	docs = doc.get_docs_nested(get_data_dir("test"))
+	random.seed(12345)
+	random.shuffle(docs)
+	confirm = cluster.MaxCliqueInitCONFIRM(docs, 2, 10)
+	confirm._init_clusters()
+
+	print
+	print "Cluster Sim Mat"
+	sim_mat = confirm.get_cluster_sim_mat()
+	utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%3.2f" % x))
+
+
 
 def double_cluster_known():
         docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
@@ -66,14 +202,21 @@ def double_cluster_known():
 
 def compare_true_templates():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
-	organizer = cluster.CheatingSorter(docs)
-	organizer.go()
-	clusters = organizer.get_clusters()
+	#confirm = cluster.PerfectCONFIRM(docs)
+	confirm = cluster.BestPerfectCONFIRM(docs, lr=0.05)
+	confirm.cluster()
+	analyzer = metric.KnownClusterAnalyzer(confirm)
+	analyzer.print_all()
+	analyzer.draw_centers()
+	analyzer.clusters[0].center.push_away(analyzer.clusters[1].center)
+	print "PUSHING APART!"
 	print
 	print
-	analyzer = metric.KnownClusterAnalyzer(clusters)
+	analyzer = metric.KnownClusterAnalyzer(confirm)
 	analyzer.draw_centers()
 	analyzer.print_all()
+	print
+	print
 
 def aggreage_same():
 	docs = doc.get_docs(aggregate_dir)[0]
@@ -87,8 +230,8 @@ def aggreage_same():
 		pass
 	for x, _doc in enumerate(docs):
 		_doc._load_check()
-		im = _doc.draw()
-		im.save("output/aggregate/doc_%d.png" % x)
+		#im = _doc.draw()
+		#im.save("output/aggregate/doc_%d.png" % x)
 	template = None
 	for x, _doc in enumerate(docs):
 		print
@@ -101,70 +244,91 @@ def aggreage_same():
 			template.aggregate(_doc)
 			im = template.draw()
 			im.save("output/aggregate/template_%d.png" % x)
+			print
+			print "IN DRIVER", id(template)
+			for line in template.text_lines:
+				print line
 	template.final_prune()
 	im = template.draw()
 	im.save("output/aggregate/template_final.png")
 
 def load_doc_test():
-	_doc = doc.get_doc(single_dir, single_basename)
+	_doc = doc.get_doc(single_dir, single_file)
 	#_doc = doc.get_doc(second_dir, second_basename)
 	_doc._load_check()
-	for line in _doc.h_lines:
-		print line
-	for line in _doc.v_lines:
-		print line
-	for line in _doc.text_lines:
-		print line
+	_doc.display()
 	im = _doc.draw()
 	im.save("output/single_doc.png")
 
 def cmp_test():
-	doc1 = doc.get_doc(single_dir, single_basename)
-	doc2 = doc.get_doc(second_dir, second_basename)
+	doc1 = doc.get_doc(single_dir, single_file)
+	doc2 = doc.get_doc(second_dir, second_file)
 	doc1._load_check()
 	doc2._load_check()
 
-	print "DOC1 text-lines:"
-	for line in doc1.text_lines:
-		print "\t%s" % line
-	print
+	doc1.display()
+	doc2.display()
 
-	print "DOC2 text-lines:"
-	for line in doc2.text_lines:
-		print "\t%s" % line
-	print
+	global_region_sims = doc1.global_region_sim(doc2)
+	global_region_weights = doc1.global_region_weights()
+	global_sims = doc1.global_sim(doc2)
+	region_sims = doc1.region_sim(doc2)
+	region_weights1 = doc1.region_weights()
+	region_weights2 = doc2.region_weights()
 
-	sims = doc1.similarities_by_name(doc2)
+	for x, name in enumerate(doc1.feature_set_names):
+		print
+		print name
+		print "Global Sim:", global_sims[x]
+		print "Region Sims:"
+		print
+		utils.print_mat(utils.apply_mat(region_sims[x], lambda x: "%.3f" % x))
+		print
+		print "Region Weights doc1:"
+		print
+		utils.print_mat(utils.apply_mat(region_weights1[x], lambda x: "%.3f" % x))
+		print
+		print "Region Weights doc2:"
+		print
+		utils.print_mat(utils.apply_mat(region_weights2[x], lambda x: "%.3f" % x))
+
+	print "Sim Vector:"
+	print " ".join(map(lambda x: "%.2f" % x, global_region_sims))
+	print "Sim Weights:"
+	print " ".join(map(lambda x: "%.2f" % x, global_region_weights))
+
 	doc1.draw().save("output/doc1.png")
 	doc2.draw().save("output/doc2.png")
-	print sims
 
-	print "DOC2 Unmatched text-lines:"
-	for line in doc1.text_lines:
-		if not line.matched:
-			print "\t%s" % line
-	print
+	#doc1.push_away(doc2)
+	#doc1.draw().save("output/doc1_pushed.png")
+	#doc2.draw().save("output/doc2_pushed.png")
 
-	print "DOC2 Unmatched text-lines:"
-	for line in doc2.text_lines:
-		if not line.matched:
-			print "\t%s" % line
-	print
+	#doc1.push_away(doc2)
 
-	exit()
-
-	print len(doc1.text_lines), len(doc1.text_lines)
-	print len(doc2.h_lines), len(doc2.v_lines)
 	doc1.aggregate(doc2)
 	doc1.draw().save("output/combined.png")
-	print len(doc1.h_lines), len(doc1.v_lines)
+
+def draw_all():
+	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
+	try:
+		shutil.rmtree('output/docs')
+	except:
+		pass
+	try:
+		os.mkdir('output/docs')
+	except:
+		pass
+	for _doc in docs:
+		_doc.draw().save("output/docs/%s.png" % _doc._id)
+	
 
 
 def main(arg):
 	if arg == "cluster":
 		cluster_known()
-        if arg == "twice":
-                double_cluster_known()
+	if arg == "twice":
+		double_cluster_known()
 	if arg == "perfect":
 		compare_true_templates()
 	if arg == "single":
@@ -173,6 +337,10 @@ def main(arg):
 		cmp_test()
 	if arg == "aggregate":
 		aggreage_same()
+	if arg == "draw":
+		draw_all()
+	if arg == "init":
+		check_init()
 
 if __name__ == "__main__":
 	print "Start"

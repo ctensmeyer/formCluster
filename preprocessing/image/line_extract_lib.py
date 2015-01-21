@@ -9,7 +9,7 @@ import line_detect_lib as ld
 LOW_THRESH = 30
 HIGH_THRESH = 120
 
-MIN_LINE_LENGTH = 0.01
+MIN_LINE_LENGTH = 0.015
 
 def fill_bbs(im, bbs, color=255):
 	draw = ImageDraw.Draw(im)

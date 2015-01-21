@@ -1,3 +1,9 @@
 
 *.pyc
 data
+*.jpg
+*.pgm
+*.png
+cluster/archive/*
+cluster/err/*
+cluster/output/*
