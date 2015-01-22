@@ -4,7 +4,7 @@ import sys
 import collections
 
 # first is the x-axis
-_keys = ['Num_Clusters', 'Codebook_Size'] 
+_keys = ['Perc_Rand', 'Num_Clusters'] 
 _values = ['Acc', 'V-measure', 'Completeness', 'Homogeneity', 'ARI', 'Silhouette']
 
 
@@ -51,7 +51,7 @@ def write(d, outdir):
 	for key in d:
 		x, fd = key 
 		vals = d[key]
-		line = (int(x), "\t".join(map(lambda y: "%.3f" % y, vals)) )
+		line = (x, "\t".join(map(lambda y: "%.3f" % y, vals)) )
 		lines[fd].append(line)
 
 	for fd in lines:
@@ -59,7 +59,7 @@ def write(d, outdir):
 		tups = lines[fd]
 		tups.sort(key=lambda tup: tup[0])
 		for tup in tups:
-			f.write("%d\t%s\n" % tup)
+			f.write("%.2f\t%s\n" % tup)
 		f.close()
 		
 			

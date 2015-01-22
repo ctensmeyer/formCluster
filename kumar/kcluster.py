@@ -21,8 +21,8 @@ np.set_printoptions(precision=2, linewidth=200, suppress=True)
 _num_histograms = 21
 
 # Random Forest
-_num_trees = 4000
-_rf_threads = 4
+_num_trees = 2000
+_rf_threads = 7
 _perc_random_data = 1
 
 # Spectral Clustering
