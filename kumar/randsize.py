@@ -28,7 +28,7 @@ _percs_random_data = [.1, .25, .5, 1., 1.5, 2, 3]
 #_percs_random_data = [.1, 1., 2]
 
 # Spectral Clustering
-_cluster_range = (2, int(sys.argv[3]))
+_cluster_range = (5, int(sys.argv[3]))
 _assignment_method = 'discretize'
 
 # not parameters

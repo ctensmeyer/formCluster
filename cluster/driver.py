@@ -300,6 +300,7 @@ def cmp_test():
 
 	doc1.draw().save("output/doc1.png")
 	doc2.draw().save("output/doc2.png")
+
 	#doc1.push_away(doc2)
 	#doc1.draw().save("output/doc1_pushed.png")
 	#doc2.draw().save("output/doc2_pushed.png")
