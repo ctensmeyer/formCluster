@@ -123,11 +123,11 @@ def get_confirm(descrip):
 
 def cluster_known():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
-	random.seed(12345)
+	#random.seed(12345)
 	random.shuffle(docs)
 	param = int(sys.argv[3])
-	param2 = int(sys.argv[5])
-	param3 = int(sys.argv[6])
+	#param2 = int(sys.argv[5])
+	#param3 = int(sys.argv[6])
 
 	factory = get_confirm(sys.argv[4])
 	confirm = factory(docs, 
@@ -142,7 +142,7 @@ def cluster_known():
 		num_initial_seeds=param, 	# KumarCONFIRM, how many seeds to start with
 		iterations=1,				# KumarCONFIRM, how many iterations to perform
 		num_seeds=param,            # KumarCONFIRM, how many seeds to get each iteration
-		cluster_range=(10,15),	 	# KumarCONFIRM, how many clusters to search over
+		cluster_range=(2,30),	 	# KumarCONFIRM, how many clusters to search over
 
 		seeds_per_batch=2,  		# MaxCliqueSeedsKumarCONFIRM, how many seeds to get per batch
 		batch_size=10,  			# MaxCliqueSeedsKumarCONFIRM, how many batches
@@ -150,9 +150,9 @@ def cluster_known():
 
 		init_subset=30000,			# PipelineCONFIRM, how many docs to initialize
 		min_membership=1, 			# PipelineCONFIRM, how many docs a cluster must have after initialization
-		z_threshold=-50,			# PipelineCONFIRM, the reject threshold for the greedy pass
+		z_threshold=-100,			# PipelineCONFIRM, the reject threshold for the greedy pass
 		use_labels=False,			# PipelineCONFIRM, Skips kumarconfirm init and uses the labels
-		use_ss=param3
+		use_ss=False
 		)
 
 	confirm.cluster2()
