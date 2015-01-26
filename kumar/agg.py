@@ -4,7 +4,7 @@ import sys
 import collections
 
 # first is the x-axis
-_keys = ['Perc_Rand', 'Num_Clusters'] 
+_keys = ['', 'Num_Clusters'] 
 _values = ['Acc', 'V-measure', 'Completeness', 'Homogeneity', 'ARI', 'Silhouette']
 
 
