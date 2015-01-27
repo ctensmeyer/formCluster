@@ -19,6 +19,9 @@ UK1911Census_EnglandWales_Institution1200Names_33_02 UK1911Census_EnglandWales_H
 # this one is questionable
 #UK1911Census_EnglandWales_Institution200Names_27_01 UK1911Census_EnglandWales_Household40Names_04_01
 
+# combined wales and england
+UK1911Census_EnglandWales_Household40Names_07_01 UK1911Census_EnglandWales_Household40Names_04_01 
+
 
 
 # PADeaths

@@ -1,7 +1,7 @@
 
 _blacklist = set()
 
-_black_list_filename = "./blacklist.txt"
+_black_list_filename = "/home/chris/formCluster/cluster/blacklist.txt"
 _loaded = False
 
 def _load_check():
