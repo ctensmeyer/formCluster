@@ -10,6 +10,7 @@ import metric
 import cPickle
 import cluster
 import kmedoids
+import tempfile
 import numpy as np
 import collections
 import sklearn.cluster
@@ -32,8 +33,11 @@ _num_trials = 5
 _perc_docs_for_codebook = 0.05
 _num_surf_features_codebook = 25000
 _max_k_medoids_iters = 30
-_H_partitions = 3
-_V_partitions = 4
+_H_partitions = 2
+_V_partitions = 2
+
+# Memory Control
+_batch_size = 2
 
 # not parameters
 _num_histograms = ( (2 ** (_H_partitions) - 1) + (2 ** (_V_partitions) - 1) - 1 )
@@ -237,22 +241,62 @@ def main(in_dir, out_dir):
 	print "Creating Codebooks"
 	print
 	codebooks = get_codebooks(instances_for_codebooks, codebook_params)
-	d = collections.defaultdict(list)
+	num_codebooks = len(codebooks)
+	features_by_codebook = list()
 
-	print 
-	print "Creating Data Matrices"
-	print
-	for x, instance in enumerate(instances):
-		if x % 10 == 0:
-			print "Processing (%d/%d) %.2f%% Images" % (x, n, 100. * x / n)
-		pts, deses, width, height = calc_surf_features(instance)
-		for x, codebook in enumerate(codebooks):
-			features = calc_features(pts, deses, width, height, codebook)
-			d[x].append(features)
+	tmpdir = tempfile.mkdtemp()
 
-	for x, features in d.iteritems():
-		data_matrix = np.array(features)
-		np.save(os.path.join(out_dir, "data_matrix_%d.npy" % x), data_matrix)
+	try:
+		print "Temp Dir:", tmpdir
+		for x in xrange(num_codebooks):
+			# disk storage for that codebook
+			os.makedirs(os.path.join(tmpdir, str(x)))
+
+			# allocate matrix for a batch of features
+			codebook_size = codebooks[x].shape[0]
+			num_features = _num_histograms * codebook_size
+			empty = np.zeros( (_batch_size, num_features) )
+			features_by_codebook.append(empty)
+
+		print 
+		print "Creating Data Matrices"
+		print
+		for x, instance in enumerate(instances):
+			if x % 10 == 0:
+				print "Processing (%d/%d) %.2f%% Images" % (x, n, 100. * x / n)
+			pts, deses, width, height = calc_surf_features(instance)
+			for y, codebook in enumerate(codebooks):
+				features = calc_features(pts, deses, width, height, codebook)
+				features_by_codebook[y][x % _batch_size,:] = features
+
+			if (x + 1) % _batch_size == 0:
+				# flush matrix to the disk
+				for y, feature_mat in enumerate(features_by_codebook):
+					num = (x / _batch_size)
+					print "Codebook %d, Batch %d" % (y, num)
+					np.save(os.path.join(tmpdir, str(y), "%d.npy" % num), feature_mat)
+
+		num_dirty = len(instances) % _batch_size
+		print "num_dirty:", num_dirty
+		if num_dirty:
+			for y in xrange(num_codebooks):
+				num = (len(instances) / _batch_size) + 1 
+				print "Codebook %d, Batch %d" % (y, num)
+				mat = features_by_codeook[y][:num_dirty,:]
+				np.save(os.path.join(tmpdir, str(y), "%d.npy" % num), mat)
+
+		num_batches = (len(instances) / _batch_size) + (1 if num_dirty else 0)
+		for y in xrange(num_codebooks):
+			matrices = map(lambda z: 
+				np.load(open(os.path.join(tmpdir, str(y), "%d.npy" % z))), 
+				xrange(num_batches))
+			data_matrix = np.concatenate(matrices)
+
+			np.save(os.path.join(out_dir, "data_matrix_%d.npy" % y), data_matrix)
+	finally:
+		shutil.rmtree(tmpdir)
+
+		
 
 
 if __name__ == "__main__":
