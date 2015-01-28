@@ -18,19 +18,19 @@ import scipy.spatial.distance
 
 np.set_printoptions(precision=2, linewidth=200, suppress=True)
 
-_image_ext = ".png"
+_image_ext = ".jpg"
 
 # SURF Extraction
 _surf_upright = True
 _surf_extended = False
 _surf_threshold = 30000
-_num_surf_features = 1000
+_num_surf_features = 10000
 
 # Codebook & Features
-_codebook_sizes = [10, 20]
-_num_trials = 2
-_perc_docs_for_codebook = 0.30
-_num_surf_features_codebook = 1000
+_codebook_sizes = [1000]
+_num_trials = 5
+_perc_docs_for_codebook = 0.05
+_num_surf_features_codebook = 25000
 _max_k_medoids_iters = 30
 _H_partitions = 3
 _V_partitions = 4
@@ -40,26 +40,23 @@ _num_histograms = ( (2 ** (_H_partitions) - 1) + (2 ** (_V_partitions) - 1) - 1 
 _surf_instance = cv2.SURF(_surf_threshold)
 _surf_instance.upright = _surf_upright
 _surf_instance.extended = _surf_extended
-_surf_features = dict()
 _print_interval = 20
 
 
 def calc_surf_features(im_file):
-	if im_file not in _surf_features:
-		im = cv2.imread(im_file, 0)
-		height = im.shape[0]
-		width = im.shape[1]
-		# surf_features[0] is the array of keypoints
-		# surf_features[1] is the array of descriptors
-		_surf_instance.hessianThreshold = _surf_threshold
+	im = cv2.imread(im_file, 0)
+	height = im.shape[0]
+	width = im.shape[1]
+	# surf_features[0] is the array of keypoints
+	# surf_features[1] is the array of descriptors
+	_surf_instance.hessianThreshold = _surf_threshold
+	kps, deses = _surf_instance.detectAndCompute(im, None)
+	while len(kps) < _num_surf_features:
+		_surf_instance.hessianThreshold /= 2
 		kps, deses = _surf_instance.detectAndCompute(im, None)
-		while len(kps) < _num_surf_features:
-			_surf_instance.hessianThreshold /= 2
-			kps, deses = _surf_instance.detectAndCompute(im, None)
-		pts = np.array(map(lambda kp: kp.pt, kps[:_num_surf_features]))
-		deses = deses[:_num_surf_features] + 0
-		_surf_features[im_file] = (pts, deses, width, height)
-	return _surf_features[im_file]
+	pts = np.array(map(lambda kp: kp.pt, kps[:_num_surf_features]))
+	deses = deses[:_num_surf_features] + 0
+	return (pts, deses, width, height)
 	
 def calc_features(pts, deses, width, height, codebook):
 	# calc the surf features
