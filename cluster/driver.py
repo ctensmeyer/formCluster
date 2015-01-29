@@ -24,6 +24,22 @@ second_dir = single_dir
 second_file = "rg14_31702_0059_03.txt"
 
 def get_data_dir(descrip):
+	if descrip.startswith("wales_large"):
+		return "../data/paper/Wales-Large"
+	if descrip.startswith("wales_small"):
+		return "../data/paper/Wales-Small"
+	if descrip.startswith("wales_balanced"):
+		return "../data/paper/Wales-Balanced"
+	if descrip.startswith("washpass"):
+		return "../data/paper/WashPass"
+	if descrip.startswith("nist"):
+		return "../data/paper/Nist"
+	if descrip.startswith("padeaths_all"):
+		return "../data/paper/PADeaths"
+	if descrip.startswith("padeaths_balanced"):
+		return "../data/paper/PADeaths-Balanced"
+
+	
 	if descrip.startswith("wales_all"):
 		return "../data/current/1911Wales"
 	if descrip.startswith("wales_1000"):
@@ -123,11 +139,10 @@ def get_confirm(descrip):
 
 def cluster_known():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
-	#random.seed(12345)
 	random.shuffle(docs)
 	param = int(sys.argv[3])
-	#param2 = int(sys.argv[5])
-	#param3 = int(sys.argv[6])
+	param2 = int(sys.argv[5])
+	param3 = int(sys.argv[6])
 
 	factory = get_confirm(sys.argv[4])
 	confirm = factory(docs, 
@@ -142,7 +157,7 @@ def cluster_known():
 		num_initial_seeds=param, 	# KumarCONFIRM, how many seeds to start with
 		iterations=1,				# KumarCONFIRM, how many iterations to perform
 		num_seeds=param,            # KumarCONFIRM, how many seeds to get each iteration
-		cluster_range=(2,30),	 	# KumarCONFIRM, how many clusters to search over
+		cluster_range=(2,5),	 	# KumarCONFIRM, how many clusters to search over
 
 		seeds_per_batch=2,  		# MaxCliqueSeedsKumarCONFIRM, how many seeds to get per batch
 		batch_size=10,  			# MaxCliqueSeedsKumarCONFIRM, how many batches
@@ -152,22 +167,22 @@ def cluster_known():
 		min_membership=1, 			# PipelineCONFIRM, how many docs a cluster must have after initialization
 		z_threshold=-100,			# PipelineCONFIRM, the reject threshold for the greedy pass
 		use_labels=False,			# PipelineCONFIRM, Skips kumarconfirm init and uses the labels
-		use_ss=False
+		use_ss=param3
 		)
 
 	confirm.cluster2()
 	print
 	print
-	exit()
+	#exit()
 
-	if hasattr(confirm, 'print_reject_analysis'):
-		confirm.print_reject_analysis()
-	elif hasattr(confirm, 'print_analysis'):
-		confirm.print_analysis()
-	else:
-		analyzer = metric.KnownClusterAnalyzer(confirm)
-		analyzer.draw_centers()
-		analyzer.print_all()
+	#if hasattr(confirm, 'print_reject_analysis'):
+	#	confirm.print_reject_analysis()
+	#elif hasattr(confirm, 'print_analysis'):
+	#	confirm.print_analysis()
+	#else:
+	#	analyzer = metric.KnownClusterAnalyzer(confirm)
+	#	analyzer.draw_centers()
+	#	analyzer.print_all()
 
 def check_init():
 	docs = doc.get_docs_nested(get_data_dir("test"))

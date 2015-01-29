@@ -7,6 +7,7 @@ import scipy.spatial.distance
 import sklearn.ensemble
 import sklearn.cluster
 import sklearn.linear_model
+import sklearn.metrics
 import collections
 import utils
 import random
@@ -160,7 +161,7 @@ def kumar_cluster_cv(data_matrix, instances, cluster_range):
 	
 class KumarCONFIRM(cluster.BaseCONFIRM):
 	
-	def __init__(self, docs, iterations=2, num_initial_seeds=10, num_seeds=10, cluster_range=(10,15), **kwargs):
+	def __init__(self, docs, iterations=2, num_initial_seeds=10, num_seeds=10, cluster_range=(2,4), **kwargs):
 		super(KumarCONFIRM, self).__init__(docs, **kwargs)
 		self.num_initial_seeds = num_initial_seeds
 		self.iterations = iterations
@@ -292,26 +293,27 @@ class BatchMaxCliqueKumarCONFIRM(KumarCONFIRM):
 
 class SemiSupervisedKumarCONFIRM(KumarCONFIRM):
 	
-	def __init__(self, docs, num_per_seed=1, **kwargs):
+	def __init__(self, docs, num_seeds=-1, num_per_seed=1, **kwargs):
 		super(SemiSupervisedKumarCONFIRM, self).__init__(docs, **kwargs)
 		self.num_per_seed = num_per_seed
+		self.num_seeds = num_seeds
 
 	def _choose_initial_seeds(self):
-		counter = collections.defaultdict(int)
-		label_to_seed = dict()
+		dseeds = collections.defaultdict(list)
+		num_labels = len(set(map(lambda _doc: _doc.label, self.docs)))
+		if self.num_seeds != -1:
+			self.num_per_seed = self.num_seeds / num_labels + 1 
 		for _doc in self.docs:
 			_doc._load_check()
 			label = _doc.label
-			if counter[label] == 0:
-				seed = _doc.copy(label)
-				counter[label] += 1
-				label_to_seed[label] = seed
-			elif counter[label] < self.num_per_seed:
-				label_to_seed[label].aggregate(_doc)
-				counter[label] += 1
-		seeds = label_to_seed.values() 
-		for seed in seeds:
-			seed.final_prune()
+			if len(dseeds[label]) < self.num_per_seed:
+				dseeds[label].append(_doc)
+		seeds = list()
+		for x in xrange(self.num_per_seed):
+			for label in dseeds:
+				seeds.append(dseeds[label][x])
+		if self.num_seeds != -1:
+			seeds = seeds[:self.num_seeds]
 		return seeds
 		
 class RandomSeedsKumarCONFIRM(KumarCONFIRM):
@@ -403,8 +405,7 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 
 	def __init__(self, docs, init_subset=2000, min_membership=5, iterations=2, 
 				num_initial_seeds=10, num_seeds=10, z_threshold=-1, 
-				use_labels=True, use_ss=False, num_per_seed=1, cluster_range=(10,15),
-				**kwargs):
+				use_labels=False, use_ss=False, num_per_seed=1, **kwargs):
 		self.docs = docs
 		self.init_subset = init_subset
 		self.min_cluster_membership = min_membership
@@ -416,7 +417,6 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 		self.topN = 3
 		self.use_ss = use_ss
 		self.num_per_seed = num_per_seed
-		self.cluster_range = cluster_range
 	
 	def cluster_doc_similarity(self, cluster, _doc):
 		sim_vec = cluster.center.global_region_sim(_doc)
@@ -468,7 +468,7 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 		if self.use_ss:
 			kumarConfirm = SemiSupervisedKumarCONFIRM(self.docs[:self.init_subset], num_per_seed=self.num_per_seed,
 											iterations=self.iterations, num_initial_seeds=self.num_initial_seeds, 
-											num_seeds=self.num_seeds, cluster_range=self.cluster_range)
+											num_seeds=self.num_seeds)
 			seeds = kumarConfirm._choose_initial_seeds()
 
 		else:
@@ -520,21 +520,22 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 
 	def cluster2(self):
 		affinity_matrix = self.get_affinity_matrix()
-		print self.cluster_range
-		for num_clusters in xrange(self.cluster_range[0], self.cluster_range[1] + 1):
+		for num_clusters in NUM_CLUSTERS:
 			assignments = spectral_cluster(affinity_matrix, num_clusters)
 			clusters = form_clusters(self.docs, assignments)
 			self.clusters = filter(lambda cluster: cluster.members, clusters)
 			analyzer = metric.KnownClusterAnalyzer(self)
-			acc = analyzer.accuracy()
-			print
-			print "NUM CLUSTERS: ", num_clusters
-			print
-			print "Init_Accuracy: ", acc
+			silhouette = sklearn.metrics.silhouette_score(1 - affinity_matrix, assignments, metric='precomputed')
+			analyzer.print_summary(num_clusters, self.num_seeds, prefix="init", sil=silhouette)
+			analyzer.print_general_info()
+			analyzer.print_label_conf_mat()
+			analyzer.print_label_cluster_mat()
 
 			clusters = self.preprocess_clusters(clusters, do_prototypes=True)
 			clusters = self.greedy(clusters)
 			self.clusters = filter(lambda cluster: cluster.members, clusters)
+			analyzer = metric.KnownClusterAnalyzer(self)
+			analyzer.print_summary(num_clusters, self.num_seeds, prefix="final")
 			self.print_reject_analysis()
 			
 
@@ -551,7 +552,7 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 		elif self.use_ss:
 			kumarConfirm = SemiSupervisedKumarCONFIRM(self.docs[:self.init_subset], num_per_seed=self.num_per_seed,
 											iterations=self.iterations, num_initial_seeds=self.num_initial_seeds, 
-											num_seeds=self.num_seeds, cluster_range=self.cluster_range)
+											num_seeds=self.num_seeds)
 			kumarConfirm.cluster()
 			clusters = kumarConfirm.clusters
 
@@ -744,7 +745,6 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 				vector = seed.match_vector(_doc)
 				feature_mat[x,offset:offset + len(vector)] = vector
 				offset += len(vector)
-		print feature_mat
 		return feature_mat
 		
 		

@@ -523,7 +523,7 @@ class LMatcher(LineMatcher):
 		weight_mat = [([0] * cols) for r in xrange(rows)]
 		for r in xrange(rows):
 			for c in xrange(cols):
-				weight_mat[r][c] = total_cost_mat[r][c] / total
+				weight_mat[r][c] = total_cost_mat[r][c] / total if total else 0
 		return perc_mat, weight_mat
 
 	def similarity(self):
@@ -611,7 +611,7 @@ class LMatcher(LineMatcher):
 		weights = [line1.count, line2.count]
 		pos2_translated = utils.tup_sum([line2.pos, pos_offset]) 
 		avg_pos = utils.tup_avg([line1.pos, pos2_translated], weights)
-		avg_len = utils.wavg([line1.length, line2.length], weights)
+		avg_len = max(utils.wavg([line1.length, line2.length], weights), 0.1)
 		avg_thick = utils.wavg([line1.thickness, line2.thickness], weights)
 
 		combined_line = components.Line(line1.orien, avg_pos, avg_len, avg_thick)
@@ -636,7 +636,7 @@ class LMatcher(LineMatcher):
 		avg_dist = utils.wavg([line1.pos[o], line2.pos[o]], weights)
 		offset = line1.pos[1-o]
 		pos = create_pos(avg_dist, offset, o)
-		length = line2.length + (line2.pos[1-o] - line1.pos[1-o])
+		length = max(line2.length + (line2.pos[1-o] - line1.pos[1-o]), 0.1)
 		avg_thickness = utils.wavg([line1.thickness, line2.thickness], weights)
 
 		line = components.Line(o, pos, length, avg_thickness)
@@ -704,7 +704,7 @@ class LMatcher(LineMatcher):
 		len_diff = line1.length - line2.length
 		overlap_perc = line2.length / line1.length
 		length_delta = len_diff * overlap_perc / max(line1.count, 1)
-		length = line1.length - length_delta
+		length = max(line1.length - length_delta, 0.1)
 
 		# offset
 		offset = line1.pos[1-o] + (length_delta / 2)
@@ -737,7 +737,7 @@ class LMatcher(LineMatcher):
 		len_diff = line2.length - line1.length
 		overlap_perc = line1.length / line2.length
 		length_delta = len_diff * overlap_perc / max(line1.count, 1)
-		length = line1.length + length_delta
+		length = max(line1.length + length_delta, 0.1)
 
 		# offset
 		offset = line1.pos[1-o] - (length_delta / 2)
@@ -769,7 +769,7 @@ class LMatcher(LineMatcher):
 
 		# length
 		length_delta = overlap_perc1 * (line2.length - overlap_len) / max(line1.count, 1)
-		length = line1.length + length_delta
+		length = max(line1.length + length_delta, 0.1)
 
 		# decide which end to grow
 		if line1.pos[1-o] < (line2.pos[1-o] + pos_offset[1-o]):
