@@ -10,6 +10,7 @@ import metric
 import cPickle
 import cluster
 import kmedoids
+import tempfile
 import numpy as np
 import collections
 import sklearn.cluster
@@ -18,48 +19,48 @@ import scipy.spatial.distance
 
 np.set_printoptions(precision=2, linewidth=200, suppress=True)
 
-_image_ext = ".png"
+_image_ext = ".jpg"
 
 # SURF Extraction
 _surf_upright = True
 _surf_extended = False
 _surf_threshold = 30000
-_num_surf_features = 1000
+_num_surf_features = 10000
 
 # Codebook & Features
-_codebook_sizes = [10, 20]
-_num_trials = 2
-_perc_docs_for_codebook = 0.30
-_num_surf_features_codebook = 1000
+_codebook_sizes = [1000]
+_num_trials = 5
+_perc_docs_for_codebook = 0.05
+_num_surf_features_codebook = 25000
 _max_k_medoids_iters = 30
-_H_partitions = 3
-_V_partitions = 4
+_H_partitions = 2
+_V_partitions = 2
+
+# Memory Control
+_batch_size = 2
 
 # not parameters
 _num_histograms = ( (2 ** (_H_partitions) - 1) + (2 ** (_V_partitions) - 1) - 1 )
 _surf_instance = cv2.SURF(_surf_threshold)
 _surf_instance.upright = _surf_upright
 _surf_instance.extended = _surf_extended
-_surf_features = dict()
 _print_interval = 20
 
 
 def calc_surf_features(im_file):
-	if im_file not in _surf_features:
-		im = cv2.imread(im_file, 0)
-		height = im.shape[0]
-		width = im.shape[1]
-		# surf_features[0] is the array of keypoints
-		# surf_features[1] is the array of descriptors
-		_surf_instance.hessianThreshold = _surf_threshold
+	im = cv2.imread(im_file, 0)
+	height = im.shape[0]
+	width = im.shape[1]
+	# surf_features[0] is the array of keypoints
+	# surf_features[1] is the array of descriptors
+	_surf_instance.hessianThreshold = _surf_threshold
+	kps, deses = _surf_instance.detectAndCompute(im, None)
+	while len(kps) < _num_surf_features:
+		_surf_instance.hessianThreshold /= 2
 		kps, deses = _surf_instance.detectAndCompute(im, None)
-		while len(kps) < _num_surf_features:
-			_surf_instance.hessianThreshold /= 2
-			kps, deses = _surf_instance.detectAndCompute(im, None)
-		pts = np.array(map(lambda kp: kp.pt, kps[:_num_surf_features]))
-		deses = deses[:_num_surf_features] + 0
-		_surf_features[im_file] = (pts, deses, width, height)
-	return _surf_features[im_file]
+	pts = np.array(map(lambda kp: kp.pt, kps[:_num_surf_features]))
+	deses = deses[:_num_surf_features] + 0
+	return (pts, deses, width, height)
 	
 def calc_features(pts, deses, width, height, codebook):
 	# calc the surf features
@@ -240,22 +241,62 @@ def main(in_dir, out_dir):
 	print "Creating Codebooks"
 	print
 	codebooks = get_codebooks(instances_for_codebooks, codebook_params)
-	d = collections.defaultdict(list)
+	num_codebooks = len(codebooks)
+	features_by_codebook = list()
 
-	print 
-	print "Creating Data Matrices"
-	print
-	for x, instance in enumerate(instances):
-		if x % 10 == 0:
-			print "Processing (%d/%d) %.2f%% Images" % (x, n, 100. * x / n)
-		pts, deses, width, height = calc_surf_features(instance)
-		for x, codebook in enumerate(codebooks):
-			features = calc_features(pts, deses, width, height, codebook)
-			d[x].append(features)
+	tmpdir = tempfile.mkdtemp()
 
-	for x, features in d.iteritems():
-		data_matrix = np.array(features)
-		np.save(os.path.join(out_dir, "data_matrix_%d.npy" % x), data_matrix)
+	try:
+		print "Temp Dir:", tmpdir
+		for x in xrange(num_codebooks):
+			# disk storage for that codebook
+			os.makedirs(os.path.join(tmpdir, str(x)))
+
+			# allocate matrix for a batch of features
+			codebook_size = codebooks[x].shape[0]
+			num_features = _num_histograms * codebook_size
+			empty = np.zeros( (_batch_size, num_features) )
+			features_by_codebook.append(empty)
+
+		print 
+		print "Creating Data Matrices"
+		print
+		for x, instance in enumerate(instances):
+			if x % 10 == 0:
+				print "Processing (%d/%d) %.2f%% Images" % (x, n, 100. * x / n)
+			pts, deses, width, height = calc_surf_features(instance)
+			for y, codebook in enumerate(codebooks):
+				features = calc_features(pts, deses, width, height, codebook)
+				features_by_codebook[y][x % _batch_size,:] = features
+
+			if (x + 1) % _batch_size == 0:
+				# flush matrix to the disk
+				for y, feature_mat in enumerate(features_by_codebook):
+					num = (x / _batch_size)
+					print "Codebook %d, Batch %d" % (y, num)
+					np.save(os.path.join(tmpdir, str(y), "%d.npy" % num), feature_mat)
+
+		num_dirty = len(instances) % _batch_size
+		print "num_dirty:", num_dirty
+		if num_dirty:
+			for y in xrange(num_codebooks):
+				num = (len(instances) / _batch_size) + 1 
+				print "Codebook %d, Batch %d" % (y, num)
+				mat = features_by_codeook[y][:num_dirty,:]
+				np.save(os.path.join(tmpdir, str(y), "%d.npy" % num), mat)
+
+		num_batches = (len(instances) / _batch_size) + (1 if num_dirty else 0)
+		for y in xrange(num_codebooks):
+			matrices = map(lambda z: 
+				np.load(open(os.path.join(tmpdir, str(y), "%d.npy" % z))), 
+				xrange(num_batches))
+			data_matrix = np.concatenate(matrices)
+
+			np.save(os.path.join(out_dir, "data_matrix_%d.npy" % y), data_matrix)
+	finally:
+		shutil.rmtree(tmpdir)
+
+		
 
 
 if __name__ == "__main__":
