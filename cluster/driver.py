@@ -173,16 +173,16 @@ def cluster_known():
 	confirm.cluster2()
 	print
 	print
-	exit()
+	#exit()
 
-	if hasattr(confirm, 'print_reject_analysis'):
-		confirm.print_reject_analysis()
-	elif hasattr(confirm, 'print_analysis'):
-		confirm.print_analysis()
-	else:
-		analyzer = metric.KnownClusterAnalyzer(confirm)
-		analyzer.draw_centers()
-		analyzer.print_all()
+	#if hasattr(confirm, 'print_reject_analysis'):
+	#	confirm.print_reject_analysis()
+	#elif hasattr(confirm, 'print_analysis'):
+	#	confirm.print_analysis()
+	#else:
+	#	analyzer = metric.KnownClusterAnalyzer(confirm)
+	#	analyzer.draw_centers()
+	#	analyzer.print_all()
 
 def check_init():
 	docs = doc.get_docs_nested(get_data_dir("test"))

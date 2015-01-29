@@ -491,6 +491,20 @@ class KnownClusterAnalyzer:
 		print
 		print
 
+	def print_summary(self, k, s, prefix="init", sil=-1):
+		acc = self.accuracy()
+		v = self.v_measure()
+		h = self.homogeneity()
+		c = self.completeness()
+		ari = self.ari()
+
+		ints = [k, s]
+		metrics = [acc, v, c, h, ari, sil]
+
+		print
+		print "%s\t%s\n" % (prefix, "\t".join(map(lambda x: "%d" % x, ints)) + "\t" +
+									"\t".join(map(lambda x: "%.3f" % x, metrics)))
+
 	def calc_label_cluster_counts(self):
 		'''
 		:return: { label : { cluster_id : #occurances, }, }
