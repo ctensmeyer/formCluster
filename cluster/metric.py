@@ -33,7 +33,7 @@ class KnownClusterAnalyzer:
 				self.total_counts[count] += n
 		#print json.dumps(self.label_pr_mats, indent=4)
 
-		labels = list(self.label_pr_mats.keys())
+		labels = list(self.all_labels)
 		mapping = {label: labels.index(label) for label in labels}
 		self.true_labels = map(lambda _doc: mapping[_doc.label], self.docs)
 		self.predicted_labels = utils.flatten(map(lambda cluster: [mapping[cluster.label]] * len(cluster.members), self.clusters))

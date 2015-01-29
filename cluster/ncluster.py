@@ -6,6 +6,7 @@ import numpy as np
 import scipy.spatial.distance
 import sklearn.ensemble
 import sklearn.cluster
+import sklearn.linear_model
 import collections
 import utils
 import random
@@ -483,6 +484,39 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 		rf = train_random_forest(data_matrix, random_matrix)
 		sim_matrix = compute_sim_mat(data_matrix, rf)
 		return sim_matrix
+
+	def cluster_bootstrap(self):
+		affinity_matrix = self.get_affinity_matrix()
+		print self.cluster_range
+		for num_clusters in xrange(self.cluster_range[0], self.cluster_range[1] + 1):
+			assignments = spectral_cluster(affinity_matrix, num_clusters)
+			clusters = form_clusters(self.docs, assignments)
+			self.clusters = filter(lambda cluster: cluster.members, clusters)
+			analyzer = metric.KnownClusterAnalyzer(self)
+			acc = analyzer.accuracy()
+			print
+			print "NUM CLUSTERS: ", num_clusters
+			print
+			print "Init_Accuracy: ", acc
+
+			clusters = filter(lambda _cluster: len(_cluster.members) >= self.min_cluster_membership, clusters)
+			self._form_prototypes(clusters)
+			features = self._compute_features(map(lambda _cluster, _cluster.center))
+			labels = list()
+			for _doc in self.docs:
+				for x,_cluster in enumerate(clusters):
+					if _doc in _cluster.members:
+						labels.append(x)
+						break
+			labels = np.array(labels)
+			classifier = sklearn.linear_model.LogisticRegression()
+			classifier.fit(features, labels)
+			assignments = classifier.predict(features)
+			self.clusters = form_clusters(self.docs, assignments)
+
+			self.print_reject_analysis()
+					
+		
 
 	def cluster2(self):
 		affinity_matrix = self.get_affinity_matrix()
