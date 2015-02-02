@@ -60,6 +60,8 @@ DUP_THRESH = 0.01
 
 descrip = sys.argv[2]
 
+FEATURES_OUTDIR="features"
+
 if descrip.startswith("wales_large"):
 	NUM_CLUSTERS=[10,15,20,25,26,27,28,29,30,31,32,33,34,35,40,45,50,55,60]
 elif descrip.startswith("wales_small"):
@@ -75,7 +77,8 @@ elif descrip.startswith("padeaths_all"):
 elif descrip.startswith("padeaths_balanced"):
 	NUM_CLUSTERS=[2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20]
 elif descrip.startswith("wales_20"):
-	NUM_CLUSTERS=[2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 19]
+	#NUM_CLUSTERS=[2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 19]
+	NUM_CLUSTERS=[2, 3, 4]
 else:
 	NUM_CLUSTERS=[2,5]
 

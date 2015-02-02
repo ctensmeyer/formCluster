@@ -19,12 +19,11 @@ class Cluster:
 
 	def set_label(self):
 		labels = map(lambda doc: doc.label, self.members)
-		c = collections.Counter(labels)
-		try:
+		if labels:
+			c = collections.Counter(labels)
 			self.label = c.most_common(1)[0][0]
-		except:
+		else:
 			self.label = None
-
 
 class BaseCONFIRM(object):
 	

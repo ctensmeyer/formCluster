@@ -1,4 +1,6 @@
 
+import os
+import datetime
 import metric
 import cluster
 import network
@@ -486,22 +488,36 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 		return sim_matrix
 
 	def cluster_bootstrap(self):
+		outdir = os.path.join(FEATURES_OUTDIR, str(datetime.datetime.now()).replace(' ', '_') + "_".join(sys.argv[1:]))
+		try:
+			os.makedirs(outdir)
+		except:
+			pass
+		all_labels = list(set(map(lambda _doc: _doc.label, self.docs)))
+		mapping = {label: all_labels.index(label) for label in all_labels}
+		true_labels = np.array(map(lambda _doc: mapping[_doc.label], self.docs))
+		np.save(os.path.join(outdir, 'true_labels.npy'), true_labels)
+
 		affinity_matrix = self.get_affinity_matrix()
-		print self.cluster_range
-		for num_clusters in xrange(self.cluster_range[0], self.cluster_range[1] + 1):
+		for num_clusters in NUM_CLUSTERS:
+			try:
+				os.makedirs(os.path.join(outdir, str(num_clusters)))
+			except:
+				pass
 			assignments = spectral_cluster(affinity_matrix, num_clusters)
 			clusters = form_clusters(self.docs, assignments)
 			self.clusters = filter(lambda cluster: cluster.members, clusters)
+
 			analyzer = metric.KnownClusterAnalyzer(self)
-			acc = analyzer.accuracy()
-			print
-			print "NUM CLUSTERS: ", num_clusters
-			print
-			print "Init_Accuracy: ", acc
+			silhouette = sklearn.metrics.silhouette_score(1 - affinity_matrix, assignments, metric='precomputed')
+			analyzer.print_summary(num_clusters, self.num_seeds, prefix="init", sil=silhouette)
+			analyzer.print_general_info()
+			analyzer.print_label_conf_mat()
+			analyzer.print_label_cluster_mat()
 
 			clusters = filter(lambda _cluster: len(_cluster.members) >= self.min_cluster_membership, clusters)
 			self._form_prototypes(clusters)
-			features = self._compute_features(map(lambda _cluster, _cluster.center))
+			features = self._compute_features(map(lambda _cluster: _cluster.center, clusters))
 			labels = list()
 			for _doc in self.docs:
 				for x,_cluster in enumerate(clusters):
@@ -509,13 +525,20 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 						labels.append(x)
 						break
 			labels = np.array(labels)
+			np.save(os.path.join(outdir, str(num_clusters), "features.npy"), features)
+			np.save(os.path.join(outdir, str(num_clusters), "bootstrapped_labels.npy"), labels)
+
 			classifier = sklearn.linear_model.LogisticRegression()
 			classifier.fit(features, labels)
+			print classifier.coef_
 			assignments = classifier.predict(features)
 			self.clusters = form_clusters(self.docs, assignments)
+			np.save(os.path.join(outdir, str(num_clusters), "predicted_labels.npy"), assignments)
 
+			analyzer = metric.KnownClusterAnalyzer(self)
+			analyzer.print_summary(num_clusters, self.num_seeds, prefix="final")
 			self.print_reject_analysis()
-					
+
 		
 
 	def cluster2(self):
@@ -524,6 +547,7 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 			assignments = spectral_cluster(affinity_matrix, num_clusters)
 			clusters = form_clusters(self.docs, assignments)
 			self.clusters = filter(lambda cluster: cluster.members, clusters)
+
 			analyzer = metric.KnownClusterAnalyzer(self)
 			silhouette = sklearn.metrics.silhouette_score(1 - affinity_matrix, assignments, metric='precomputed')
 			analyzer.print_summary(num_clusters, self.num_seeds, prefix="init", sil=silhouette)

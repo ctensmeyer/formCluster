@@ -36,7 +36,14 @@ class KnownClusterAnalyzer:
 		labels = list(self.all_labels)
 		mapping = {label: labels.index(label) for label in labels}
 		self.true_labels = map(lambda _doc: mapping[_doc.label], self.docs)
-		self.predicted_labels = utils.flatten(map(lambda cluster: [mapping[cluster.label]] * len(cluster.members), self.clusters))
+		self.predicted_labels = list()
+		for _doc in self.docs:
+			for _cluster in self.clusters:
+				if _doc in _cluster.members:
+					self.predicted_labels.append(mapping[_cluster.label])
+					break
+		#self.predicted_labels = utils.flatten(map(lambda cluster: ([mapping[cluster.label]] * len(cluster.members)) 
+		#		if cluster.label else [], self.clusters))
 
 
 	def preprocess_clusters(self):

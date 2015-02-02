@@ -170,7 +170,7 @@ def cluster_known():
 		use_ss=param3
 		)
 
-	confirm.cluster2()
+	confirm.cluster_bootstrap()
 	print
 	print
 	#exit()
