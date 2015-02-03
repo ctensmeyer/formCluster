@@ -22,7 +22,7 @@ _num_histograms = 21
 
 # Random Forest
 _num_trees = 2000
-_rf_threads = 7
+_rf_threads = 5
 _perc_random_data = 1
 
 # Spectral Clustering
@@ -38,6 +38,8 @@ _recorded_metrics = ['Matrix_File', 'Codebook_Size', 'Trial_Num', 'Num_Clusters'
 _out = open(_output_file, 'w')
 _out.write("%s\n" % "\t".join(_recorded_metrics))
 _verbose = True
+_prefix = "rand"
+#_prefix = "data_matrix"
 
 
 def compute_random_matrix(data_matrix):
@@ -105,7 +107,7 @@ def form_clusters(true_labels, predicted_labels):
 		count += 1
 		m.label = true
 		cluster_map[predicted].members.append(m)
-	clusters = cluster_map.values()
+	clusters = filter(lambda cluster: cluster.members, cluster_map.values())
 	map(lambda cluster: cluster.set_label(), clusters)
 	return clusters
 
@@ -129,7 +131,7 @@ def main(in_dir):
 	true_labels = np.load(f)
 	f.close()
 	for f in os.listdir(in_dir):
-		if f.startswith("data_matrix") and f.endswith(".npy"):
+		if f.startswith(_prefix) and f.endswith(".npy"):
 			data_matrix_files.append(os.path.join(in_dir, f))
 	data_matrix_files.sort()
 	num_trials = len(data_matrix_files)
@@ -157,9 +159,15 @@ def main(in_dir):
 				map(lambda x: "%.3f" % x, [acc, v, c, h, ari, silhouette])))
 			_out.write(s)
 			if _verbose:
-				print s
-				clusters = form_clusters(true_labels, predicted_labels)
-				print_analysis(clusters)
+				try:
+					print s
+					clusters = form_clusters(true_labels, predicted_labels)
+					print_analysis(clusters)
+				except Exception as e:
+					print "Error occured in verbose output"
+					print e
+					print sys.exc_info()[0]
+
 	_out.close()
 
 
