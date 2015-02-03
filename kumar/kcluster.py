@@ -33,13 +33,13 @@ _assignment_method = 'discretize'
 # not parameters
 _output_file = sys.argv[2]
 _recorded_metrics = ['Matrix_File', 'Codebook_Size', 'Trial_Num', 'Num_Clusters', 'Num_Trees', 
-					'Acc', 'V-measure', 'Completeness', 'Homogeneity', 'ARI', 'Silhouette']
+					'Acc', 'V-measure', 'Completeness', 'Homogeneity', 'ARI', 'Obs_Silh', 'True_Silh']
 
 _out = open(_output_file, 'w')
 _out.write("%s\n" % "\t".join(_recorded_metrics))
 _verbose = True
-_prefix = "rand"
-#_prefix = "data_matrix"
+#_prefix = "rand"
+_prefix = "data_matrix"
 
 
 def compute_random_matrix(data_matrix):
@@ -152,11 +152,12 @@ def main(in_dir):
 			acc = calc_acc(true_labels, predicted_labels)
 			h, c, v = sklearn.metrics.homogeneity_completeness_v_measure(true_labels, predicted_labels)
 			ari = sklearn.metrics.adjusted_rand_score(true_labels, predicted_labels)
-			silhouette = sklearn.metrics.silhouette_score(1 - sim_mat, predicted_labels, metric='precomputed')
+			predicted_silhouette = sklearn.metrics.silhouette_score(1 - sim_mat, predicted_labels, metric='precomputed')
+			actual_silhouette = sklearn.metrics.silhouette_score(1 - sim_mat, true_labels, metric='precomputed')
 			f = os.path.basename(data_matrix_file)
 			s = ("%s\n" % "\t".join([f] +
 				map(lambda x: "%d" % x, [codebook_size, y, num_clusters, _num_trees]) +
-				map(lambda x: "%.3f" % x, [acc, v, c, h, ari, silhouette])))
+				map(lambda x: "%.3f" % x, [acc, v, c, h, ari, predicted_silhouette, actual_silhouette])))
 			_out.write(s)
 			if _verbose:
 				try:
