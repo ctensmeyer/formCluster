@@ -184,6 +184,27 @@ def cluster_known():
 	#	analyzer.draw_centers()
 	#	analyzer.print_all()
 
+def extract():
+	dataset = sys.argv[2]
+	outdir = "output/" + "_".join(sys.argv[1:])
+
+	docs = doc.get_docs_nested(get_data_dir(dataset))
+	random.shuffle(docs)
+
+	#rand_amounts = [10, 20, 30, 50, 75, 100]
+	#type_percs = [0.01, 0.25, 0.50, 0.75, 0.90, 1.0]
+
+	rand_amounts = [1, 2, 3, 5]
+	type_percs = [0.01, 0.50]
+
+	#num_type_seeds = 30 if dataset not in ['nist', 'wales_balanced'] else 50
+	num_type_seeds = 7 if dataset not in ['nist', 'wales_balanced'] else 50
+
+	extractor = ncluster.FeatureExtractor(docs)
+	extractor.extract_random(os.path.join(outdir, 'rand'), rand_amounts)
+	extractor.extract_type(os.path.join(outdir, 'type'), num_type_seeds, type_percs)
+	
+
 def check_init():
 	docs = doc.get_docs_nested(get_data_dir("test"))
 	random.seed(12345)
@@ -349,6 +370,7 @@ def draw_all():
 	
 
 
+
 def main(arg):
 	if arg == "cluster":
 		cluster_known()
@@ -366,6 +388,8 @@ def main(arg):
 		draw_all()
 	if arg == "init":
 		check_init()
+	if arg == "extract":
+		extract()
 
 if __name__ == "__main__":
 	print "Start"
