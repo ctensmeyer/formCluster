@@ -82,5 +82,5 @@ elif descrip.startswith("wales_20"):
 else:
 	NUM_CLUSTERS=[2,5]
 
-print "NUM_CLUSTERS", NUM_CLUSTERS
+#print "NUM_CLUSTERS", NUM_CLUSTERS
 

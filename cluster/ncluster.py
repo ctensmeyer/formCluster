@@ -13,6 +13,7 @@ import sklearn.metrics
 import collections
 import utils
 import random
+import math
 import multiprocessing
 from constants import *
 
@@ -263,6 +264,111 @@ class KumarCONFIRM(cluster.BaseCONFIRM):
 		print feature_mat
 		return feature_mat
 
+class FeatureExtractor(object):
+	
+	def __init__(self, docs):
+		self.docs = docs
+		random.shuffle(self.docs)
+
+		self.all_labels = map(lambda _doc: _doc.label, self.docs)
+		self.labels = list(set(self.all_labels))
+		self.mapping = {label: self.labels.index(label) for label in self.labels}
+		self.true_labels = map(lambda _doc: self.mapping[_doc.label], self.docs)
+
+	def extract_type(self, outdir, num_seeds, perc_types):
+		print
+		print "extract_type()"
+		print
+		try:
+			os.makedirs(outdir)
+		except:
+			pass
+
+		np.save(os.path.join(outdir, "labels.npy"), self.true_labels)
+
+		perc_types.sort()
+		num_types = len(self.labels)
+		num_types_to_try = list()
+		for perc_type in perc_types:
+			num = int(math.ceil(num_types * perc_type))
+			if num not in num_types_to_try:
+				num_types_to_try.append(num)
+
+		type_histogram = collections.Counter(self.all_labels)
+		biggest_types = map(lambda tup: tup[0], type_histogram.most_common(num_types))
+
+		docs_by_type = collections.defaultdict(list)
+		for _doc in self.docs:
+			docs_by_type[_doc.label].append(_doc)
+
+		print "num_types_to_try", num_types_to_try
+		print
+		for num in num_types_to_try:
+			print num
+			types = biggest_types[:num]
+			forms_per_type = num_seeds / num
+			extra = num_seeds % num
+
+			seeds = list()
+			for x, _type in enumerate(types):
+				num_to_sample = forms_per_type
+				if x < extra:
+					num_to_sample += 1
+				if num_to_sample > len(docs_by_type[_type]):
+					seeds += docs_by_type[_type]
+				else:
+					seeds += random.sample(docs_by_type[_type], num_to_sample)
+
+			#assert num_seeds == len(seeds)
+
+			mat = self._compute_features(seeds)[0]
+			np.save(os.path.join(outdir, "type_%d_%d.npy" % (num, num_seeds)), mat)
+
+	def extract_random(self, outdir, amounts):
+		print
+		print "extract_random()"
+		print
+		try:
+			os.makedirs(outdir)
+		except:
+			pass
+		np.save(os.path.join(outdir, "labels.npy"), self.true_labels)
+
+		amounts.sort()
+		max_amount = amounts[-1]
+		seeds = random.sample(self.docs, max_amount)
+		mat, end_posses = self._compute_features(seeds)
+
+		print
+		print "Saving matrices"
+		print
+		for amount in amounts:
+			print amount
+			end_pos = end_posses[amount]
+			sub_mat = mat[:,:end_pos]
+			np.save(os.path.join(outdir, "rand_%d.npy" % amount), sub_mat)
+
+	def _compute_features(self, seeds):
+		num_features = 0
+		_doc = self.docs[0]
+		vectors = list()
+		for seed in seeds:
+			vectors.append(seed.match_vector(_doc))
+		num_features = sum(map(len, vectors))
+		feature_mat = np.zeros( (len(self.docs), num_features) )
+		end_poses = list()
+		for x, _doc in enumerate(self.docs):
+			if x % 20 == 0:
+				print "\t%d/%d (%.2f%%) Documents Extracted" % (x, len(self.docs), 100. * x / len(self.docs))
+			offset = 0
+			for seed in seeds:
+				vector = seed.match_vector(_doc)
+				feature_mat[x,offset:offset + len(vector)] = vector
+				offset += len(vector)
+				end_poses.append(offset)
+		return feature_mat, end_poses
+		
+
 
 class BatchMaxCliqueKumarCONFIRM(KumarCONFIRM):
 
@@ -291,7 +397,6 @@ class BatchMaxCliqueKumarCONFIRM(KumarCONFIRM):
 			batch_num += 1
 		print "Done"
 		return seeds
-		
 
 class SemiSupervisedKumarCONFIRM(KumarCONFIRM):
 	
