@@ -292,6 +292,7 @@ def cmp_test():
 	region_weights1 = doc1.region_weights()
 	region_weights2 = doc2.region_weights()
 
+
 	for x, name in enumerate(doc1.feature_set_names):
 		print
 		print name
@@ -307,14 +308,21 @@ def cmp_test():
 		print "Region Weights doc2:"
 		print
 		utils.print_mat(utils.apply_mat(region_weights2[x], lambda x: "%.3f" % x))
+	print
+	print "Match Vec"
+	print
+	match_vec = doc1.match_vector(doc2)
+	for x in xrange(len(match_vec) / 10):
+		print match_vec[10 * x: 10 * (x + 1)]
+	print
 
 	print "Sim Vector:"
 	print " ".join(map(lambda x: "%.2f" % x, global_region_sims))
 	print "Sim Weights:"
 	print " ".join(map(lambda x: "%.2f" % x, global_region_weights))
 
-	doc1.draw().save("output/doc1.png")
-	doc2.draw().save("output/doc2.png")
+	#doc1.draw().save("output/doc1.png")
+	#doc2.draw().save("output/doc2.png")
 
 	#doc1.push_away(doc2)
 	#doc1.draw().save("output/doc1_pushed.png")
@@ -323,7 +331,8 @@ def cmp_test():
 	#doc1.push_away(doc2)
 
 	doc1.aggregate(doc2)
-	doc1.draw().save("output/combined.png")
+	doc1.display()
+	#doc1.draw().save("output/combined.png")
 
 def draw_all():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))

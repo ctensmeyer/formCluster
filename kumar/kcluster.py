@@ -21,8 +21,8 @@ np.set_printoptions(precision=2, linewidth=200, suppress=True)
 _num_histograms = 21
 
 # Random Forest
-_num_trees = 2000
-_rf_threads = 7
+_num_trees = 100
+_rf_threads = 1
 _perc_random_data = 1
 
 # Spectral Clustering
@@ -146,20 +146,23 @@ def main(in_dir):
 		sim_mat = compute_sim_mat(data_matrix, random_forest)
 
 		for num_clusters in xrange(_cluster_range[0], _cluster_range[1] + 1):
-			predicted_labels = spectral_cluster(sim_mat, num_clusters)
-			acc = calc_acc(true_labels, predicted_labels)
-			h, c, v = sklearn.metrics.homogeneity_completeness_v_measure(true_labels, predicted_labels)
-			ari = sklearn.metrics.adjusted_rand_score(true_labels, predicted_labels)
-			silhouette = sklearn.metrics.silhouette_score(1 - sim_mat, predicted_labels, metric='precomputed')
-			f = os.path.basename(data_matrix_file)
-			s = ("%s\n" % "\t".join([f] +
-				map(lambda x: "%d" % x, [codebook_size, y, num_clusters, _num_trees]) +
-				map(lambda x: "%.3f" % x, [acc, v, c, h, ari, silhouette])))
-			_out.write(s)
-			if _verbose:
-				print s
-				clusters = form_clusters(true_labels, predicted_labels)
-				print_analysis(clusters)
+			try:
+				predicted_labels = spectral_cluster(sim_mat, num_clusters)
+				acc = calc_acc(true_labels, predicted_labels)
+				h, c, v = sklearn.metrics.homogeneity_completeness_v_measure(true_labels, predicted_labels)
+				ari = sklearn.metrics.adjusted_rand_score(true_labels, predicted_labels)
+				silhouette = sklearn.metrics.silhouette_score(1 - sim_mat, predicted_labels, metric='precomputed')
+				f = os.path.basename(data_matrix_file)
+				s = ("%s\n" % "\t".join([f] +
+					map(lambda x: "%d" % x, [codebook_size, y, num_clusters, _num_trees]) +
+					map(lambda x: "%.3f" % x, [acc, v, c, h, ari, silhouette])))
+				_out.write(s)
+				if _verbose:
+					print s
+					clusters = form_clusters(true_labels, predicted_labels)
+					print_analysis(clusters)
+			except:
+				print "error!"
 	_out.close()
 
 
