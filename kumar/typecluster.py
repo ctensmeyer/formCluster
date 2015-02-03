@@ -31,7 +31,7 @@ _assignment_method = 'discretize'
 # not parameters
 _output_file = sys.argv[2]
 _recorded_metrics = ['Matrix_File', 'Num_Seeds', 'Num_Types', 'Trial_Num', 'Num_Clusters', 'Num_Trees', 
-					'Acc', 'V-measure', 'Completeness', 'Homogeneity', 'ARI', 'P_Silh', 'A_Silh']
+					'Acc', 'V-measure', 'Completeness', 'Homogeneity', 'ARI', 'Obs_Silh', 'True_Silh']
 
 _out = open(_output_file, 'w')
 _out.write("%s\n" % "\t".join(_recorded_metrics))
@@ -140,8 +140,7 @@ def main(in_dir):
 		f = open(data_matrix_file)
 		data_matrix = np.load(f)
 		f.close()
-		tokens = re.split('_|.', data_matrix_file)
-		print tokens
+		tokens = os.path.splitext(os.path.basename(data_matrix_file))[0].split('_')
 		num_types = int(tokens[1])
 		num_seeds = int(tokens[2])
 		random_matrix = compute_random_matrix(data_matrix)

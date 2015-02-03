@@ -30,7 +30,7 @@ _assignment_method = 'discretize'
 # not parameters
 _output_file = sys.argv[2]
 _recorded_metrics = ['Matrix_File', 'Num_Seeds', 'Trial_Num', 'Num_Clusters', 'Num_Trees', 
-					'Acc', 'V-measure', 'Completeness', 'Homogeneity', 'ARI', 'P_Silh', 'A_Silh']
+					'Acc', 'V-measure', 'Completeness', 'Homogeneity', 'ARI', 'Obs_Silh', 'True_Silh']
 
 _out = open(_output_file, 'w')
 _out.write("%s\n" % "\t".join(_recorded_metrics))
@@ -139,7 +139,7 @@ def main(in_dir):
 		f = open(data_matrix_file)
 		data_matrix = np.load(f)
 		f.close()
-		num_seeds = int(data_matrix_file[len(_prefix):-4])
+		num_seeds = int(os.path.basename(data_matrix_file)[len(_prefix):-4])
 		random_matrix = compute_random_matrix(data_matrix)
 		random_forest = train_classifier(data_matrix, random_matrix)
 		sim_mat = compute_sim_mat(data_matrix, random_forest)
