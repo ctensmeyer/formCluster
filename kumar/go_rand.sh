@@ -10,8 +10,8 @@ function dorandcluster
 
 export -f dorandcluster
 
-datasets="padeaths_all wales_balanced"
-nums="1 2 3 4 5"
+datasets="nist"
+nums="3 4"
 
 nice parallel --gnu -j 2 dorandcluster {1} {2} ::: $datasets ::: $nums
 

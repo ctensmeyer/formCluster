@@ -10,8 +10,8 @@ function dotypecluster
 
 export -f dotypecluster
 
-datasets="padeaths_balanced washpass"
+datasets="padeaths_all"
 nums="1 2 3 4 5"
 
-nice parallel --gnu -j 1 dotypecluster {1} {2} ::: $datasets ::: $nums
+nice parallel --gnu -j 3 dotypecluster {1} {2} ::: $datasets ::: $nums
 
