@@ -45,14 +45,14 @@ _stay_probs = [0, 0.1, 0.25, 0.5, 0.75, 0.9]
 def compute_structured_random_matrix(data_matrix, stay_prob=0.5):
 	print "Constructing Structured Random Training Set"
 
-	rand_shape = (int(data_matrix.shape[0] * SIZE_OF_RANDOM_DATA), data_matrix.shape[1])
+	rand_shape = (int(data_matrix.shape[0] * _perc_random_data), data_matrix.shape[1])
 	rand_mat = np.zeros(rand_shape)
 
 	# these are the indices of the rows we sample from
-	row_choices = xrange(data_matrix.shape[0])
+	row_choices = range(data_matrix.shape[0])
 
 	# column indices for both matrices
-	col_idxs = xrange(rand_mat.shape[1])
+	col_idxs = range(rand_mat.shape[1])
 	for row in xrange(rand_mat.shape[0]):
 
 		# pick a row idx from data_matrix
@@ -156,18 +156,25 @@ def print_analysis(clusters):
 
 def main(in_dir):
 
-	data_matrix_files = list()
-	f = open(os.path.join(in_dir, "labels.npy"))
-	true_labels = np.load(f)
-	f.close()
+	matrix_files = list()
 	for f in os.listdir(in_dir):
-		if f.endswith(".npy") and f != "labels.npy":
-			data_matrix_files.append(os.path.join(in_dir, f))
-	data_matrix_files.sort()
-	num_trials = len(data_matrix_files)
+		if f.endswith(".npy") and not f.startswith("labels"):
+			data_num = int(f.split('_')[-1][:-4])
+			print data_num
+			data_file = os.path.join(in_dir, f)
+			labels_file = os.path.join(in_dir, "labels_%d.npy" % data_num)
+			matrix_files.append( (data_file, labels_file) )
+	matrix_files.sort()
+	num_trials = len(matrix_files)
 
-	for y, data_matrix_file in enumerate(data_matrix_files):
+	for y, tup in enumerate(matrix_files):
 		print "\t%d/%d (%2.1f%%) Trials processed" % (y, num_trials, 100.0 * y / num_trials)
+
+		data_matrix_file, labels_matrix_file = tup
+
+		f = open(os.path.join(in_dir, labels_matrix_file))
+		true_labels = np.load(f)
+		f.close()
 		
 		f = open(data_matrix_file)
 		data_matrix = np.load(f)
