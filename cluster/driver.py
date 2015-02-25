@@ -410,9 +410,8 @@ def all_cluster():
 	num_initial_clusters = int(sys.argv[4])
 	num_seeds = int(sys.argv[5])
 	min_pts = int(sys.argv[6])
-	outdir = os.path.join(_output_dir, str(datetime.datetime.now()).replace(' ', '_') + "_".join(sys.argv[1:]))
+	outdir = os.path.join(_output_dir, str(datetime.date.today()) + "_" + "_".join(sys.argv[1:]))
 	ncluster.all_cluster(docs, num_subset, num_initial_clusters, num_seeds, min_pts, outdir)
-	
 
 def main(arg):
 	if arg == "cluster":

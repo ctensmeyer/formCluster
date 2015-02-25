@@ -145,7 +145,7 @@ def form_clusters_alt(instances, l_idx):
 	m = MockCenter()
 	m.label = None
 	for x, l in enumerate(l_idx):
-		_cluster = cluster.Cluster(list(), m, x)
+		_cluster = cluster.Cluster(list(), m)
 		for idx in l:
 			_cluster.members.append(instances[idx])
 		clusters.append(_cluster)
@@ -341,7 +341,7 @@ def extract_type(docs, num_seeds, perc_types):
 	return mats
 
 
-def print_cluster_analysis(clusters):
+def print_cluster_analysis(clusters, misclustered=False):
 	class Mock:
 		pass
 	m = Mock()
@@ -351,6 +351,9 @@ def print_cluster_analysis(clusters):
 	analyzer.print_label_conf_mat()
 	analyzer.print_label_cluster_mat()
 	analyzer.print_metric_info()
+
+	#if misclustered:
+		#analyzer.
 
 
 def get_acc_v_measure(clusters):
@@ -372,7 +375,7 @@ def test_features(clusters, min_size):
 		for _type in ['match', 'sim']:
 			sclusters = split_clusters(clusters, min_size, _type, dist)
 			acc, v = get_acc_v_measure(sclusters)
-			print "%s_%s\t%d\t%.3f\t%.3f" % (_type, dist, len(sclusters), acc, v)
+			print "%s_%s\t%d\t%.lf\t%.3f" % (_type, dist, len(sclusters), acc, v)
 			#print_cluster_analysis(sclusters)
 
 
@@ -473,13 +476,13 @@ def all_cluster(docs, num_subset, num_initial_clusters, num_seeds, min_pts, outd
 	print "*" * 30
 	print "Final Clusters:"
 	print "*" * 30
-	print_cluster_analysis(final_clusters)
+	print_cluster_analysis(final_clusters, True)
 
 	# summary compare
 	for name, clusters in {"init": initial_clusters, "split": sclusters, "final": final_clusters}.iteritems():
 		acc, v = get_acc_v_measure(clusters)
 		k = len(clusters)
-		print "%s:\t%d\t%.3f\t%.3f" % (name, k, acc, v)
+		print "%s\t%d\t%.4f\t%.4f" % (name, k, acc, v)
 
 
 class KumarCONFIRM(cluster.BaseCONFIRM):

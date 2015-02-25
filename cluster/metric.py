@@ -195,9 +195,11 @@ class KnownClusterAnalyzer:
 			for _doc in cluster.members:
 				if _doc.label != cluster.label:
 					total += 1
-					sims = cluster.center.global_sim(_doc)
-					sim = self.confirm.cluster_doc_similarity(cluster, _doc)
-					print "\t" + "\t".join(map(str, [_doc.label, sim, sims]))
+					#sims = cluster.center.global_sim(_doc)
+					#sim = self.confirm.cluster_doc_similarity(cluster, _doc)
+					#print "\t" + "\t".join(map(str, [_doc.label, sim, sims]))
+					#print "\t" + "\t".join(map(str, [_doc.label, sim, sims]))
+					print "\t%s" % _doc.label
 			print
 		print "Total Mismatches:", total
 		print
