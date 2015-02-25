@@ -12,6 +12,8 @@ def extract_surf(im_file, out_file, limit):
 
 	im2 = cv2.drawKeypoints(im, kp, None, (255, 0, 0), 4)
 	cv2.imwrite(out_file, im2)
+	
+	print len(kp)
 
 	exit()
 

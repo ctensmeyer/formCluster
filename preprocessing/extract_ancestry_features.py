@@ -11,6 +11,7 @@ import random
 import numpy as np
 import scipy.spatial.distance
 import multiprocessing
+import cPickle
 
 # Parameters
 _surf_upright = True
@@ -34,8 +35,8 @@ _surf_instance_low.upright = _surf_upright
 _surf_instance_low.extended = _surf_extended
 
 _cache_codebook_file = "./codebook.pckl"
-_read_cache = False
-_write_cache = True
+_read_cache = True
+_write_cache = False
 
 def get_id(img_file):
 	return os.path.splitext(img_file)[0]
@@ -99,11 +100,11 @@ def get_surfs(im_file, codebook):
 def transfer2(args):
 	transfer(*args)
 
-def transfer(img_file, h_line_file, v_line_file, label_file, ocr_file, out_file, line_verify_file, codebook):
+def transfer(img_file, h_line_file, v_line_file, label, ocr_file, out_file, line_verify_file, codebook):
 	print out_file
 	_id = get_id(img_file)
 	size = get_size(img_file)	
-	label = get_label(label_file)
+	#label = get_label(label_file)
 	h_lines, v_lines = get_hv_lines(h_line_file, v_line_file)
 	create_verify_file(h_lines, v_lines, line_verify_file, size)
 	text_lines = get_text_lines(ocr_file)
@@ -203,17 +204,19 @@ if __name__ == "__main__":
 		for f in os.listdir(rdir):
 			if f.endswith(".jpg"):
 				img_file = os.path.join(rdir, f)
-				h_line_file = os.path.join(rdir, f.replace(".jpg", "_linesH.pgm"))
-				v_line_file = os.path.join(rdir, f.replace(".jpg", "_linesV.pgm"))
-				label_file = os.path.join(rdir, f.replace(".jpg", "_FormType.txt"))
+				h_line_file = os.path.join(rdir, f.replace(".jpg", "_linesH.png"))
+				v_line_file = os.path.join(rdir, f.replace(".jpg", "_linesV.png"))
+				#label_file = os.path.join(rdir, f.replace(".jpg", "_FormType.txt"))
+				label = subdir
 				ocr_file = os.path.join(rdir, f.replace(".jpg", ".xml"))
 				out_file = os.path.join(todir, f.replace(".jpg", ".txt"))
 				verify_file = os.path.join(todir, f.replace(".jpg", "_verify.png"))
 				if not os.path.exists(out_file):
 					#print out_file
 					#transfer(img_file, h_line_file, v_line_file, label_file, ocr_file, out_file, verify_file, codebook)
-					args.append( (img_file, h_line_file, v_line_file, label_file, ocr_file, out_file, verify_file, codebook) )
-	pool = multiprocessing.Pool(4)
+					#args.append( (img_file, h_line_file, v_line_file, label_file, ocr_file, out_file, verify_file, codebook) )
+					args.append( (img_file, h_line_file, v_line_file, label, ocr_file, out_file, verify_file, codebook) )
+	pool = multiprocessing.Pool(7)
 	pool.map(transfer2, args, 10)
 	
 	
