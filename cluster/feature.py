@@ -3,6 +3,7 @@ import utils
 import text
 import lines
 import components
+import scipy.spatial
 from constants import *
 
 
@@ -97,8 +98,9 @@ class LineFeatureSet(FeatureSet):
 			self._prune(self._get_decay(), 0)
 
 	def prune_final(self):
-		final_prune_thresh = max(map(lambda line: line.count, self.lines)) / FINAL_PRUNE_DIV
-		self._prune(self._get_decay(), final_prune_thresh)
+		if self.lines:
+			final_prune_thresh = max(map(lambda line: line.count, self.lines)) / FINAL_PRUNE_DIV
+			self._prune(self._get_decay(), final_prune_thresh)
 
 	def _prune(self, amount, thresh):
 		map(lambda line: line.decay(amount), self.lines)
@@ -159,7 +161,64 @@ class TextLineFeatureSet(LineFeatureSet):
 	def _get_decay(self):
 		return TEXT_DECAY 
 
+class TextLineKDTree(LineFeatureSet):
+	
+	def __init__(self, width, height, rows, cols, f=None):
+		super(TextLineKDTree, self).__init__(width, height, rows, cols)
+		if f:
+			line = f.readline().strip()
+			while line:
+				tokens = line.split()
+				text = " ".join(tokens[4:])
+				pos = ( int(tokens[0]), int(tokens[1]) )
+				size = ( int(tokens[2]), int(tokens[3]) )
+				self.lines.append(components.TextLine(text, pos, size))
+				line = f.readline().strip()
+			self.kd_tree = self.form_kd_tree(self.lines)
 
+	def form_kd_tree(self, lines):
+		locations = map(lambda line: line.pos, lines)
+		kd_tree = scipy.spatial.KDTree(locations)
+		return kd_tree
+
+	def name(self):
+		return "text"
+
+	def copy(self):
+		new = TextLineKDTree(self.width, self.height, self.rows, self.cols)
+		new.lines = map(lambda line: line.copy(), self.lines)
+		new.kd_tree = new.form_kd_tree(new.lines)
+		return new
+
+	def region_weights(self):
+		thresh = TEXT_THRESH_MULT * max(self.width, self.height)
+		matcher = text.TextLineKDMatcher(self, self, thresh, PARTIAL_TEXT_MATCHES)
+		return matcher.similarity_by_region(self.rows, self.cols, (self.width, self.height) )[1]
+
+	def _get_matcher(self, other):
+		thresh = TEXT_THRESH_MULT * max(self.size)
+		matcher = text.TextLineKDMatcher(self, other, thresh, PARTIAL_TEXT_MATCHES)
+		return matcher
+
+	def draw(self, draw):
+		for line in self.lines:
+			#fill = colors[idx % len(colors)] if colortext else "black"
+			fill = "black"
+			draw.text(line.pos, line.text, font=utils.get_font(line.text, line.size[0]), fill=fill)
+			draw.text( line.pos, "%.2f" % line.count, fill=TEXT_COUNT_COLOR)
+
+	def _get_decay(self):
+		return TEXT_DECAY 
+
+	def _prune(self, amount, thresh):
+		map(lambda line: line.decay(amount), self.lines)
+		self.lines = filter(lambda line: line.count > thresh, self.lines)
+		self.kd_tree = self.form_kd_tree(self.lines)
+
+	def aggregate(self, other):
+		matcher = self._get_matcher(other)
+		self.lines = matcher.merge()
+		#self.kd_tree = self.form_kd_tree(self.lines)
 
 class GridLineFeatureSet(LineFeatureSet):
 

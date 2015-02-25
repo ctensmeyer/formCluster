@@ -22,7 +22,7 @@ _num_histograms = 21
 
 # Random Forest
 _num_trees = 2000
-_rf_threads = 4
+_rf_threads = 7
 _perc_random_data = 1
 
 # Spectral Clustering

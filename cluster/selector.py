@@ -15,7 +15,7 @@ from cluster import Cluster
 from cluster import BaseCONFIRM
 import metric 
 import matplotlib.pyplot as pyplot
-from image.signalutils import blur_bilateral
+#from image.signalutils import blur_bilateral
 
 
 def logProb(y,x,base):
@@ -212,7 +212,10 @@ class dataPoint:
     
     def core_distance(self, distances, minPts):
         if(self.core == -1):
-            d = sorted(distances)
+            try:
+                 d = sorted(distances)
+            except:
+                 d = sorted(distances.tolist())
             self.core = d[ minPts ] if (minPts < len(d)) else -1
         
         return self.core
@@ -366,10 +369,10 @@ def separateClusters(output, minPts):
     std = np.std(forward)
     
     fig = pyplot.figure(3)
-    pyplot.clf()
-    pyplot.title("Derivative")
+    #pyplot.clf()
+    #pyplot.title("Derivative")
     
-    pyplot.plot(forward, color='g')   
+    #pyplot.plot(forward, color='g')   
     
 
     clusters = []
@@ -390,8 +393,8 @@ def separateClusters(output, minPts):
         var = np.std(area)
         
         threshold = np.sqrt(var * std)
-        pyplot.plot(i,std, 'c.')
-        pyplot.plot(i,threshold, 'b.')
+        #pyplot.plot(i,std, 'c.')
+        #pyplot.plot(i,threshold, 'b.')
         if (((i == 0) and (i != len(output)-1)) or ((forward[i] >= threshold) and (forward[i-1] < threshold))):
             current = []
             clusters.append(current)
@@ -400,9 +403,9 @@ def separateClusters(output, minPts):
         current.append(o)
           
     
-    fig.show()
+    #fig.show()
 
-    while(len(clusters[0]) < minPts and len(clusters) > 1):
+    while(len(clusters) > 1 and len(clusters[0]) < minPts):
         if (len(clusters[0]) < minPts and len(clusters) > 1):
             clusters[1] = clusters[0] + clusters[1]
             del clusters[0]
@@ -419,26 +422,26 @@ def separateClusters(output, minPts):
 
 
 
-    fig = pyplot.figure(2)
-    pyplot.clf()
-    
-    pyplot.title("Clustering")
-    
-    pyplot.plot(reachability, "c")
-    pyplot.plot(reach, "k")
-    
-    colors =['b^','r^', 'g^', 'm^', 'c^']
-    c = 0
+    #fig = pyplot.figure(2)
+    #pyplot.clf()
+    #
+    #pyplot.title("Clustering")
+    #
+    #pyplot.plot(reachability, "c")
+    #pyplot.plot(reach, "k")
+    #
+    #colors =['b^','r^', 'g^', 'm^', 'c^']
+    #c = 0
 
-    i = 0
-    for cl in clusters:
-        c = (c+1) % len(colors)
-        for o in cl:
-            pyplot.plot(i,o.reachability, colors[c])
-            i += 1
-    fig.show()
-    
-    print "clusters:", len(clusters), map(lambda x: len(x), clusters)
+    #i = 0
+    #for cl in clusters:
+    #    c = (c+1) % len(colors)
+    #    for o in cl:
+    #        pyplot.plot(i,o.reachability, colors[c])
+    #        i += 1
+    #fig.show()
+    #
+    #print "clusters:", len(clusters), map(lambda x: len(x), clusters)
     
     #print "variance:", np.var(reach),",", np.var(forward)
     

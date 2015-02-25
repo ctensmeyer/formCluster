@@ -1607,14 +1607,2754 @@ April 9
 				it would be nice to slowly converge on the actual character content
 				instead of just keeping the first one.
 
-Immediate TODO:
+Sept 2
 
-Distant TODO:
-	Tune up the text line matching/merging process
-	Unsupervised cluster metrics
-		ARI cluster metric
-		RAND
-		etc
-	Graphing new profile data to see how it can be used
+	Back into things.  
+	Logan has done a lot while I was gone.
+		Tabs vs spaces in the code
+		find out what his code does
 
+Sept 3
+	
+	Things from Logan
+		Speed up comparisons
+		Longer similarity vector
+
+	Need to figure out the interaction between the User and the Algorithm
+
+Sept 8
+	
+	How is my clustering algorithm any different from one iteration of
+		K-means if you already pass in the cluster centers?
+		Well, you can still create new clusters
+
+	Time to start writing my proposal
+		What other papers use the NIST tax forms for classification/clustering?
+		Are there other good publically available datasets to use?
+		Follow up with Jen on getting example MS proposals
+
+Sept 29
+
+	I've implemented string median computation for prototype aggregation
+	It would be interesting to implement the clustering algorithm from the
+		Chinese Restaurant Process perspective.  The probability of creating
+		a new cluster is a function of a hyper parameter and how many forms have
+		already been clustered.  This can be adapted to take into account similarity
+		scores
+
+	Another insight for reclustering.  If a given cluster has been found to house two
+		types of forms, other clusters containing either type of form should be checked
+		for containing the other form type.
+
+	Analysis of clustering decisions with a random data ordering on the entire 1911 census
+		threshold = 0.2
+		76 clusters created
+		33 clusters kept after pruning ones with 5 or less members
+		The two large, similar classes are clustered apart (blame sorted data ordering)
+		One label still not assigned
+			The Household100Names_08_01 is identical to Household40_07_01 except that the
+				former has a line that says "space for 100 names" and the later says 
+				"space for 40 names".  It would not be unreasonable to consider these two
+				the same.  This is especially the case because our preprocessing strips
+				out digits anyway.
+		In the confusion matrix, there are few clusters with more than 10 of any single
+			non-majority class.
+
+
+	Other good ideas that need to be explored
+		Per-cluster basis weights for importance of each metric
+		To aid active clustering, partition the images into NxM blocks.  Each time a
+			document is aggregated with a prototype, features are matched.  For each
+			region we can calculate the weighted percentage of matched prototype features
+
+
+Oct 2
+
+	So the string median computation is taking like 80% of the time.  That needs to be fixed
+		Hmmm, calling string median every time we update is probably making us take quadratic time
+
+Oct 3
+
+	Trying to fix the median string - running another profile
+		So calling Levenshtein.median only when there is a tie for most popular string
+			causes it to never be called on 1000 docs of 1911 Wales dataset.  This might
+			change if we have more noise.
+	Looks like the similiarity matrix between two forms for text lines is done and working
+		properly.  Ended up doing uniform horz and vert. partitions of the image and defined
+		the weight of a text line in that region to be the proportion of its bounding
+		box that falls in that region.  If cluster members compare against the same (not updated)
+		prototype, it should be consistent and intuitive to the user.  Regions void of text right now
+		are given a value of 0, though if we transform this into a comparable feature vector, we
+		could just truncate them out because they are degenerate dimensions
+
+	Weights on a per cluster basis
+		The intuition is that if a feature collection is inconsistent across a form type, then
+			we should give that similarity score less consideration.
+			One example of this is from the Washington Passenger List dataset.  The fields are
+				filled in with a typewriter so this OCR'd text is not part of the form type.
+				Eventually the prototype counts should reflect this with the header lines having
+				a high count, while everything else should not match at all, but decay off.
+				However, when a form is matched against that cluster, the headers in the form are
+				not weighted differently and a small percentage of the text lines in the form match
+				the prototype (assymetrical matching %).  So 1, using the harmonic mean to combine
+				these scores based on the assumption that every text line should symmetrically match
+				may be bad, and 2) we should learn that text lines aren't necessarily the best 
+				indicator for similarity for that cluster.
+		How do we set the weights?
+			Initially uniform (like a prior)
+				How quickly to transition away from uniform and to data?
+			Add on the similarity vector for every added form?
+			Consider the mean and variance of each similarity type?
+				Higher mean -> higher weight
+				Higher variance -> lower weight
+			Can we not just weight each of these similarity scores, but every regional similarity score?
+				This is tricky because as the features in the prototype settle, they might migrate regions
+					making it difficult to compare sim_mats from different forms.  If we did fuzzy region
+					assignment, this wouldn't be a problem.
+			This way we can learn to ignore certain regions of the image.
+
+Oct 7
+
+	Proposal is almost done.  Time to code stuff.
+
+
+Oct 8
+	
+	Listened to webinar by Clarifai, a company who provides an api for image classification/similarity
+		Uses deep convoluational networks under the hood
+		NY based start up, looking to hire
+
+
+	Coding up similarity matrices for each feature collection is done.
+	Now the question, how do we combine everything to make decisions?
+		We partition everything into MxN regions we have lots to look at.
+		We have
+			MxN matrix for each feature type
+			We can combine the matricies for each feature type into another MxN matrix
+			We have the 3 individual global scores and the composite global score
+		The MxN scores in a matrix should be weighted according to the feature weights of
+			everything in that region.  Regions containing one element shouldn't be weighted
+			as highly as regions with lots of features, etc.
+		Then we should adapt which regions are considered for that cluster based on what regions
+			are always matched and which ones seem to be "optional"
+		That leads to two factors in the weights, one for the amount of feature weight it represents
+			and how much that region mattered in previous assignment decisions.  Can we model those
+			weights independently and then combine them somehow?
+		I think we ought to use a hierarchy.  The matrix (regional) scores are combined independently
+			of the global scores and vice versa. Each will use their own set of independent weights
+			to produce a score.  Then these two scores are combined with another set of weights to produce
+			the final scores.  We could then run a backprop like algorithm to update the weights on
+			each of the features.
+
+		New Idea: give each cluster a neural network with linear activations.  The idea here is that
+			instead of fixing feature weights manually, or updating them based on some heuristic rule,
+			we use competitive style learning on a linear network to learn good weights as we go along.
+			The architecture will be fixed based on the features that we include, and not be fully 
+				connected.  Basically, corresponding cells in each MxN matrix (include composite 
+				values) exclusively feedforward to the same neuron.  Those neurons all feedforward to
+				a single neuron representing the combined local scores.  The global scores are also inputs
+				that feed forward to a combined global score.  The local/global combined neurons feed forward
+				to the output neuron, whose activation is the similarity score for that cluster.  If it is 
+				the most similar cluster, then we assign it a target value of 1 (or .9 or whatever), and for
+				all other clusters, we assign it a target value of 0 (or .1 or whatever) and then we use
+				backprop to update the weights.  
+				We also can impose the constraint that the weights in each layer must sum to 1.  
+				For the 2nd layer regional neurons, the weight into the local combined neuron can be initialized 
+					to be the weight mass in that region, but that's tricky because we've already combine the 
+					local scores (which won't have the same proportion of feature weight)
+				We'll have to play around with schemas.
+
+		Thinking about when to make a new cluster:
+			Be deterministic
+			Information Available
+				Current number of clusters
+				User Hyperparameter(s)
+				Similarity to all cluster
+				Top similarity score
+				Margin of similarity score
+				Number of instances already clustered
+				Top similarity scores for the previous P instances
+			Threshold based
+				Have a starting threshold 
+					Perhaps estimated from O(S^2) sim mat from S sampled forms
+				Change the threshold
+					Everytime a form is assigned to a cluster
+					Everytime a new cluster is created
+					Base magnitude of change on the number of forms seem so far?
+			New idea: At every step, make up a "new cluster" based on random perturbations of the form under
+				examination.  If the form best matches the perturbed version, then create the new
+				cluster.  We can have a value controlling the magnitude of the perturbations, which
+				I guess would be highly related to the expected value of the similarity with the
+				perturbed form.
+			New idea: Keep track of the similarity scores typical of each cluster.  If the top similarity score
+				looks too low for that cluster, say that it should be it's own cluster.  Essentially, this is
+				online cluster outlier detection.
+
+	The MxN regions ought to be adaptive for each cluster.  For instance, the unclassified class of Wales1911
+		has a different aspect ratio, which skews the size of each cell.
+	We also need to indicate when a region is empty, so it can just be excluded when setting weights
+
+Oct 9
+	
+	Going to have cluster prototypes start passing back NaN for empty regions
+	Tricky because those regions won't always be empty as the cluster prototype moves
+		around.  We could impute values using the avg of the neighboring regions.  If we
+		just treat them as 0s, that weight is wasted.  We could detect Nan inputs and renormalize
+		the weights on the fly, but that only works on the first layer, which wouldn't work if
+		the first layer just convolves the different types of features for each cell.
+
+	Let's try the non-neural net approach right now.  The prototype should be able to give 
+		feature weights for each region.
+		Implemented one with fixed uniform weights
+
+	Any tie in to MaxEnt models?
+		So by matching each form against the prototypes is essentially doing class dependent
+			feature functions, and my idea of doing cluster dependent weights for each feature
+			correspond to the maxent model weights.  The difference lies in that the prototypes,
+			possible class labels, and the feature functions are not fixed.  The number of
+			prototypes is also increasing, so we really have a moving target.
+		An aside.  MaxEnt models really use the same learning algorithm as the perceptron, which
+			means that some how as things are optimized, when a certain output "wins" an instance,
+
+	Compiled a gigantic pile of papers to read on Deep Learning.
+
+	
+Oct 10
+
+	Some Future work ideas
+	Code keeps breaking with divide by zero errors because feature dimensions are out of wack.
+		Just putting in code to check and silently ignore it for now.  I'll put in better checks
+			when I rebuild this thing.
+		
+	I think that cluster cohesion should be used to gauge whether to break up small clusters.
+		Say if the cluster size is less than 1% of the dataset size and the cohesion is much
+		less than that of larger clusters.
+
+	There are all these different algorithms/params for handling various parts, and it is 
+		difficult to see which is best.  What are the right metrics for each part?
+		Similarity
+			Text Line Matching
+				Search Window Size
+				Edit Distance Threshold
+				String Median
+				Prefix/Suffix finding
+				Full string matching either Prefix or Suffix
+				Decay amount
+			Grid Line Matching
+				First match penalty (perhaps use the estimated offset from text lines)
+				Relative offset threshold for matching/colinear
+				Breaking up connected lines
+				Various cost of operations
+					Do we even really need stuff like contains/overlap, etc
+				Merge "learning rate"
+			Region
+				Region sizes - different aspect ratios?
+				Weight regions by contained feature weight?
+		Clustering
+			How to weight global/region scores for different feature types
+				Fixed transformation
+					Harmonic mean
+						Cluster independent
+					Using feature weight region weights
+						Cluster dependent
+				Weighted average
+					Weights set by combining the sim scores of previous added forms
+						Cluster dependent
+						Can use last N
+							Prototypes constantly change, features can migrate regions, etc
+							Can use discounting a la Q - learning
+						Can use all (N = infinity)
+						If a regional score is omitted (no feature in that region), it is
+							easy to redistribute that weight and still get a normalized score
+					Use a neural net with linear activations
+						Could be better at learning the weights
+						Initial weights can be set based on feature weights, split evenly between
+							feature types
+						Learning schedule can use a decaying learning rate based on cluster size
+						Can do competitive learning so that the next most similar clusters are
+							penalized
+				Using fixed nonlinear transformations of the inputs?
+					min, max, harmonic means, etc
+			Deciding to create a new cluster
+				Fixed sim threshold
+					Could estimate from data?
+				Dynamic sim threshold
+					Based on cluster size
+					Based on previous sim scores for that cluster
+				
+
+	Refactored cluster.py to use inheritence.  Should be much easier to swap in and out different
+		algorithms for various pieces
+
+	One way to evaluate the different ways to get the similarity score is to examine the mean and
+		variance of the cluster-doc sim score on the perfect dataset.  Should probably refactor
+		metric.py to accept the CONFIRM instance used in clustering.
+
+	Now it's easy to play with the different combinations of behavior for post processing clusters
+	Still need to make sure that the code I just wrote isn't buggy
+
+Oct 13
+
+	Regarding outlier detection
+		Two divisions
+			Parametric or statistical, where you assume a statistical model of the data
+				and outliers are those points that don't conform well to the model
+			Non-parametric
+				Distance based
+					All of these seem to be computationally expensive and take some parameters
+				Clustering techniques
+		There seems to be a chicken and egg problem with outliers.  If you have no outliers,
+			it becomes easy to see the regions where points would be considered outliers.
+
+	Two Pass paper by Chinese Researchers
+		Terrible Grammar
+		So their data driven estimate of sufficiently similar is a threshold based on the
+			most similar cluster centers.  This could work, but not using the most similar
+			but perhaps using the to 10% of the similarity scores between clusters?  And
+			then we recompute it every time a cluster is added?
+
+	Essential Problems
+		Features/Similarity to make form types more seperable
+			Areas
+				Feature extraction
+				Feature matching
+				Feature merging
+				Feature weighting
+			Testing Metrics
+				Matching scores/Extraction/Merging
+					Each feature type is eval'd independently
+					Use perfect clustering
+					Take the individual feature matching scores for each instance to its cluster.
+						Find the mean and std dev of these scores
+						Maximize mean, minimize std dev
+					Test robustness by using a faulty clusterer that is incorrect p% of the time
+				Weighting Schemes
+					Depends on the matching scores, etc
+					Use perfect clustering, updating the weight matrices, etc
+					Take the total matching scores for each instance to its cluster
+						Mean and std. dev
+						Maximize mean, minimize std dev
+					Find each cluster's most similar clusters
+						Take the mean and std. dev of clostest, 2nd clostest, 3rd...
+						Minimize mean, std dev?
+					Number (%) of cases where an instance is most similar to an incorrect cluster
+						0-1 loss essentially
+		Deciding when to make another cluster
+			Ideas
+				Update threshold everytime a cluster is added
+				Update threshold everytime an instance is added
+				Cluster thresholds based on the most similar (1-3, logK?) clusters
+				Cluster thresholds based on the mean and std dev of the last A instances
+					added to this cluster.
+				Global threshold based on the top K scores in the KxK matrix
+					Including A -> B excludes B -> A (take the max sim of the two)
+				If the instance is below the threshold 
+					1) for the most similar cluster
+					2) for all clusters
+			Testing Metrics
+				Cases
+					Unordered Data
+					Ordered Data
+					2 class data
+						Similar classes
+						Not similar classes
+				Accuracy/Purity
+				Homogeneity 
+					V-measure as well
+				# of clusters
+				% Datapoints in any 100% pure cluster
+					0-1 loss
+		Initialization schemes
+			Take the first 20?  Compute the 20x20 sim matrix and find the minimal spanning tree.  Then
+				remove some more edges (graph cuts) and take one form from each disconnected tree
+				component.  Pretty sure to be in different clusters.
+			Take the first M and make them separate clusters
+
+	Metric needs to take in CONFIRM and use it's defined notion of similarity
+
+
+Oct 16
+	
+	Time to rewrite metric.py
+
+Oct 20
+	
+	Need to get the NIST tax forms into a png image format
+		Took a little bit of work, but it's done.
+		Now they need to be deskewed and extract features
+
+Oct 21
+
+	Adding in feature evaluation print outs in metric.py
+	Time to evaluate how well the features are doing
+
+Oct 27
+
+	I've run a few of the feature experiments
+		So the weighted average net does boost the avg sim from docs to their centers and lowers
+			the std dev, but also raises the similarity between cluster centers.
+		We'll see about adding in competitive links to push cluster centers apart.
+		We can vary the learning rate/target incorrect value to tune how far the other centers
+			get pushed.
+
+	Looking into Line Segment Detector and EDLines
+		Couldn't get EdLines to run (.so link problem at runtime)
+		LSD runs well
+			The lines are very fragmented, but accurate
+			Thick lines are sometimes cut into two lines for both sides of the line
+
+	Let's see if we can get a nice format for reading in documents that doesn't take forever to
+		load them.
+		Reprocessing data...
+		Time to get a loader for this format
+		Then let's set up something that will run for a long time...
+
+
+Oct 29
+
+	The input format is rewritten, so that should speed things up
+	Time to investigate the competitive clustering.  Let's run it on the medium dataset
+
+	SURF is up and working
+		Let's extract the SURF features for each image in 1911Wales
+	
+	Ancestry
+		Meeting soon
+			Things to go over
+				Initialization
+				Choosing to create a new cluster
+				Pruning
+				Similarity weighting
+			What are their preferences on how that works?
+
+	Turns out initialization with an MST has a fundamental flaw
+		Only the nodes in the MST with edges between them are guarenteed to have
+			a low mutual score
+		New schema work well.
+		Start with N Nodes and no edges
+		Add in edges if the sim between the docs is less than a threshold
+		Compute the max cliques in the graph
+			Fast for small graphs
+		If the largest max clique is big enough, use that
+			For ties, take the one with the lowest maximum sim 
+		else
+			increase the threshold
+
+	When to create a new cluster
+		Every cluster tracks the mean/std dev of the last A sim scores of added forms
+			Go one std dev below the mean
+		Keep a global mean
+		Smoothly interpolate between the global mean and the cluster mean based on
+			the size of the cluster.
+
+	Found a nice deskew tool to use
+		http://galfar.vevb.net/wp/tag/deskew/
+		Working my way through the NIST images.  It looks like it will take awhile
+
+Oct 30
+	
+	Thinking about implementing Kumar
+		Major Steps
+			SURF features for each image
+				Python
+				C++ OpenCV
+			K-medoids over SURF features for a subset of images (1%?)
+				Python
+			Convert SURF features to histogram features
+				Any language
+			Construct dummy data
+				Any language
+			Train Random Forrest classifier
+			Construct sim matrix based on terminal leaves in tree paths
+			Cluster using sim mat
+				Normalized Cuts
+					Python scikit
+
+Nov 5
+	
+	Implemented Kumar/Doerman's clustering method
+		Can Reproduce 100% accuracy over the NIST tax forms spdb2
+		Running it over spdb6 - got 100% as well
+		Need to run it on the combined NIST and the tax forms
+
+	So the wavgnet clustering was pretty terrible.  What needs to be done to
+		make it better?  The competitive side also didn't perform well on
+		the perfect clustering experiment.
+	I suppose that I need to inspect the weights to see what it is learning
+
+Nov 6
+
+	The prototypes after clustering look terrible.  I wonder if I messed up
+		some data?
+		Yup, some of the line extraction is pretty terrible for three classes
+			Vessel100
+			Vessel15_23_01
+			Household100_08_01
+	
+	The kumar/doerman clustering over the full tax forms got 100%
+		Running it over 1911 Wales
+
+	So the wavg networks aren't doing very well anymore.
+		But they are supposed to calculate the weighted region score at first,
+			and then only improve by making the things that are added even more
+			similar.  I guess trouble comes up when the things added really
+			aren't similar
+
+	Created a two class dataset for the two form types that differ by a column
+		Running perfect over a small subset
+			Base Scores - 32.1% Terrible
+			Region Scores - 14% Terrible
+			Weighted Region - 0.6% (2 docs) Pretty good.  Very low scores for both clusters on errors
+			WavgNet - Perfect, very seperable.
+				The learned weights are nearly identicle, so the feature matching
+					is the cause of the separation
+		Running clustering with threshold = 0.7
+			Base Scores - 73% & 11 Clusters
+			Region Scores - 95% & 10 Clusters
+			Weighted Region - 98.7%  & 5 Clusters
+			WavgNet - 99.3% & 3 Clusters
+			results stored in output/small_two_class_sim_scores
+		Do the real clustering results hold over all 2000 docs of those classes?
+			Or over the full big dataset?
+			Running both experiments (8 runs)
+			threshold=0.7
+			init_clusters=2
+
+	Results back on Kumar/Doermann over 1911 Wales
+		With 11 clusters - 86% Acc 0.80 V-measure
+			3 clusters with < 10 mislabled
+		With 30 clusters - 94% Acc 0.73 V-measure
+			Majority of clusters are pretty pure
+		With 50 clusters - 92.5% Acc 0.66 V-measure
+	
+Nov 7
+
+	Got results for the 2000 doc/ 2 class problem for Wales 1911
+		Stored in output/big_two_class_sim_scores
+		Base Scores - 96% & 7 Clusters
+		Region Scores - 98.7% & 11 Clusters
+		Weighted Region - 90%  & 7 Clusters
+		WavgNet - 98.95% & 4 Clusters
+
+	Results for Wash State Pass List for Kumar/Doerman
+		92% 0.62 - V-measure
+		
+Nov 10
+	
+	Ancestry meeting went well.  Need to take the NIST data to them for processing.
+		Need to follow up to get the data from them.
+
+	Redoing the wales dataset line extraction didn't really help.  It's still terrible
+
+	Looking at publication venues
+		ICDAR
+		DRR - 2nd tier
+		CVPR
+		ICCV
+		IJDAR
+		DAS
+		KDDJMLR
+		JAIR
+		PAMI
+
+	Got results for full Wales 1911
+		Stored in output/wales_1911_full
+		Base Scores - Taking way long...
+		Region Scores - 94.8% & 37 clusters 
+			Many pure clusters.
+			Some clusters with large components that will easily separate with logan's
+		Weighted Region - 89.5%  & 29 Clusters
+			Much worse than Region Scores
+		WavgNet - 84.8% & 16 Clusters
+			One cluster has 700+ mislabeled docs.  Everything else looks good though
+			Easy for logan to get
+
+	Of the resulting prototypes, everything looks pretty bad as far as lines go.
+		Even on a medium perfect run, the horz lines for all classes look terrible
+		Okay, fixed that issue.  Turns out the lines wern't being sorted at first.  
+		I bet this was slowing down the computation a lot!  
+		Time to rerun experiments
+
+	It would be nice if we had a set of "good clusters" and a set of "potential clusters"
+		If a document is close enough to a "good cluster" it is added to that cluster.
+		If it is not, it is evaluated against the potential clusters.  If it is similar enough,
+			it is added to one of them.  A potential cluster becomes a main stream cluster
+			when it acheives a certain membership size.
+
+
+Nov 11
+	
+	Figured out how to use parallel (have to use --gnu for it to work)
+		For some reason batch wasn't running even though I set the allowed load 
+			to be really high
+
+	Still running the Louisiana dataset to see how well it does with Kumar's method
+		Does pretty terrible.  With correct # clusters acc and v-measure ~50%
+		With 20 clusters, 70% accuracy 54 v-measure
+		
+	Rerunning the experiments of the last few days to see how they do with the
+		correctly sorted lines.
+		For two class big all accuracies are ~98.5%
+			This may be because partial line matching is turned off because the
+				choosing the correct representative string doesn't handle that.
+		The small set, all except base get 100% acc with 2 clusters
+			base gets 99% with 3 clusters (2 large and pure)
+		Would be interesting to see how kumar's method runs on this dataset.
+		Run times are more reasonable
+			~1hr for base on the 2000 - including 2nd pass and metrics
+
+	Need to refactor stuff to make it super easy to add/remove features.
+		Then add in SURF features using the codebook idea from Kumar
+
+	Still need the adaptive threshold thing to work out
+		This would be good to try across the 2 class dataset with a small number of
+			additional documents added in.
+
+	Let's see how the WashPassList dataset goes
+			
+Nov 12
+
+	Wavg net is doing poorly on the large wales dataset.
+		This is probably due to the global threshold b/c once a cluster has started to
+			learn weights, the sim scores go up, perhaps even for wrong classes of
+			documents.
+
+	Adaptive Threshold is looking good
+		Interpolate between local and global threshold based on size of cluster
+		Local threshold is the sum of the sim scores added minus the sum of the margins
+		Global threshold is the global sum of sim scores minus sum of margins
+
+	Rewriting Document to use modular feature sets
+		Including SURF in the new feature sets
+		Running the feature extraction - goes really slow
+	
+Nov 13
+	
+	Got SURF features up and running.  Refactoring is done, kind of
+		Need some data to cluster though
+		Alright, now things are looking pretty good
+	It takes forever to extract features though.  Also would be good to save the codebook
+
+Nov 14
+
+	Prepared presentation on Kumar/Doermann's clustering
+	
+	Making sure stuff runs and setting up weekend experiment
+	Processing the 3 datasets
+		No OCR filtering based on dictionary
+			Some docs have really bad OCR and so they appear very different
+		Surf features
+
+	Talking with Dr. Ringger on Wed at 3
+		Need to reread my thesis proposal before then.  There are lots of implementation
+			changes, and I need to be aware of those
+
+Nov 17
+	
+	Comp was unresponsive when I got here.  Maybe something ate all of the RAM over the weekend?
+	Wales and Wash SURF features got calculated
+		Need to rerun louisiana feature extraction
+
+	The pipeline is looking really good
+		Change which features are included, etc
+		Also redid the dir structure for the data, looks cleaner
+
+	The OCR for some documents is very incomplete
+		Missing > 50% of the lines, etc
+		This is leading to new clusters, etc
+		It's not my preprocessing, it's not there in the raw form
+		The images themselves are very clean
+		Examples:
+			Household15_03_01/rg14_31703_0285_03
+			Household15_03_01/rg14_31703_0413_03
+			Household15_03_01/rg14_31705_0015_03
+			Household15_03_01/rg14_31703_0349_03
+			Household15_06_01/rg14_31963_0379_06
+			Household15_06_01/rg14_31852_0923_06
+			Household15_06_01/rg14_31841_0567_06
+			Household15_06_01/rg14_31771_0165_06
+			Household15_06_01/rg14_31804_0223_06
+
+		These 9 were pulled into the same cluster on a 200 instance problem
+			Sounds like we're doing a good job, but the extraction was faulty
+		5 of these are incorrectly classified in the perfect base setting
+			But not in region, wavg, or weighted
+
+	Comments on Adaptive Threshold
+		The initial global threshold is too high
+			It should not consider the diagonal entries in the sim mat
+			Perhaps something from the lower qunatile, or where there is a large
+				margin?
+			If we do this correctly, we should give the value some momentum so it
+				doesn't immediately switch to the first sim score added to a cluster
+
+Nov 18
+
+	Would be nice to have a result aggregator for multiple runs
+		which confirm
+		dataset
+		Accuracy
+		V-measure
+		# clusters
+		time duration
+		time stamp
+		error occurred?
+		mean and std dev of confirm scores
+		% Docs similar to wrong cluster
+
+	Looking at perfect runs over wash_all set
+		For region and wavg, there are 18 / 2000 .9% wrong
+		For wavg, these have a very small margin
+		For region, most are small, some are large
+		For base, 105 docs are wrong
+			Margins are big
+			Some have a score of 0 for both
+				Assuming that no text lines actually matched
+		For weighted
+			9 docs wrong
+			6 small margins (< .02) and 3 larger
+
+	Clustering runs
+		Region 
+			Only gets 1 wrong, makes 10 clusters
+		Wavg
+			Basically puts most everything in 1 cluster
+			When cluster sizes become skewed, one cluster's weights are
+				more settled and so it scores everything higher
+			So we can get an avalanche effect, where one cluster starts
+				absorbing another even though there is a small cluster
+				with unsettled weights for that type.
+			In this particular case, just the singleton learning quicker to ignore
+				the text gave it the edge.  Maybe the prior that all features
+				are equally indicative is too strong. Perhaps we need to look at
+				more data before we start making assignments.
+			Maybe ada grad would be a more appropriate weight update rule?
+			Results may also depend on data ordering because it's an initialization
+				problem
+		Weighted
+			Also did really bad
+		Similar results hold for the 500, 1000 subset problems
+		best did perfectly on the 100 instances, wavg got 99%
+
+	Wales Clustering runs
+		best did poorly because initially the margin was really high, so the
+			local and global thresholds were really low, which lead to clusters
+			not being created, so it snowballed again.
+		I think including the surf features changes the expected threshold of the
+			wales dataset, so not enough clusters were created.
+			The minimum surf similarity between any two clusters was 0.79, and
+			average looks to be in the 90s
+
+	Overall, there are intialization problems that result in bad cluster formation.
+		The current method is probably to blame and not just bad luck
+			Margin seems to work well on the 2 class problems
+		Also, there is a chicken and egg problem on deciding the threshold that hasn't
+			been adequately resolved
+
+	Let's run the wash datasets without the text and see how they do
+		All the methods get 99.5%+ accuracy, which is great
+
+	Now let's see if initilization is the real problem
+		I made a version of CONFIRM that intializes using the labels, so basically a 
+			partially labeled data version.
+		If with proper initialization, it works well, then we are good to go.
+		I still think there will be problems with taking the highest raw sim score.  Then
+			types with few instances will be overwelmed by more settled weights.
+			Perhaps if we take into account how settled a cluster is when we consider
+				the sim score?
+		Wales500
+			Init with 5 docs/cluster
+			Two classes only had 6 total.  The 6th was missclassified in both cases
+				Both novel instances were towards the end, after other clusters had settled
+
+	Experiments
+		Lets see if good init (10 - 20) works out on the full wales dataset
+			No SURF features, but include text features
+		Lets see if good init (10) works out on the full wash dataset
+			No SURF features, but include text features
+		Lets see if good init (10) works out on the two class wales dataset
+			No SURF features, but include text features
+
+	Open questions
+		What is the best way to set the adaptive threshold?
+			Prevent snowballing?
+		Can competitive negative signals be used to tune?
+		Can better unsupervised initialization be used?
+			Also prevent snowballing?
+			Without violating (much) the online setting?
+		Can we prevent snowballing directly by taking into account how many
+			cluster members are in a cluster?
+		How do we set the learning rate?
+			Would ada grad do better?
+		Does different data orderings affect the snow ball effect?
+			What about an ordering where a label may not be seen again until all the
+				other labels have been seen after it - an extension of every other
+				to many types?
+
+			
+Nov 19
+
+	Almost Thanksgiving, yay!
+	Experiments turned out negative
+		Some clusters still snowballed (70-80% accuracy on full wales, 85% on two class)
+		Wash Passensgers list turned out well
+		For Wales 2 class
+			Reassigning at the end created about 4x the errors
+			Many of the margins on correct decisions during clusters are small
+			Some of the margins on mismatches during clustering are very large
+
+	Louisiana data finally finished
+		All of it seems inappropriate for clustering because
+			The line extraction is pretty terrible
+			Labeled types are not homogenous
+				Capture
+					Types letters (non form)
+					Many types
+				Certificates
+					~5-10 unique singletons
+				ChildPetition
+					Two types of forms, sometimes forms have a small overlay on them
+				CoverPage
+					A lot of different stuff
+					Much of it is not ammenable to our features
+				Declaration
+					A few types
+				Index
+					Mostly handwritten lists of many types
+				Ledger
+					Just as bad
+				Petition
+					Bad
+				SecondImage
+					Why do we even have this dataset?
+
+
+			Some of the types are not forms
+	
+	So what to do about the feature weighting?
+		No surf features
+		First let's see how well we can do with region CONFIRM and a good threshold
+			Running (base, region) x (wales_100, 500, 1000) x (thresh = 0.6, 0.7, 0.8)
+			Hopefull this won't take hours and hours
+		The results for wales_100 and wales_500 are in
+			wales_100 just has problems because many of the classes have few instances
+			wales_500 looks really good for region
+				thresh 0.8
+				15 clusters
+				96.2% accuracy
+			Definitely choosing a more appropriate threshold matters
+				Too low and we had fewer clusters than classes in the end
+		wales_1000
+			region 0.7 did well - 93.9% acc 12 clusters 0.89 V-measure
+			base 0.8 did well too - 95.1% acc 19 clusters 0.88 V-measure
+			region 0.8 - 97.4% acc 23 clusters 0.86 V-measure
+
+	Maybe the key is to take a balance approach.
+		We only need to get reasonable prototypes, and then we can just assign all the rest
+			as for supervised classification
+
+Nov 20
+
+	So running base and region over the full wales datasets
+		There are some really good runs ~96.5% acc with a reasonable number of clusters
+		The consistently formed small cluster of equally balanced Household ones is
+			probably because of incomplete OCR
+			For the H15N_3_1 class, there are 29 incomplete OCR files and 29 members of that
+				odd cluster.  That's 29 that we get wrong because of feature extraction.  That's
+				.4% right there.
+		The vessel line extraction is pretty bad there as well.  If we got that up to speed, then
+			we would probably fix those errors.
+		How are the lines for a perfect run of the vessel classes?
+			Their vertical lines are normally pretty good
+
+	Starting experiment over the wash dataset
+		region & base with thresholds .3, .4, .5
+
+	Need some more careful analysis of OCR quality
+
+	Still need to see how SURF features contribute
+		I'll run these experiments with the surf features enabled and see how they do
+		Would be interesting to run them with just the surf features...
+			Would be pretty quick too
+
+	Lets see if we can get an adpative threshold scheme to work for region/base
+		Idea is to prevent creating a ton of clusters during clustering
+		Let's work on two class wales, wales_500, wash_500
+			Base is just going to fail on wales because sometimes none of the text
+				matches
+
+	Got running a few things
+		Wales all and Wash all with all feature types (including surf)
+			various thresholds 
+			base and region
+		Perfect base on wales all with all features
+		Wales all and Wash all with only surf features
+			various thresholds
+			base and region
+
+Nov 21
+	
+	Results of experiments
+		None of the all features did as well as without the surf features.
+		On a surf only region thresh=.85 we got 97.2% with 58 clusters .81 V-measure
+			And it only took 2 hours  (Made ~400 clusters before reassigning...)
+			At thresh=.8, the acc was 72%
+			Some others are comparable, but some are bad
+				These beat the kumar number of 92%, though they only use 2 clusters...
+		Seems that vessel lists are more homogeneous than the airline lists
+
+	This should probably have been obvious, but when running multiple experiments using
+		parallel, the starting times are staggered, so I can't change the source while
+		experiment is running....
+
+Nov 24
+
+	Looking at experiments
+		SURF features can do well by themselves.  However, they are a little more
+			unreliable.  Small changes in the threshold had great effect on the
+			results.  Tends to form many more clusters, which helps the purity.  Too
+			low of a threshold and everything gets lumped in one cluster.
+			Overall, region did best across the datasets by far. wavg did not do as well as
+				weighted (I think).  Both of those have issues with a fixed threshold.
+
+	Idea of pushing apart similar form types
+		Take some feature count on the matched features and put them onto the 
+			unmatched features.
+		We can shift some percentage of feature mass.
+
+	The text line matching definitely needs improving
+		Let's check on the prefix/suffix thing
+	Should remove the bad OCR files from wales_twoclass_200
+
+Nov 26
+
+	Thanksgiving Tomorrow!!!! Yay
+
+	Okay, let's try to introduce some robustness into the cluster.  I don't think the k-means
+		battle will ever be won to great satisfaction, so let's try something a bit more
+		principled.  Let's use the feature matching algorithm as a feature extraction process
+		and let an out of the block classifier figure out what goes together.  I like the Kumar
+		clustering schema.  Let's see if we can do it with domain features.  Then we aggreagate
+		the clusters and evaluate how cohesive they are, or if we need to split.
+
+	First feature sets need to return a vector based on how well things match (explicit features).
+		The Surf features can just return the similarity vector.
+
+	Okay, it is working pretty good with just the text features
+		Even on the wash dataset, it works ~88% accuracy with 5 clusters
+		And it's not super slow
+		90% on wales_twoclass_all with 1 instance/seed
+			Ran in under 5 minutes!
+		98.6% on wales_twoclass_all with 10 instances/seed
+			The only ones it messed up were the ones with bad OCR!
+
+	What if we just have it try n random docs as seeds?
+		That makes for a strong baseline
+		Bet that works on the Nist tax forms as long as you get every type
+			Raises the question, given a uniform distribution, how many times do you
+			need to sample it to be confident you have a representative from every type?
+			Let's be empirical
+		It worked on the twoclass_wales_all dataset pretty well with 6 random seeds
+		Didn't work so well on wash_500 - trying more random seeds
+			50 seeds got it to 91.6%
+		Let's try throwing a few cores at the extraction process
+		10 random seeds on wales_all gets 87% acc with 20 clusters
+			And this is just with text features
+
+	Going to leave running:
+		30 clusters
+		30 random seeds
+		wales_all
+		text only
+
+Dec 1
+
+	Experiment got 83.7% accuracy.  Not bad for a first iteration.
+	Implementing the line matching as well gets very competitive accuracy
+		94% with 12 clusters on full wales 20 rand seeds
+
+Dec 2
+	
+	Got the data dump from Ancestry
+	It's time to clean some things up.
+	Data Management
+		Only keep the extracted features and form images on my machine
+			Area for workspace as needed to do the extraction
+		All those pgm line images are getting converted to png
+			Not going to keep the pgms, they are just too big
+		The verify images are not going to be kept with the extracted features
+		Going to keep a copy of the data on my external drive and on the lab's
+			external drive
+			Manual backup of the data.  Should only need to be done once
+
+	Wrote script to change pgm files to png, testing it on BritishWarRecords
+	Let's free up some memory!
+	It seems to work.  Let's let it loose on the other data.
+
+Dec 3
+
+	Let's tidy up the data management stuff
+		Extract features and stuff
+
+	Implemented Iterated Kumar CONFIRM
+		CV using silhouette gives bad results on a small datasets
+			Would be nice to see how well it correlates with V-measure or
+				accuracy
+		Let's try something bigger
+
+	Started Feature Extraction of PADeaths
+		Only one at a time because it caches the codebook file
+
+	1911England is huge
+		1.2 TB
+		150,000 items, so probably about > 17k forms
+		We'll wait to convert this till other stuff is done
+		It's going to need over night most threads, etc
+
+Dec 4
+
+	There are some mogrify errors for the 1911England dataset.  Therefore, some pgms didn't
+		convert and were just deleted. Hmmm, didn't think about that.  Oh well.  This means
+		that I'll need to write a script to check that all parts are present for all forms,
+		so I can recopy what needs to be there.
+
+	Interesting little results from the word2vec analysis
+		Functional words in general have a decaying vector magnitude under cbow training
+			Contribute less over time to the shared projection layer
+			Figuring that out early may impact learning, i.e. using tf-idf values for weights
+
+	NIST feature extraction is going, but slow.  The 1911England conversion is going to be
+		very slow as well.
+
+	Interesting profiling result:
+		The majority of the iterated kumar confirm (3 iters, including silhouette cv)
+			is taken up by text._find_perfect_matches
+			1/4 of time is just evaluating if they are within the distance threshold
+			This would presumably run much faster in C
+
+Dec 5
+
+	Let's write a file checker script
+		Turns out that there are 207 forms with bad data
+		At least one of the lines images is unreadable by imagemagick
+			mogrify.im6: unable to read image data `../data/raw/1911England//UK1911Census_EnglandWales_Institution200Names_27_02/rg14_29539_0066_27_linesV.pgm' @ error/pnm.c/ReadPNMImage/765
+		Tried writing a python script to read the file and save it as a png.  Also got an
+			error about buffer sizes.  Perhaps the pixel content does not match the size
+			info in the header.
+		Going to copy these to data/errors/1911England_errors and just remove them from raw
+
+	I suspect using more random data in Kumar CONFIRM leads to increases in accuracy
+		Also, the more noisy features also is bad because each tree only looks at a
+			small subset of the features.
+		Perhaps more trees?
+
+	Let's run NIST over the weekend
+		Let's try with singular feature sets first
+		Just Text
+			thresh = 0.5
+			base, perfect, region, weighted, wavg
+			nist_all and nist_500
+
+	For the perfect nist_500,
+		the highest inter-cluster sim score with text was 0.30, nothing to worry about
+			
+
+	Running extraction over 1911England
+		2 threads, all weekend
+
+	Let's do some experiments next week varying the amount of random data and the 
+		number of trees for a single iteration random init kumar confirm
+
+Dec 9
+	
+	Ran NIST with just SURF features
+		Poor choice of threshold yields 2-3 clusters
+		Region scores are better than global
+			Region with thresh=0.9 gets 100% purity with 23 clusters
+			Wavg with thresh=0.9 gets perfect clustering in 21 minutes
+			Weighted did the same as Wavg
+				Only made 1 spurious cluster that was pruned
+			Neither ever made a wrong assignment, so the 2nd pass did nothing
+			Region with thresh=0.85 got a perfect clustering
+				Same, 1 spurious cluster with one instance in it
+			Wavg snowballed at thresh=0.85
+			Weighted snowballed but not as bad at 0.85
+
+Dec 10
+	
+	Looking at surf features for nist over thresholds (0.84, 0.95), the number of clusters
+		and accuracy makes sudden jumps for wavg and weighted.  Region did them all perfectly, though
+		with the higher thresholds started making duplicate clusters.  Once wavg net had a high enough
+		threshold, the number of clusters was relatively stable to further increasing the threshold
+
+	Let's examine vertical lines now
+		Better than horizontal
+		Doesn't get to 100%, but gets 99.9% - must be some noise in the extraction
+
+	So let's design the full system:
+		Initialize prototypes using Kumar/seed matching:
+			Get a (large) subset of the forms
+			Get initial seeds
+			for each iteration
+				Extract features based on seed matching
+				Run Kumar clustering on extracted features
+				Form cluster prototypes (seeds for next iteration)
+					Problem here is deciding number of clusters
+		Given a prototype and consitutient forms, decide on regions and on region weights
+			Region weights can just be set the sum of the matching scores and smoothed
+			This is problematic because all of the SURF matching scores are high, so they would
+				naturally steal alot of weight, but those scores are high on the other clusters...
+			Also would be good to push prototypes apart based on what matches between them.
+				This will be problematic if the form types are actually the same...
+					This is where user input would be critical...
+			Also need to estimate similarity scores, so we can identify outliers
+		Then we do greedy matching for all of the documents
+			To update or not update prototypes?
+				Faster if not
+
+	With uniform regions, when deciding region weights in the batch setting:
+		Instead of using the matching score, we take the margin between the matchng score and the
+			average matching score for the corresponding region in the other prototypes
+
+	So really we don't necessarily want the weights that will maximize the weighted average of
+		the region/global feature sim scores for a protoype individually.  
+		We want to set the weights to maximize the margin.  But changing a prototype's weights 
+			only changes it's sim score, not the sim scores given by others.
+		Changing the feature counts will affect the sim scores, so the push apart is valid there,
+			but how to push apart with things like SURF?
+
+	
+	Experiment
+		Running nist with THV features with various thresholds
+			region, base, wavg
+
+	Did proposal and passed
+		Time to celebrate
+				
+
+Dec 11
+	
+	Last day of class, and I don't need to do the extra credit cause I got a 100 on the midterm
+
+	So none of the experiments finished (taking forever).
+		THV features
+		I think it's the horizontal lines that are really slowing things down.
+	So region with thresh of 0.50 got perfect, but had to use the 2nd pass to reassign forms ~200.
+	Region with thresh of 0.60 didn't need the 2nd pass.  Neither did wavg
+	Not much point in continuing the experiments.  The others are just going to take longer because
+		they might make more clusters.  I'm curious though how base compares with everything.  Oh,
+		we've gone into swap space.  No good.
+
+	Computer crashed.  Don't know why it does that, but it does when it's been left running for
+		a long time.
+
+	So this new scheme of estimating a threshold with a reject option has to make some
+		assumptions.  If a true type is not found in the initialization, then it may just
+		be stuck with another type in the greedy process.  Well, k-means is an NP-Hard problem
+		anyway, so exact solutions aren't to be found.
+
+	Questions to be answered
+		How many seeds/iterations/instances are needed for initial kumar clustering
+			relative to the number of classes and the distribution of classes?
+		Is the push apart working?
+			This needs some testing
+		What are the tradeoffs for setting the reject threshold?
+		Assign clusters based on highest sim or highest z?
+			Probably highest sim
+		Does it make sense to update during the greedy assignment stage?
+		Can we add another layer of iteration to handle rejected documents?
+		If we take the first N documents and use the labels to construct prototypes
+			for the greedy clustering, do we do really well?  That is what the kumar init
+			is trying to acheive anyway.  I showed that just using 10-20-30 documents in
+			each class didn't always prevent snowballing.  I think the key lies in the
+			push away part.
+			
+Dec 12
+
+	Looking at the kumar init for the NIST, taking 4000 documents and 30 seeds, the first
+		iteration with the random seed produced a 100% pure clustering.  The 2nd iteration
+		then produced a 98.5% pure clustering with the prototypes from the iteration before.
+		That's dissappointing.  I doubt the 30 random seeds contained an instance from every
+		class, but the prototypes did.  Still only two impure clusters, but with significant
+		impurity. The last iteration only missed 1, which is okay, because its features will
+		be decayed out.
+
+	PADeaths did terrible - 20% at the end, 30% after the first iteration with random seeds.
+		I wonder how good the class labels are and how well straight kumar clustering does.
+
+	Wales_all did okay - random seeds got 95.5%, and the iteration after as well.  The last
+		iteration dropped to 91%, but the whole thing got 96.6% at the end.  Several of those
+		errors come from the incomplete OCR.  Perhaps I need to just exclude those.
+
+	Two class wales did 98.55%, so maybe that's getting messed up on the bad OCR as well.
+
+	Wash_Pass did see improvement with more iterations!  95.5% -> 99.5% -> 99.75%
+
+	Examining PADeaths, all of the form types are very very very similar.  A lot of them ought
+		to be put into the same bucket anyway.  Not sure how useful it will be.
+
+Dec 13
+	
+	Kumar clustering gets 31.7% on pa deaths, cause they are so stinking similar!
+		I think it is a problem in the labels.  Perhaps I can collapse some labels.
+		Doing that now.  This should help.
+	
+Dec 16
+
+	Done with classes! woo hoo!
+	Let's look at the 1911England to check labels and stuff
+		Got em
+			
+Dec 17
+
+	To do
+		~Check label processing
+		~Exclude List
+		~Run greedy on the supervised init
+		~Look into the push away part
+			~Get it working for grid lines
+		Partial text line matching
+
+	Supervised Experiment
+		Does every label get a cluster?
+		What are the accuracies?
+		How far apart are the clusters?
+		Parameters
+			How many instances to use to build initial prototypes?
+				10%, 20%, 30%, 40%?
+				classes * (50, 100, 150, 200)?
+		Datasets
+			NIST - 11185 - 20
+				1000
+				4000
+			Wales - 6354 - 11
+				600 
+				1500
+				3000
+			England - 23056 - 27
+				2000
+				5000
+				10000
+			PADeaths - 10832 - 5
+				1000
+				4000
+			Wash - 2000 - 2
+				200
+				500
+				1000
+
+	How much does push apart affect things?
+		Start with ground truth clusters made from part of the data
+			How much?  Depends on the results of the previous experiment
+		See how much pushing them apart affects the final accuracy
+			Different degrees of push apart?
+			PA Deaths ought to be a good candidate for this because the
+				differences really are minute
+
+Dec 18
+	
+	Check the memory profile for kumar.py
+		Seems to be fine
+
+	Experiment results
+		Datasets
+			NIST - 11185 - 20
+				1000
+					100%, nuff said - heck we could probably seed it with just 60 docs
+				4000
+					Also 100%
+			Wales - 6354 - 11
+				600 
+					99.5% acc
+				1500
+					99.3% acc
+				3000
+					99.3% acc
+			England - 23056 - 27
+				2000
+					89.0% with 23 initial clusters
+					Made same errors as run with 10000
+				5000
+					90.0% with 23 initial clusters
+					Same errors
+				10000
+					89.9% with 25 initial clusters
+						None of the 25 swapped labels even though some clusters were really small (7)
+						Most impure clusters have large impurities.  Some smallish as well
+						3.2% points were lost due to a mislabeling mistake
+						another ~3% were due to very similar form types - push apart should help
+						Something is up with V-measure - it was calculated as more than 1 with that
+						empty cluster
+						
+			PADeaths - 10832 - 5
+				Baseline
+					Baseline accuracy is 75% when Type6 reduces to Type2
+						Reasonable label
+				1000
+					94.3% 5 initial clusters
+					Much lower avg sim scores to ground truth clusters + higher std dev.
+					Learned weights are fairly uniform  - excluding 0s, the highest weight is
+					only double the lowest
+					Type1 is easy to differentiate
+					Need some push apart
+				4000
+					93.8% 5 initial clusters
+					Weights are still pretty uniform
+					Did worse becuase Type2 took over another cluster, whereas with 1000 it
+						was an almost balanced cluster
+			Wash - 2000 - 2
+				200
+					99.6%
+				500
+					99.2%
+				1000
+					99.4%
+						These missclassifed guys have got to be noisy instances, the cluster
+						sims are 0.18, not very high!
+		
+		Conclusions
+			More data up front didn't always lead to doing better, but everything was so
+				close any how.
+				More data is probably better when we don't look at labels.
+			Push apart seems like it should help to solve some of these errors
+
+	Thoughts
+		Push apart changes the input distribution, whereas weights specify the model
+			and therefore assignment.
+		Push apart is designed to make the clusters more separable
+			What schema is best assuming that all clusters are different types?
+			Possibles:
+				Only most similar pairs
+				Top N most similar pairs
+				Only clusters whose sim > mean sim?
+
+	Weekend Experiment
+		How does push apart affect the end accuracy?
+		Take the ground truth clusters and push them apart.  Then iterate
+		Let's try the top 3 most sim clusters with a 0.5% push away 
+		Datasets
+			Wales - 6354 - 11
+				600 
+			England - 23056 - 27
+				2000
+			PADeaths - 10832 - 5
+				1000
+			Wash - 2000 - 2
+				200
+
+	Let's reimplement kumar.py to be more memory efficient, so it can handle doing
+		all of 1911england
+
+	Need to finish coding up the TopN experiment.
+
+Dec 22
+
+	Looking at the results of the push apart experiments
+		30 iterations at 1% push apart for Top3
+		Datasets
+			Wales - 6354 - 11
+				600 
+					No improvement over the baseline of 99.5% 
+					This could just reflect some noise in labels, etc
+						The unclassified have some variants
+						Let's see how prefix/suffix matching affects this.
+					Gets *marginally* worse towards the end of the 30 iterations
+			England - 23056 - 27
+				2000
+					In less than 30 iterations, accuracy improves from 92.9% to 94.3%
+					Let's see if it continues...
+			PADeaths - 10832 - 5
+				1000
+					Accuracy greatly improves 94.3% -> 97.0%.  Potentially it could have
+						kept increasing.
+			Wash - 2000 - 2
+				200
+					No change in accuracy at all.  The classes are sufficiently separate.
+					It would be interesting to examine the misclassified instances...
+		
+	Overall push apart using the ground truth clusters tends to improve results.  This may or may
+		not be realisitic when non-ground truth clusters are used.  Let's retry the same experiment
+		with some good initialized clusters.
+
+	Things to check:
+		Initialization
+			How many docs?
+				When number of types is unknown?
+				Assume distribution of types is skewed.
+				Answers 
+					As much as you can and stay in memory/time constraints
+					Using more to seed greedy clustering didn't always help
+						Of course that was peeking at labels
+			Does the amount of random data affect the quality of initial clusters?
+				This would be an interesting experiment in an of itself.
+				How do RF handle unbalanced classes?
+			How to choose the number of seeds/clusters?
+				CV based on silhouette seems to fail
+				Perhaps a modified silhouette measure based on sign of the score instead
+					of combined magnitude - Also an interesting problem in its own right
+			How many iterations?
+				There is little evidence that additional iterations help produce more accurate
+					initial clusterings.
+				What do good seeds look like?  Ideally we'd have 1-2 of every type.  How does
+					that stack up against random?
+				What is the variance using random seeds?
+		Prototype Construction
+			How much push apart?
+				Looks like 20% is good.  
+				Perhaps we can CV based on the inter cluster similarities
+					Tricky to use the NxK matrix because I expect some of those
+						to be reassigned when using the full matching based on the
+						learned weights.
+					Also tricky in the over complete case
+			How to set thresholds?
+				This assumes that the greedy stage allows rejection or creation of new clusters
+			How to set weights?
+				Two styles
+					Maximize avg/sum sim score of docs to prototype
+					Maximize margin between doc sim to prototype and doc sim to other cluster
+		Greedy Stage
+			How to keep outliers from creating too many clusters? 
+				Reject option?
+					2nd pass of entire system?
+				Secondary pool of clusters?
+
+Dec 23
+
+	Let's rewrite kumar.py to be more memory efficient.
+		Separate feature extraction/computation stage
+		Okay, the images are no longer part of the pickles, which means thing should
+			run rather fast.
+		Let's play with the amount of random data on the original algorithm using wash_all
+			dataset
+
+	Experiment
+		Variables of interest
+			Percentage of random data used to train RF
+				.1, .25, .5, .75, 1.0, 1.25, 1.5, 2, 3, 5
+			Accuracy
+				At correct # of clusters
+				With overcomplete clusters
+			Results
+				Wash
+					No clear trend
+					Codebook was the same for all runs.
+						The sampling may have been different...
+						Perhaps it would be best to set a random seed there
+					The difference was in the RF.
+					Would be interesting to analyze the variance of the RF and the
+						variance in the codebook construction
+
+	See how many individual silhouette scores are positive
+		Running on wales using CV at multiple iterations of kumar init
+		Doesn't correlate exactly with accuracy
+		Correlates better with mean silhouette
+
+	See how random seeds vs supervised init seeds work
+		Single iteration
+			While we're at it, let's CV the metrics
+			Also see accuracy after a greedy assignment
+		Various number of random seeds
+		Various number of seeds/class
+		Datasets
+			Wales
+				Cluster range: 2-20
+				Random - 5, 10, 15, 20, 25, 30, 40, 50, 100
+				Supervised - 1, 2, 3, 4
+			Wash
+				Cluster range: 2-6
+				Random - 5, 10, 15, 20, 30, 50
+				Supervised - 1, 2, 3, 4
+			England
+				Cluster range: 2-50
+				Random - 5, 10, 15
+				Random - 10, 20, 30, 40, 50, 75, 100, 200
+				Supervised - 1, 2, 3, 4
+			PADeaths
+				Cluster range: 2-12
+				Random - 5, 10, 15, 20, 25, 30, 40, 50
+				Supervised - 1, 2, 3, 4
+			NIST
+				Cluster range: 2-30
+				Random - 10, 20, 30, 40, 50, 75, 100 
+				Supervised - 1, 2, 3, 4
+
+	Would be good to repeat the push apart experiment with a larger step e.g. 5%
+
+	Next steps:
+		Let's check the variance of
+			Kumar clustering
+				Constructing codebook
+				RF training
+				Random Data Sampling
+			KumarCONFIRM
+				Choice of random seeds
+		Redo push apart experiment with larger steps
+			Different % schema
+				TopN, affect by N?
+				Top1
+				Weighted all by % similarity
+				All over some threshold (based on mean sim scores)
+		Make backups of the data
+		Prefix/Suffix matching
+
+Dec 25
+
+	Experiment didn't quite go as planned
+		Memory errors for the england dataset (maybe if they ran separately?)
+			Perhaps I need to use data subsets for quick experiments...
+		Not finished yet
+		The range of clusters was capped at 10, not at the passed parameter
+			Of course NIST did terrible then
+			Wales results are useless then
+				Basically one class doesn't get a cluster then
+		Not strong results
+			Wash
+				The random seeds consistently did better than using the supervised seeds
+				Makes no sense because 5 random seeds is practically the same as having
+					2 seeds from each of 2 classes
+			PADeaths
+				Greedy Assignment did better in some cases, but not in all.
+			Wales
+				The greedy assignment almost certainly did significantly worse than the
+					intial
+				
+
+Dec 29
+
+	Still not turning out well
+		England datasets did not finish completely
+			One had a line length of 0 causing a divide by zero error
+			The others seemed to produce empty clusters at some point
+		Random Data experiment with Kumar Clustering
+			No clear pattern, must be a lot of variation because of other factors
+
+	I feel that I don't quite know enough about any given research area to really
+		start a research agenda.  It's going to take a bunch of work.  I'd like to
+		finish up this project, so I can get started on other things.  Good enough
+		is better than perfect.
+
+	Let's throw out a lot of the majority class in PADeaths, so that we can get
+		reasonable class balance.  Let's say that it can't be more than 2x the next
+		largest class and no more than 20x the smallest class.
+
+	Conclusions
+		Silhouette performs poorly to CV true number of clusters when clusters are
+			very similar.
+			Also the variant of % positive individual silhouette scores
+			We'd probably be better off looking for specific lines of text that distinguish
+				i.e. doing something like frequent item set analysis.
+			Perhaps that would be some good future work
+		Wales
+			Random Seeds
+				Initial accuracy was not monotonic in the number of seeds
+					Literally, it goes up and down every other sample
+				Greedy assignment helped for 50, 75, 100 random seeds, boosting 50, 100 to > 99%
+				It didn't help for several (same or +- .1%)
+				Some it hurt -(1,2)%
+			Supervised
+				Best initial was 2
+				1 did worse than 10 random seeds
+				Greedy assignment helped in all cases
+			Too much variance in results that really shouldn't be there.  I ought to let the same
+				parameter settings run and see what the variance is over different random seeds.
+				Spectral Clustering uses k-means somehow under the hood, and the default is
+					to use 10 random restarts and take the best based on "inertia" - sum of
+					distance to cluster center.  We can reduce variance by increasing the number
+					of restarts (say to 50 or 100) or we can use the other method "discretize"
+					Let's try the discretize method.
+			One source of variation is that the # of initial clusters is CV by acc.  Many of the
+				runs picked 10 clusters, which limits the possible accuracy, so the results just
+				show that over complete clusters is better than under complete.
+			The CV'd acc for initial clustering spiked around 10-14, and dropped off pretty sharply
+				higher than that.  Strange because you would expect higher accuracy with more clusters.
+				For NIST, it typically stayed at 100% even after 20 clusters, however, some had sub optimal
+					accs.  In one run, 21 clusters were selected instead of 20.
+
+	Experiment
+		Let's run some repeated runs of the same thing with different random seeds and over some parameter
+			settings.  Essentially, let's rerun the previous experiment using discritized and CV only the
+			valid range of clusters ie. 11-20.
+
+
+Dec 30
+
+	Actually I have been using discretize all along.  Shoot.
+
+	Trying kumar clustering for several runs
+		So far with 3 runs, the accuracy varies quite a bit.  Wonder why that is?
+		Do we need more trees in the RF?
+		Is it dependent on the sampled data?
+
+
+	Authorship paper
+		Read a survey (2009).
+		I'm not terribly novel, but I may not be sunk yet
+		Similarity based methods do exist
+			Delta is one of them
+		Discussion addresses
+			The open candidate pool issue
+				Admits most of it assumed closed pool
+			Confidence measures
+				Forensics would need this
+			Generalizing across genre's
+				Train on blog posts, test on emails, etc
+		Lots and lots of work on feature construction
+			Feature Functions
+				At many granularities
+					Character
+					Lexical
+					Syntax
+					Chunks
+					Semantic
+					Domain
+			Induction
+				Bottom up
+				Top Down
+			Extraction
+				PCA
+		So what is the novelty?
+			Of what I've done
+				Reformulated the problem
+				Measured generalization in several categories
+				Evaluated many classifiers
+			What I could do
+				Use standard datasets
+					Use many (disjoint) datasets to show generalization
+				Actually perform the clustering
+					Easy enough to make the sim matrix
+					Cluster, use silhouette to decide how many authors
+						Of course some authors may have more than one cluster
+							if their style is influenced by genre, etc
+				
+
+Jan 1
+
+	Finished checking the variation in kumar clustering
+		Pretty high variation in the overcomplete case 82-90%
+		Less in exact cluster # 85-88%
+
+	Variation in the random seeds/supervised seeds
+		20 vs 50 rand seeds - inital
+			variation is small for 20 about 1%
+			variation is larger for 50 about 3%
+			mean for 50 is larger
+			Improvement by the greedy portion typically is large or not at all
+				e.g. .2% or less or ~1.5-2%
+			Most of the 50s improved to ~99%
+
+		20 rand seeds # clusters
+			The considered range was 11-20
+			Most 11-12,
+				Couple higher (15, 16)
+				CV'd by acc
+			Silhouette consitently pointed to 11 clusters
+			There seemed to be a slight correlation between more initial clusters
+				and higher accuracy, though not strong.
+
+		50 rand seeds # clusters
+			Same range
+			Typically ~15, high variation
+			Same for silhouette
+			Some errors, things did not terminate
+
+		2 supervised seeds
+			Definately better inital clusterings than even 50 random seeds
+			Typically 19 clusters
+				Had a biggish spike too
+
+		3 supervised seeds
+			Some initial clusterings wern't good (94-95%)
+
+		So how to choose number of initial clusters?
+			User input?
+				Should be at least the number of classes.
+			Logan's method is a good safety net.
+			I don't think the current framework provides a good way to choose the number
+				of clusters.
+			The problem seems to be small classes that are somewhat similar
+				Perhaps these could be caught in the greedy stage with a reject option
+
+	Now the question is, how does the initial choice of clusters affect the final
+		clustering accuracy?
+		So same seeds and learned sim matrix
+			Then construct prototypes for each number of clusters in the valid range.
+			Get the number of clusters/accuracy.
+			Do this several times
+
+Jan 5
+
+	Back into things
+
+	Dean
+		There are more sophisticated clustering metrics
+		Of the simple ones
+			No known parametric
+			Most have problems with sub clusters
+
+	Still running things
+
+Jan 6
+
+	Experiments for the Paper
+
+		General Settings
+			Mean of 7 runs
+			Graph # chosen clusters/other parameters and final metrics
+			Report Acc, V-measure, and ARI
+			Datasets
+				Wales
+				Wash
+				England
+					May not be feasable for the full dataset for everything
+				PADeaths
+				NIST
+		
+		Kumar control experiments
+			Different codebook for each run
+			Use the full dataset
+				What about the england dataset?
+			Choosing the number of clusters
+				Could graph it
+					Acc/V-measure
+				Also graph the silhouette to see how well it works
+			Choosing parameters
+				#trees
+					Just computational time
+					More trees just reduces variance
+					Try 5000
+				codebook size
+					100, 200, 300
+				partitions
+					Between 5000-10000 features
+				Let's CV parameters once per dataset using the graph method
+			It would be nice to run these on the super computer or to use another
+				machine or two.
+			Also need a way to extract the SURF features independent of the codebook
+				so computation is not duplicated
+
+		Initial Clustering
+			Using all of the data
+			Parameters
+				# of clusters
+				# of random seeds 
+				or # of examples for each class
+					1, 2, 4, 8
+
+		Initial Clustering + Greedy Assignment
+			Amount of initial data
+				10%
+				50%
+				100%
+			Graph amounts of push apart
+				3d graph?
+
+		Initial Clustering + Greedy Assignment w/ Reject
+			Amount of initial data
+				10%
+				50%
+				100%
+			Use "optimal" push apart
+			Test some reject thresholds
+				.[5-9] * mean sim/cluster
+				Can be done on the same run, just a filter to exclude
+					some documents from consideration after a full clustering
+			Does it make sense to sub cluster the rejected documents?
+
+	Idea to CV # of initial clusters
+		Base it on the constructed prototypes, not the RF sim matrix
+		Maximize the sum of the sim scores 
+			max(sum of sim scores) / f(# clusters)
+			where f is sub linear - maybe sqrt, log, etc
+
+	Removing redundant features for the RF
+		Find the average abs difference between each pair of columns
+			Greedily remove columns that are less than .1% the same
+			This means that they differ on average 1/1000 documents 
+
+Jan 8
+
+	Taking out some of the low co-variance features hurt quite a bit.
+		Guess the solution is more trees!
+	
+	The graph of results look dissappointing looking at the mean.
+		Some of the runs are noticably lower than others.  
+			Some will have 85%, others will have 95% with the same parameters
+				And this variance is consistent across choices of K
+			Perhaps the choice of seeds?
+			What is the initial accuracy?
+
+
+Jan 9
+	
+	Prefix matching seems to be working.  One caveat is that if a very long line is split
+		unevenly, the whole line will match the large fragment perfectly because the ED is
+		with tolerance.  That leaves the smaller fragment as un matched, so it is preserved
+		in the merging process.
+
+	Pruning down the PADeaths so that the largest class is not 75% of all classes. 8k -> 3k.
+
+	Running final kumar clustering over wales dataset
+		Weekend - check codebook sizes
+
+	Idea for 665 paper/research idea
+		identification via keystroke profiles
+		Could team up with Jordan to do reinforcement style detection
+			Mixture - different keyboards, applications, etc
+
+	Experiment
+		Running wales_1000 through the pipeline and this time I'm checking the initial
+			accuracy.  Hopefully it looks the same as in wales_all
+		Final Kumar on wales
+			5 codebook sizes
+			10 trials
+			Hopefully it finishes at some point...
+
+	I need some software that will do some data analysis
+		Many parameters
+		Many metrics
+		Multiple runs
+		Aggregate statistics and graph
+			2d and 3d
+	
+	software to handle tsv files for the graphing I want to do.
+		R?
+
+Jan 12
+	
+	Prefix/Suffix matching seems to improve results quite a bit.
+
+	Meeting notes
+		Concentrate on finding insights, not just running lots of experiments
+			to get graphs
+
+	It ought to be easy to compute the needed push apart based on the cluster
+		sim matrix.  Let's try some of those strategies rather than a user set
+		parameter.  Dependent on the avg intra-cluster similarities
+
+	Paper TODO:
+		Write Related Works Section
+			Go re-read a lot of the related works
+			Search for more papers specifically on doc image clustering
+		Write Descriptions of Methodology
+		Major Points
+			We do very similar form types - not previously addressed in lit
+			Improve accuracy over Kumar's clustering
+				Robust to parameters, etc
+			Domain Features > Out of Domain features
+			Take noise into account
+			CONFIRM is an extensible framework to allow other kinds of features
+
+
+Jan 13
+
+	Time to start running the kumar clustering
+		After that, I'll choose a certain size for the codebook, maybe try to
+			binary search a more optimal size.
+
+	Writing the 1pg extended abstract for FHTW
+		Finished 1 page.  Need to do results and a header + refs
+
+	Idea
+		When constructing prototypes, independently assess each initial cluster
+			to see if there should be 2 clusters.  Perform the sub clustering on
+			the match vectors between members and the prototype.  Only split if 
+			there is a clear division.  I suspect that there will be.  This is
+			stealing a bit of Logan's thunder, but it could probably really
+			help.  However, this might just be overfitting the wales dataset.
+			I don't suspect that slight similarities will be caught because the
+			clustering algorithm would have to consider each feature as equal.
+
+Jan 14
+
+	Kumar clustering hit an error (fixed)
+		Rerunning stuff
+	Wrote stuff to generate graphs, averaging the data
+
+	Time to finish writing that extended abstract
+		Going for the full two pages, including results on wales.
+		For the full paper, I'll have results for PADeaths and wash as well.
+		And I'll do the NIST tax forms
+
+Jan 15
+
+	Kumar clustering finished
+		Mean score is around 89.5% for cluster sizes > 9
+		I made a boo boo though.  For CONFIRM, I'm excluding some forms because of
+			incomplete OCR.  Those were included in the Kumar clustering.
+		I think this is okay for the FHTW because of the large difference in
+			acheived accuracies and because the work is still preliminary.
+		Acc always improved with larger codebook sizes.  I'll rerun it with
+			larger codebooks when I get time on the super computer.
+		Acc is lower than what I had before on kumar.  That was the best of a single
+			run.  I also used more trees in the RF, so the variance is lower for
+			these runs.
+		Need to look at a assignment matrix for error analysis.
+		Perhaps the silhouette is being calculated wrong
+			Maybe it's being used on the similarity matrix instead of the distance
+				matrix
+
+	Time to run clustering on the wales dataset.
+		I might not be able to run 10 at once because of memory constraints
+		Maybe I can steal Logan's machine for tommorrow.
+		Need to change things so that the right metrics get printed
+		Won't be able to print silhouette for full clustering
+		Running 10 jobs
+			With 8, I was hitting 100% util
+			With 10, theres 89%
+
+	SuperComp
+		Spectral clustering seg faults...
+		I'm just going to give up for now.  The best I could do would be to
+			compute data matrices, and I'm not sure 
+		I'll have to figure out ways of just running stuff on my machine
+
+	Why does greedy assignment improve over initial?
+		Ideas
+		It is a bootstrapped supervised problem instead of a clustering problem
+			If the initial clusters are good
+		Noise is reduced through merging
+		RF might only find major relevent structure and not specific variations
+			to certain small classes.  This is because its task is to distinguish
+			from random.
+		New Idea
+			Bootstrapped RF
+			Use the random data to come up with initial assignments, then
+				do another multi-class RF trying to predict the initial labels
+				using only the bootstrapped real data.  Then use similarty
+				not solely based on the leaves, but give partial credit for
+				overlapping paths.
+		Able to weight the features/regions and do direct comparisons
+		Data
+			Need to compare initial to final assignment matrices and see where
+				the errors are.  I can do this after the current experiment or
+				even now.
+
+
+Jan 16
+	
+	Why does greedy assignment improve over initial (cont)?
+		Experiment
+			Try the various datasets with ranges of clusters with real initial clusters
+			Construct synthetic initial clusterings (correct # of classes), with
+				with various accuracies e.g. one run with an 80% correct initial clustering.
+				See how much the greedy approach improves things as a function of how
+					correct the initial clustering is.
+				How do different datasets affect this?
+			Does the amount of random data used affect the silhouette of the true labels?
+				The idea here is we want to improve the separability (cutability) of the
+					true classes.  If amount of random data/# trees affects this, we should
+					know how.
+	
+	Push apart is the only discriminative part of the algorithm
+		Therefore we expect it to improve discriminative classification, which
+			is what the assignment stage is.
+		It is difficult to tell how much, because to cross validate it, you have to
+			assume your initial clustering is good.
+		Well, you could finish the greedy assignment, create new prototypes off of those
+			clusters, perform push apart, and go again.  That's more work for perhaps
+			a smaller benefit.
+
+	Just waiting for stuff to finish so I can finish writing the FHTW submission.
+
+	HIP2013 had a form image clustering challenge
+		The goal was to multi-cluster forms of a single type by certain regions of
+			interest that correspond to hand filled in form fields.
+		Not quite the same thing we do.
+
+	There might be some stuff under the name form recognition
+
+
+Jan 19
+
+	So the init beat the final in this set of experiments.
+		I think it is because I used the docs with the bad OCR transcriptions
+		The initial should be a little more robust to that sort of thing.
+	
+
+Jan 20
+
+	Let's really test the affect of amount of random data on initial clustering.
+		Average of 10 on 5 codebooks, one of each size.
+		Vary the % of random data: 10%, 25%, 50%, 100%, 150%, 200%, 300%
+		Check a window of cluster sizes 8-15 on wales
+		Can check on wash as well.
+		Wonder if it would be worth to check on like MNIST or something.
+		Could we get a paper out of this?
+
+	Let's run a single codebook for wales and see why the V-measure tanks
+		as the number of clusters increases.
+
+	Testing danger of not all classes being represented in a seed
+		On 50 random seeds:
+			Test n in 2 ... # classes allowed classes in the seeds
+			A more balanced training set would be best for this.
+		Do a fair test with supervised init
+			# of seeds
+		Test the # of seeds
+			20, 50, 75, 100
+	
+	Run initial vs final acc for various datasets using 50 rand seeds
+
+Jan 21
+
+	Wash clustering finished
+		As expected, larger codebook size is generally better
+			But not dominate
+			We'll see how the larger wales codebooks perform
+			These averaged results are consistent with what I observed with
+				individual runs earlier.
+
+	I should be recording the silhouette of the true clustering to know how
+		well the similarity matrix is being formed
+		Also should experiment with # of trees to see where it levels off.
+
+	I really want to just get into the unsupervised feature learning and be
+		done with these long to run algorithms
+
+	Running randsize on a wash 500 codebook to see how the size of random data
+		affects clustering accuracy.
+		Results
+			Not really conclusive
+			Graph Acc vs Perc Rand
+				For various #clusters
+			Acc does vary with Perc Rand ~2-3%
+				but it is not a consistent trend
+
+	Let's see if I can get the cuda-covent software to work
+		Nope
+		But got Dean's Machine
+
+Jan 22
+
+	Wales dataset still confirms that more random data isn't necessarily better.
+		Let's however, directly compare the silhouette on the true clusters.
+	Once those codebooks are done, I'll kick off the seeds experiment.  Still wish I
+		had some more cores to run them on.
+		I'll keep Dean's machine running kumar experiments.
+	Time to get writing
+
+	I ought to cherry pick some datasets for computational speed and diversity.
+		Datasets should be balanced for the most part.
+		NIST
+			As is, should only need to run it once or so to get the 100%
+		Wash
+			Bring it down to 500/500
+			Show binary, easily seperable
+		Original Wales
+			To show skewed distribution of types
+		Combine England and Wales
+			26 + 11 classes
+				Drop some out of the 26 because they are too small
+				There may be class overlap
+			100 forms of each class
+				Still sizable
+				~3k?
+			For a couple of experiments, use the whole thing
+				I guess I could compare it to Kumar without storing all of the
+					SURF features as once...
+		PADeaths
+			Skewed like I have it now
+			Less skewed smaller subset.
+			
+Jan 24
+
+	Kumar on Wales finished running
+		Still significant increases as the number of Codewords goes up.
+		At 300, acc is ~88%.  At 1500, acc is ~92% (13-18 clusters)
+		Perhaps the kumar paper used 300 so that the other models would
+			not also get 100%.
+
+Jan 25
+
+	Making datasets
+		Going to be sure that everything is the same for kumar and CONFIRM
+		Everything looks good
+			Ought to double check and change the labels in the feature files
+
+	Running Larger Kumar on Wales_Small on Dean's machine
+		I'll have to check its memory usage
+	Rewrote a version of the extractor to work on larger datasets
+
+	Running init/final on the smaller datasets
+		This should take awhile
+			
+Jan 26
+
+	Result reporting pipeline is done for the overall experiment.  Now it just needs to
+		run.  Need to start running wales_large and nist.
+
+	Got a work horse machine up and running.
+	
+Jan 28
+
+	Looks like I killed Dean's machine again.  This time I'm off, but I think I have the code
+		right this time.  I'll set off kumar clustering on the workhorse once NIST is done
+		processing.
+
+	Wales_balanced finished.  It looks like the intial confirm did much much better than the
+		final confirm.
+	Let's see how the original Wales performs.  Maybe I was wrong, and all the work that confirm
+		is doing isn't paying off in the end.
+
+	Okay, to investigate why this is the case:
+		Wales_Balanced - look at 30 clusters (24 true)
+		Init
+			Most of clusters contain 1-2 classes (excluding classes of 1-2 forms in that cluster)
+			The 2nd most frequent type is sometimes large, which accounts for the majority of the
+				errors.
+			Some clusters have just a couple forms.
+			One cluster is just an odd ball
+		Final
+			Things don't look so bad
+			One cluster has about 500 forms in it (obvious large errors)
+			The rest are relatively pure
+			Some mixes like the init, but overall pretty good
+
+		Looking at the difference between init/final on 30 clusters on wales_balanced_5
+			Numbers don't exactly correspond bc an empty cluster got removed in final
+				Cluster numbers refer to the final cluster #
+			Some clusters get more pure.
+				Cluster #28  161/67 -> 199/1
+					Forms only differ in the header
+				Cluster #23  84/43/11 -> 158/15
+					Differ in 3 columns in the middle
+				Cluster #20  152 -> 195
+				Cluster #19  156/52/17 -> 184
+				Cluster #16  156/60 -> 200/65
+				Cluster #7   132 -> 200
+				Cluster #6   129 -> 200
+				Cluster #2   177 -> 191
+			Some clusters get less pure.
+				Cluster #21  191 -> 162/98/83
+					Differ by the total box and by the extra infirmity column
+				Cluster #0   194 -> 101/37/15
+				Cluster #11  100 -> 195/166/28/11/7/6
+			Some clusters are the same
+				#17
+				#1
+			Some clusters were populated in init and have < 10 forms in final
+				Or less popular
+				Cluster #18 53 -> 2/2/1/1/1
+
+			Looking at the confusion matrix, some types are way better and others are
+				way worse.  Others are marginally better. No type did only marginally worse.
+
+	One way to perhaps improve the final clustering is to discriminatively set the
+		weights instead of just maximizing the weighted average of the sim scores.  
+		Essentially, treat the matching vectors of the learned prototypes as features for 
+		a max ent classifier.
+
+	This could be plug 'n chug with sklearn (use logistic regression)
+		
+Feb 2
+
+	New idea
+		Sub cluster each cluster using unsupervised Logan's method
+		Could do feature extraction on the prototype of the cluster and
+			on the protoypes of near clusters, as defined by between
+			prototype similarity.
+
+	On Nist, kumar clustering decreases in quality with more clusters, while
+		init and final stay relatively the same
+
+	Tried to optimize text line matching using kd-trees in scipy, but it doesn't
+		seem to have worked out so well.
+
+	Paper accepted to the FHTW conference.
+		Got some strong criticism on some not air tight details.
+		Should be able to address these
+		Perhaps this work should only present CONFIRM-initial?
+
+Feb 3
+
+	Paper
+		Only CONFIRM-Init, but not by that name
+		Spend time addressing relevance to FH
+		Kumar vs Init
+			Redo experiments to capture true silhouette and actual silhouette for both
+			Additional experiments showing # of rand seeds
+				And #classes in the rand seeds
+			Avg of 5
+			Can treat the Init code as an extraction process to create data matrices,
+				which can be run through as is on the kumar code
+			Don't even try to do wales_large, there isn't time
+
+	Reimplementing feature extraction
+		Different Random Seeds
+			Just take the largest and then do slicing
+		Different Types allowed in the Seeds
+			Really just want to show that if they all don't make it in, it can still perform well
+			Just 1 type, 25% of types, 50%, 75%, 90%, 100% for a given number of seeds
+
+	Experiments
+		Waiter
+			Rerunning all of kumar clustering to get the new silhouette stuff
+				All datasets
+			Everybody is going up to 60 clusters for uniformity in cmd
+		Wings
+			Running CONFIRM feature extraction.
+				Just rand
+			Going faster than I thought
+				Hmmm, PAdeaths failed because of the dir names?
+				Ah, the correct dataset is padeaths_all
+			Will run the type extraction when its done with the random extraction
+		Tony
+			Helping with CONFIRM feature extraction
+				For nist and padeaths_all, Wings has the others
+			Will run clustering with CONFIRM features
+
+	
+	Previously running experiments
+		Looks like the discriminative approach to CONFIRM-final is paying off
+		Should finish soon, then we can see for real
+		The numbers match very closely between init and final, which just means
+			that we can fit the training set.  Some are marginally better 0.1% increase.
+		This experiment does not indicate how well it can generalize though.  A good
+			experiment would be to initally cluster half of wales_balanced and then
+			assign the whole dataset.
+		It would satisfy me if we could do almost as good as init with this with some
+			generalization.
+			
+	Future directions
+		Look into classifiers that explicity account for label noise
+			Mike Smith's work
+		Perform automatic subclustering after the init.
+			Investigate the univariate statistics of the match vectors in
+				Pure clusters
+				Messed up clusters
+				Similar types put together
+				Pay attention to the text lines
+			See how optics does unsupervised with a threshold
+	
+
+Feb 4
+
+	Messed up on tony, it was extracting the wrong thing.  Now its rerunning random extract
+		on nist and padeaths_all, but that will take at least a day.
+	Type extraction is running on wings for washpass and padeaths_balanced
+	Type extraction is running on waiter for padeaths_all and wales_balanced
+
+	Things should be on their way running.  Now I just need to wait for them to finish,
+		write the graphing scripts, and write the paper.
+
+Feb 5
+	Reviewer concerns
+		How do heterogeneous collections occur in real life?
+			Paper forms may not be stored sorted by form type
+			They may be sorted by person or date or other criteria
+			Subtle shifts in forms
+
+	Got the graphing pipeline up and going
+
+
+Feb 6
+
+	Finished revising up to results
+
+	So 100 templates on WashPass did significantly worse than all the
+		others.  Why?  Is it because there wern't enough trees in the RF?
+		Let's run them on tony with more trees
+
+Feb 10
+
+	Family History Tech Workshop
+		Big Problems
+			Aiding indexing of all sorts of documents
+				Forms and unstructured
+			Partitioning docs into zones
+			Record linkage
+				Person in document to person in tree
+				Resolving conflicts in trees
+			Improving search
+				Search with a structured context instead of terms
+			Library Metadata
+				Integrating different libraries - display useful metadata
+				Incorporating metadata into search results
+		Networking
+			Brian - working on handwriting recognition
+			Jon Morrey - Heads research team at Family Search
+				Craig on team works w/ NNs
+			Matthew Larsen - Part of research team at Family Search
+
+	Found bug in rand extraction
+		The 100 didn't extract hardly anything, not the number of random trees
+		Fixed bug - was actually doing 1 random template because of wrap around
+			Did pretty good with just 1 template then
+
+	To Do
+		Get Logan's code up for splitting it out
+		Prepare a little to talk to Gavin
+		Update presentation to include ciatation
+
+Feb 11
+	
+	Did a small lit search for use of NNs in document images
+		Most of it is in character recognition
+		Some of it is on zone segmentation
+
+	Wrote the code for the alternative random matrix sampling
+		Let's see if it does any better
+
+	Cluster Splitting:
+		Can use any number of distance measures:
+			Based on similarity vector
+			Based on match vector
+			Std distance measure between vectors
+			RF leanred distance measures
+
+	Going to run an experiment to see how the alternative sampling method
+		works.
+
+	Rand vs Type
+		Wales_Balanced
+			Type does marginally better
+				Ensures that the distribution of types in the seeds is balanced
+			75 rand didn't do as well as 50 rand
+		Wales_Small
+			Even though the Types only have 30 seeds, even the 75 random seeds
+				don't do quite as well in the complete type case, though it does
+				do better than 6 types
+		WashPass
+			Including the 2 types does better than just 1 type
+			20 rand is better than 10 rand, but more doesn't seem to improve it
+
+Feb 12
+	
+	Looking at washpass and PAB SURF features
+		didn't seem like alternative sampling really helped
+		Of course everything has small ups and downs constantly
+	
+	Need to get some sub
+
+	How to measure how well splitting goes?
+		Just combine pairs of classes and see how well they get split apart?
+		Do a head to head on real clusters?
+
+	Experiments
+		wales_balanced 100 2 20
+			Match RF, Match E and Sim E did really well
+		wales_balanced 100 4 40
+			Euclidean distance did much much better???
+				On the match features even, not the sim features.
+			Similar # of clusters for all
+		wash_pass 100 2 20
+			RF won out by a lot
+			Sim-euclidean did better than match-euclidean
+			Both RFs did similar
+
+	Seems to be a slight problem in the metrics code for the label-cluster
+		conf matrix, though the metrics seem to get things right.  Maybe
+		it has to do with cluster ids?
+
+	Running a larger experiment to cross validate the measures across
+		many different artificial initial clusterings
+	Tomorrow I'll work on getting them to go on real clusterings
+	Either way, the intial results are encouraging.  It didn't make
+		too many clusters and it should help make things more pure
+
+Feb 13
+	
+	Two questions
+		Does RF learned sims do better than using straight euclidean distance?
+		Does Optics outperform spectral clustering?
+			Optics does automatically determine the number of clusters
+			These will have to wait for some free CPU time
+
+Feb 17
+
+	Examining results of sample_schema
+		does 10% outperform 0%?
+			Generally not, and sometimes it does worse
+				Mostly, it depends on the # of clusters
+			On WB-r and WB-k, 10% does do better when overcomplete
+		25% does better than 10%
+			Does worse than K on PAA, but generally better or same on rest
+		50% isn't significantly better than K
+			75% does about the same
+		90% does the best
+			Still doesn't do as good as K in some cases
+
+	So, really there is too much variance in the experiments to put a lot of stock in
+		what's going on.  Most of the stay probs were way too low for there to be a lot
+		of correlation introduced.  The expected value of correlated features is 
+		1 / (1 - stay prob)
+
+	Let's try .93, .95, .97, .99
+		Running on Tony
+
+	Time to examine splitting_features
+		How do I want to view the data?
+		Avg acc/v-measure over all the parameters per dataset?
+			0 = match_rf
+			1 = sim_rf
+			2 = match_eu
+			3 = sim_eu
+		Overall, match does much better than sim
+			On washpass, match_rf does better than match_eu by 10%
+			On the others, match_eu does better by <= 2%
+		Conclusion - sim isn't worth looking at right now.
+			Match_eu and match_rf seems to do about the same
+
+	Let's design an experiment using real clusterings and see how much they improve things
+		Record the original clustering
+		Then split it using each of the features.
+		Record the absolute and difference in acc/v-measure and #clusters
+		Then compute the avg diff and avg std of the diff for both measures
+			
+
+Feb 20
+	
+	Checking sampling scheme values of 0.93, .95, 0.97, .99
+		.99
+			Clearly better on WB-KRT
+			Clearly better on WS-T, same on KR
+			Clearly worse on PAA-K, better on R, same on T
+			Mostly same on PAB, somewhat better on R
+			Ambiguous on WashPass, only better on many many clusters...
+				Much better at K=2 for RT
+		.97 vs .99
+			Not any better on WP or PAB
+			Better on PAA-KR (up to 15 clusters)
+			Better on WS-KR, but worse on T
+			Same on WB-K, worse on RT
+		.95 vs .99
+			Does the same as .97, but a bit worse on some things
+		Not going to bother looking at .93
+
+	I ought to calculate area under curve or some summary number to be a bit more objective
+
+	Conclusions
+		.99 seemed to do the best of all the sampling schemes and did a little better
+			than the baseline.  I can't conclude that it is significantly better than 
+			baseline
+		Going to try .99{3,5,7,9} as well to see how they do
+
+	Evaluating results on splitting_features_real
+		Just washpass and padeaths_balanced
+		match does much better than sim
+		match_eu makes many fewer clusters than match_rf
+
+	Prelimenary conclusions
+		Use match_eu for now
+		Perhaps doing matching against nearby seeds will improve overall accuracy
+			doing rf based distances may be needed because the number of features
+				will greatly increase.
+		
+Feb 23
+
+	Looks like there were some errors on splitting_features_real
+		Maybe trying to split an empty cluster...
+		But those get filtered out...
+		Rerunning stuff - will take a couple days...
+
+	splitting_features_real
+		min_pts = 0.005 * len(docs) = WP - 10, PAB - 2, PAA - 24, WB - 24, WS - 31
+		All
+			match still better than sim
+		WB
+			match_rf 3 fewer clusters, .3% better acc, 0.002 better v-measure
+		WS
+			match_eu 2 fewer clusters, .1% better acc, 0.001 better v-measure
+		PAA
+			match_eu 7 fewer clusters, .6% worse acc, 0.014 better v-measure
+		PAB
+			match_eu 11 fewer clusters, 1.7% worse acc, same v-measure
+		WP
+			match_eu 4 fewer clusters, .1% better acc, 0.01 better v-measure
+
+	Conclusions
+		match_rf tends to do better for acc, but tends to make a few more clusters, and
+			this is exaggerated when there are few classes.  For the fewer classes, match_rf
+			tends to also have a smaller SD for accuracy, probably because there are more clusters.
+		Slight evidence for match_rf
+		Sometimes splitting clusters doesn't improve purity (PAA)
+		If it is already overclustered, splitting may not help (WB)
+			This could be because min pts was set too high - 10 would be more reasonable
+				Rerunning WS and WB with 10
+		Splitting in an under clustered situation may do better than splitting in the over clustered
+			situation.  This might be because the classes are less fragmented, so more easily
+			fulfill the min_pts criteria.  Rerunning with a lower min_pts may change that.
+
+	Looks like wings crashed trying to do kumar clustering
+		Don't know why it was consuming so much memory:
+		4.5G for the data matrix
+		4.5G for the random matrix
+		3G for a sim matrix
+		-----
+		12GB - not 40GB
+		How much room for RF scratch space?
+		How much room for Spectral Clustering scratch space?
+		How much room for Silhouette scratch space?
+		Well, got one full round of clustering.  Who knows why it crashed?
+			Good enough for me...
+	
+	Designing the final classifier
+		Use match vector against all of the centers
+		Logistic Regression?
+
+	Time today: 11:45 - 3:45, 5:15-6:00
+		4 hr 45 min
+
+	Time at home: 7:45 - 10:00
+		2 hr 15 min
+	
+	7 hr total
+
+Feb 24
+
+	Feeling pretty stressed about things right now.  Not because its going badly, but
+		I don't know.
+
+	sampling schema: 0.993 0.995 0.997 0.999
+		0.999
+			WP - definitely worse
+			PAB - KR much better, worse on T
+			PAA - Does much better on > 15 clusters, worse before
+			WS - Clearly better.  Linear trend upward with more clusters
+			WB - Clearly better on R, slightly better on KT
+			Does about the same at the correct number of clusters, but continues to
+				do better in the overcomplete case.  Funny that the true silhouette is
+				always best with the original.
+
+		0.995
+			WP - definitely better!
+			PAB - KR about the same, better on T
+			PAA - KR a bit better, worse on T
+			WS - Same on K, better on RT
+			WB - Slightly better
+
+		0.997
+			WP - definitely better!
+			PAB - K a bit worse, better on RT
+			PAA - definitely better!
+			WS - definitely better!
+			WB - Mostly same
+
+	The stay prob perhaps ought to be set in relation to the number of features.  Perhaps
+		better would be to first sample a number of inputs to recombine from a poisson, then
+		sample mixture percentages from an asymetric Dirichlet, then sample features from inputs
+		with those mixture percentages.
+
+	How would I even test this as learning a distance metric?  For a k-NN classifier?  For clustering?
+		This is great for this application, but are there standard datasets where this would apply?
+	Is there any way to know how much noise is needed in an unsupervised fashion?
+		This seems like just injecting expert bias into it.
+		Well, how do we tell if manhattan or euclidean is better for a particular problem?
+		Evaluate on ground truth for similar problems
+
+	Time
+		7:45-5:00 = 9 hr 15 min
+		1 hr at home grading 
+		Cumulative toal: 17 hr 15 min
+				
+Feb 25
+	
+	Looks like there wasn't much of a difference when using min_pts = 10 for WB/WS.
+	Hard to compare because the original clusters were of different qualities
+
+	Time to put together the whole clustering algorithm
+		Extraction
+		Initial Clustering
+			Optics or spectral?
+		Split clustering
+			Can still explore including other features
+				Matching against nearby cluster centers
+		Extraction
+			Match all cluster centers
+		Classification
+			RF
+			Others?
+
+	Okay, things are put together.  Let's create another experiment and
+		see how things go.
+		Parameters need to be set on a dataset by dataset basis
+			Also, let's check the size of the pickled objects - not too big
+
+
+
+State of experiments
+	init_kumar
+		All
+			SURF extracted
+			Rand extracted
+			Kumar clustered
+			Rand clustered
+		Nist
+		Wales_Large
+			SURF extracted
+			Rand and Type extracted (just 2x)
+			Kumar clustered (just 1)
+			Type clustering - wings
+				1 mat (23 types, 30 seeds)
+			Rand clustering - tony
+				1 mat (50)
+
+	sample_schema - tony
+	splitting_features
+	splitting_features_real
+
+
+Papers to write (venues?)
+	Thesis
+	CONFIRM -> IJDAR?
+	CONFIRM + Logan's -> ICDAR17?, ICPR16?
+	Sampling Scheme -> ICLR16
+	Livermore -> ???
+
+
+
+				
+Switching over to another Language wish list:
+	Config file 
+		Pass parameters instead of having magic numbers
+		Determine what is output
+			Right now metrics.py dumps everything (slow)
+		Option to not run the full pipeline
+	Logging
+		For Debugging
+		Easy to toggle, etc
+		Count occurances of certain events
+			Truncating lines
+			Edit ops
+			String edit distance
+			Prefix/Suffix matching
+			I suppose that we could use coverage tools for this
+	Abstractions
+		Feature Collections
+		Similarity metrics
+		Merge functions
+		Composing numbers
+		Strategy Pattern w/ Factory classes for different algorithms (via config file)
+			NNs
+			Ways to combine similarity scores
+			Ways to decide new cluster
+			Parameter estimation
+		How to interface with Logan
+			Lets figure this part out
+	Better data management
+		Explicit Serialization of documents
+		One time Preprocessing to extract text lines from OCR xml
+			Quick data loading
+			Standardize input format
+		Introduce arbitrary amounts of noise
+		Save/reload clusters
+	Use some open source line segment detection
+	Optimizations
+		Text matching comparisons
+			Have a list of matched and unmatched, so you don't have to reexamine matched
+			Perhaps partition the space so you only have to search neighboring regions
+		Use statically allocated memory
+			 DP algos
+			 Intermediate matrices
+		Compute everything just once
+			Can use lazy computation everywhere
+			Especially in analysis portion
+		Utils does not allocate memory unless explicit
+	Unit Testing/Sanity Checks
+		Definitly of all of the Util functions
+		Assert statements
+			Bounds checking
+		Edit distance
+	
+Ideas for CONFIRM
+	
+	Optimizaiton
+		Index text lines by geometric regions so we don't compare every pair
+		Only keep more significant text lines?
+		Maybe pre-cluster text lines?
+			Single link HAC
+	Clustering
+		MIRA
+			Only update the weights if the margin is clear about the assignment
+			Essentially this is defering assignments till we have the final prototypes
+		Stop making new clusters at some point
+			Just assign and don't update prototypes
+			Same idea, but preserve cluster balance
+				Don't add more to one cluster till you have found other instances
+					for another cluster.  Defer instances till later
+	Threshold
+		Adapt Threshold based on pairwise similarities of a small sample of
+			cluster members.  Could also compare small subsets of pairwise most
+			similar clusters.
+		Just do .9 * the avg sim scores
+
+	Cluster Separation
+		Use competitive learning to move clusters apart from each other
+
+	New Features
+		Simplify text lines to a histogram of characters in each region
+		Histograms of grid lines, though it would be way sensitive to broken lines
+			Could also just do simple features such as number of line pixels, etc.
+		Simple total line length
+			Number of lines > l1, l2, l3, l4, etc
+		"Bin" text lines (including fragments) and using frequent item set analysis
+			as features (avoids the matching algorithm with lots of preprocessing)
+			The feature matching features with the RFRD clustering does something 
+				similar without explicitly counting the item sets.
+
+	Weights
+		Ada Grad for update rule
+		Regularization to encourage non-sparcity
+			Most terms tend to go to 0, which can lead to overfitting
+		Sparse negative weights using the sim scores for the closest cluster
+			Highlight the differences between similar clusters.  This seems really tricky
+
+	Prototype Construction
+		Build the prototype, then take the match vectors.  Subcluster those match vectors 
+			to see if there are two subclusters.  If there are two clusters of reasonable 
+			size (say based on silhouette score?) then split the cluster.  
+			I bet this will help catch smaller classes that get gobbled up.
+
+	Push Apart
+		Push apart the greedy assignment clusters, then repeat
+		Push apart magnitude depends on the intra-cluster similarities
+	
+	Other
+
+Future Work
+	Cov Network	
+		Blow up training set using jitter based on a generic form model
+			Need lots of image processing to make jittered forms look legit
+			Could also include some known out of domain forms in the random dataset
+		Train a cov net with a binary output layer classifying images as part of the
+			input dataset or not.
+		Strip the binary output layer.
+		Add in a new output layer of K nodes.  Perform compeitive learning over the
+			real input dataset for clustering, or perform direct clustering over
+			the activations of the last hidden layer.
+	Giant Convolutional Autoencoder for images for feature learning.
+		Perhaps use SIFT or SURF to gauge the reconstruction error.
+		A generative Deep Belief Network would probably be best
+	
+	More detailed analysis of the clustering method proposed by Kumar/Doerman
+		Amount of Random Data
+		Other classifiers
+			Wagging?
+		Example method bias
+			What kinds of data does it perform well on?
+			Under what conditions does it perform poorly?
+				Duplicate features?
+				High dimension?
+				Lots of data?
+				Sparse data?
+				Noisy data?
+
+	Extend CONFIRM to learn a codebook of (binary?) explicit features
+		Easier to find correlations for sub-clustering
+		More preprocessing, less expensive similarity.
+
+
+Research Philosophy (Beta)
+	
+	1) Let the data speak for itself
+	2) Work within a robust framework
+	3) Start with a simple idea first and gradually build it up
+	4) Always do a thorough literature search first.
+	5) Make sure the prior work is clearly not sufficient.  If
+		you are unsure, build their system first.
+	6) Spend time continually learning new concepts
+	7) Are your ideas useful to others?
+	8) Don't trust a third party impl of a published method to be correct
+		Unless the third party has a reputation to protect
+		
 

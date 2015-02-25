@@ -4,6 +4,7 @@ import datetime
 import metric
 import cluster
 import network
+import selector
 import numpy as np
 import scipy.spatial.distance
 import sklearn.ensemble
@@ -16,6 +17,9 @@ import random
 import math
 import multiprocessing
 from constants import *
+
+class MockCenter:
+	pass
 
 def remove_duplicate_features(data_matrix, diff=0.01):
 	to_remove = list()
@@ -30,11 +34,43 @@ def remove_duplicate_features(data_matrix, diff=0.01):
 			#print "%d, %d: %.3f, %.3f" % (col, col2, dist, norm_dist)
 			if norm_dist < diff:
 				to_remove.append(col2)
-	print "Removing %d/%d features" % (len(to_remove), data_matrix.shape[1])
+	#print "Removing %d/%d features" % (len(to_remove), data_matrix.shape[1])
 	return np.delete(data_matrix, to_remove, axis=1)
 
+
+def compute_structured_random_matrix(data_matrix, stay_prob=0.5):
+	#print "Constructing Structured Random Training Set"
+
+	rand_shape = (int(data_matrix.shape[0] * SIZE_OF_RANDOM_DATA), data_matrix.shape[1])
+	rand_mat = np.zeros(rand_shape)
+
+	# these are the indices of the rows we sample from
+	row_choices = xrange(data_matrix.shape[0])
+
+	# column indices for both matrices
+	col_idxs = xrange(rand_mat.shape[1])
+	for row in xrange(rand_mat.shape[0]):
+
+		# pick a row idx from data_matrix
+		sampled_row = random.choice(row_choices)
+
+		# always fill in the columns in random order
+		random.shuffle(col_idxs)
+		for col in col_idxs:
+			
+			# fill in the value using the corresponding column of the sampled row
+			rand_mat[row, col] = data_matrix[sampled_row, col]
+
+			# retain the same sampled row for the next column with prob $stay_prob
+			if random.random() > stay_prob:
+				sampled_row = random.choice(row_choices)
+
+	#print "Done\n"
+	return rand_mat
+
+
 def compute_random_matrix(data_matrix):
-	print "Constructing Random Training Set"
+	#print "Constructing Random Training Set"
 
 	rand_shape = (int(data_matrix.shape[0] * SIZE_OF_RANDOM_DATA), data_matrix.shape[1])
 	rand_mat = np.zeros(rand_shape)
@@ -43,22 +79,23 @@ def compute_random_matrix(data_matrix):
 		for row in xrange(rand_mat.shape[0]):
 			rand_mat[row, col] = np.random.choice(vals)
 
-	print "Done\n"
+	#print "Done\n"
 	return rand_mat
 
-def train_random_forest(real_data, fake_data):
-	print "Training Random Forest"
 
-	print "Num features:", real_data.shape[1]
+def train_random_forest(real_data, fake_data):
+	#print "Training Random Forest"
+
+	#print "Num features:", real_data.shape[1]
 	num_tree_features = FUNCTION_NUM_FEATURES(real_data.shape[1])
-	print "Computed Tree features:", num_tree_features
+	#print "Computed Tree features:", num_tree_features
 	rf = sklearn.ensemble.RandomForestClassifier(n_estimators=NUM_TREES, max_features=num_tree_features,
 												bootstrap=False, n_jobs=RF_THREADS)
 	combined_data = np.concatenate( (real_data, fake_data) )
 	labels = np.concatenate( (np.ones(real_data.shape[0]), np.zeros(fake_data.shape[0])) )
 	rf.fit(combined_data, labels)
 
-	print "Done\n"
+	#print "Done\n"
 	return rf
 
 def compute_sim_mat(data_matrix, random_forest):
@@ -70,61 +107,23 @@ def compute_sim_mat(data_matrix, random_forest):
 	return sim_mat
 
 def spectral_cluster(affinity_matrix, num_clusters):
-	print "Performing Spectral Clustering"
+	#print "Performing Spectral Clustering"
 
 	sc = sklearn.cluster.SpectralClustering(n_clusters=num_clusters , affinity="precomputed",
 											assign_labels="discretize")
 	assignments = sc.fit_predict(affinity_matrix)
 
-	print "Done\n"
+	#print "Done\n"
 	return assignments
 
-def spectral_cluster_cv(affinity_matrix, cluster_range):
-	best_silhouette = -1
-	best_assignments = list()
-	dist_matrix = 1 - affinity_matrix
-
-	print 
-	print "Cross Validated Spectral Clustering"
-	print
-	for num_clusters in xrange(cluster_range[0], cluster_range[1] + 1):
-		sc = sklearn.cluster.SpectralClustering(n_clusters=num_clusters , affinity="precomputed",
-												assign_labels="discretize")
-		assignments = sc.fit_predict(affinity_matrix)
-		silhouette = sklearn.metrics.silhouette_score(dist_matrix, assignments, metric='precomputed')
-		silhouette_samples = sklearn.metrics.silhouette_samples(dist_matrix, assignments, metric='precomputed')
-		num_positive = (silhouette_samples > 0).sum()
-		print "%d: %.3f %.3f%%" % (num_clusters, silhouette, num_positive * 100.0)
-		if silhouette > best_silhouette:
-			best_silhouette = silhouette
-			best_assignments = assignments
-	
-	return best_assignments
-
-def spectral_cluster_all(affinity_matrix, cluster_range):
-	all_assignments = dict()
-	dist_matrix = 1 - affinity_matrix
-
-	print 
-	print "All Assignemnts Spectral Clustering"
-	print
-	for num_clusters in xrange(cluster_range[0], cluster_range[1] + 1):
-		#print num_clusters
-		sc = sklearn.cluster.SpectralClustering(n_clusters=num_clusters , affinity="precomputed",
-												assign_labels="discretize")
-		assignments = sc.fit_predict(affinity_matrix)
-		silhouette = sklearn.metrics.silhouette_score(dist_matrix, assignments, metric='precomputed')
-		silhouette_samples = sklearn.metrics.silhouette_samples(dist_matrix, assignments, metric='precomputed')
-		num_positive = (silhouette_samples > 0).sum()
-		all_assignments[num_clusters] = (assignments, silhouette, num_positive)
-	
-	return all_assignments
 
 def form_clusters(instances, assignments):
+	'''
+	Takes a list of instances and assignments and returns 
+		a list of Cluster objects with Mocked centers
+	'''
 	cluster_map = dict()
-	class Mock:
-		pass
-	m = Mock()
+	m = MockCenter()
 	m.label = None
 	for x in xrange(assignments.max() + 1):
 		cluster_map[x] = cluster.Cluster(list(), m, x)
@@ -136,6 +135,79 @@ def form_clusters(instances, assignments):
 	return clusters
 
 
+def form_clusters_alt(instances, l_idx):
+	'''
+		instances - list of clustered things
+		l_idx - list of lists of indices into instances
+			e.g. [ [1, 3, 5], [0, 2, 4] ]
+	'''
+	clusters = list()
+	m = MockCenter()
+	m.label = None
+	for x, l in enumerate(l_idx):
+		_cluster = cluster.Cluster(list(), m, x)
+		for idx in l:
+			_cluster.members.append(instances[idx])
+		clusters.append(_cluster)
+	clusters = filter(lambda c: len(c.members), clusters)
+	map(lambda _cluster: _cluster.set_label(), clusters)
+	return clusters
+	
+
+def set_cluster_center(_cluster):
+	center = _cluster.members[0].copy()
+	for _doc in _cluster.members[1:]:
+		center.aggregate(_doc)
+	center.final_prune()
+	_cluster.center = center
+
+
+def set_cluster_centers(clusters):
+	clusters = filter(lambda c: len(c.members), clusters)
+	for _cluster in clusters:
+		set_cluster_center(_cluster)
+	
+
+# Note that there are many ways we could do this
+def cluster_dist_mat(_cluster, feature_type='match', dist_metric='euclidean'):
+	features = extract_features(_cluster.members, [_cluster.center], feature_type)[0]
+	
+	if dist_metric == 'rf':
+		rand_mat = compute_random_matrix(features)
+		rf = train_random_forest(features, rand_mat)
+		sim_mat = compute_sim_mat(features, rf)
+		dists = 1 - sim_mat
+	else:
+		dists = scipy.spatial.distance.pdist(features, 'euclidean')
+		dists = scipy.spatial.distance.squareform(dists)
+	return dists
+
+def split_clusters(clusters, min_size, feature_type='match', dist_metric='euclidean'):
+	#set_cluster_centers(clusters)
+	split_clusters = map(lambda _cluster: split_cluster(_cluster, min_size, feature_type, dist_metric), clusters)
+	return utils.flatten(split_clusters)
+
+def split_cluster(_cluster, min_size, feature_type='match', dist_metric='euclidean'):
+	'''
+	Splits a cluster using Logan's OPTICS
+		Returns a list of resulting clusters (perhaps just the original)
+	'''
+	if not _cluster.center:
+		set_cluster_center(_cluster)
+
+	dist_mat = cluster_dist_mat(_cluster, feature_type, dist_metric)
+	reachabilities = selector.OPTICS(dist_mat, min_size)
+	indices = selector.separateClusters(reachabilities, min_size)
+
+	# comes back as selector.dataPoint classes
+	indices = map(lambda l: map(lambda dp: dp._id, l), indices)
+	#if len(indices) == 1:
+	#	return [_cluster]
+	#print indices
+	clusters = form_clusters_alt(_cluster.members, indices)
+
+	return clusters
+	
 
 def kumar_cluster(data_matrix, instances, num_clusters):
 	'''
@@ -149,19 +221,267 @@ def kumar_cluster(data_matrix, instances, num_clusters):
 	clusters = form_clusters(instances, assignments)
 	return clusters
 
-def kumar_cluster_cv(data_matrix, instances, cluster_range):
-	'''
-	data_matrix is a numpy matrix with one row for each instance's features
-	instances are arbitrary objects that are clustered
-	'''
-	random_matrix = compute_random_matrix(data_matrix)
-	rf = train_random_forest(data_matrix, random_matrix)
-	sim_matrix = compute_sim_mat(data_matrix, rf)
-	assignments = spectral_cluster_cv(sim_matrix, cluster_range)
-	clusters = form_clusters(instances, assignments)
-	return clusters
 
+def calc_num_features(seeds, feature_type='match'):
+	'''
+	Calculates the total number of features obtained by matching
+		against all seeds
+	'''
+	vectors = list()
+	_doc = seeds[0]
+	for seed in seeds:
+		vectors.append(_extract_features(_doc, seed, feature_type))
+	return sum(map(len, vectors))
+
+
+def extract_matching_features_rand_seeds(docs, amounts):
+	amounts.sort()
+	max_amount = amounts[-1]
+	seeds = random.sample(docs, max_amount)
+	mat, end_posses = extract_features(docs, seeds, 'match')
+
+	mats = list()
+	for amount in amounts:
+		end_pos = end_posses[amount]
+		sub_mat = mat[:,:end_pos]
+		mats.append(sub_mat)
 	
+	return mats
+
+def _extract_features(_doc, seed, feature_type='match'):
+	if feature_type == 'match':
+		vector = seed.match_vector(_doc)
+	elif feature_type == 'sim':
+		vector = seed.global_region_sim(_doc)
+	else:
+		raise Exception("Unknown feature extraction type %s" % repr(feature_type))
+	return vector
+
+
+def extract_features(docs, seeds, feature_type='match',  _print=True):
+	'''
+	Takes all docs and matches them against all seeds to produce
+		a matrix of features.
+		offsets[n] is the col index in feature_mat of the end of the nth seed's features
+	'''
+	num_docs = len(docs)
+	num_features = calc_num_features(seeds, feature_type)
+
+	feature_mat = np.zeros( (num_docs, num_features) )
+	offsets = list()
+	offsets.append(0)
+	for x, _doc in enumerate(docs):
+		if x % 20 == 0 and _print:
+			pass
+			#print "\t%d/%d (%.2f%%) Documents Extracted" % (x, num_docs, 100. * x / num_docs)
+		offset = 0
+		for seed in seeds:
+			vector = _extract_features(_doc, seed, feature_type)
+			feature_mat[x,offset:offset + len(vector)] = vector
+			offset += len(vector)
+			if x == 0:
+				offsets.append(offset)
+	return feature_mat, offsets
+
+
+def extract_matching_features_rand_seeds(docs, amounts):
+	amounts.sort()
+	max_amount = amounts[-1]
+	seeds = random.sample(docs, max_amount)
+	mat, end_posses = extract_features(docs, seeds, 'match')
+
+	mats = list()
+	for amount in amounts:
+		end_pos = end_posses[amount]
+		sub_mat = mat[:,:end_pos]
+		mats.append(sub_mat)
+	
+	return mats
+
+
+def extract_type(docs, num_seeds, perc_types):
+	all_labels = map(lambda _doc: _doc.label, docs)
+	labels = list(set(all_labels))
+	mapping = {label: labels.index(label) for label in labels}
+	true_labels = map(lambda _doc: mapping[_doc.label], docs)
+
+	perc_types.sort()
+	num_types = len(labels)
+	num_types_to_try = list()
+	for perc_type in perc_types:
+		num = int(math.ceil(num_types * perc_type))
+		if num not in num_types_to_try:
+			num_types_to_try.append(num)
+
+	type_histogram = collections.Counter(all_labels)
+	biggest_types = map(lambda tup: tup[0], type_histogram.most_common(num_types))
+
+	docs_by_type = collections.defaultdict(list)
+	for _doc in docs:
+		docs_by_type[_doc.label].append(_doc)
+
+	mats = list()
+	for num in num_types_to_try:
+		types = biggest_types[:num]
+		forms_per_type = num_seeds / num
+		extra = num_seeds % num
+
+		seeds = list()
+		for x, _type in enumerate(types):
+			num_to_sample = forms_per_type
+			if x < extra:
+				num_to_sample += 1
+			if num_to_sample > len(docs_by_type[_type]):
+				seeds += docs_by_type[_type]
+			else:
+				seeds += random.sample(docs_by_type[_type], num_to_sample)
+
+		mat = extract_matching_features(docs, seeds)[0]
+		mats.append(mat)
+	return mats
+
+
+def print_cluster_analysis(clusters):
+	class Mock:
+		pass
+	m = Mock()
+	m.get_clusters = lambda: clusters
+	analyzer = metric.KnownClusterAnalyzer(m)
+	analyzer.print_general_info()
+	analyzer.print_label_conf_mat()
+	analyzer.print_label_cluster_mat()
+	analyzer.print_metric_info()
+
+
+def get_acc_v_measure(clusters):
+	class Mock:
+		pass
+	m = Mock()
+	m.get_clusters = lambda: clusters
+	analyzer = metric.KnownClusterAnalyzer(m)
+	acc = analyzer.accuracy()
+	v = analyzer.v_measure()
+	return acc, v
+	
+
+def test_features(clusters, min_size):
+	#print "Original Clusters"
+	#print_cluster_analysis(clusters)
+	set_cluster_centers(clusters)
+	for dist in ['rf', 'euclidean']:
+		for _type in ['match', 'sim']:
+			sclusters = split_clusters(clusters, min_size, _type, dist)
+			acc, v = get_acc_v_measure(sclusters)
+			print "%s_%s\t%d\t%.3f\t%.3f" % (_type, dist, len(sclusters), acc, v)
+			#print_cluster_analysis(sclusters)
+
+
+def do_cluster(docs, num_seeds, num_clusters):
+	seeds = random.sample(docs, num_seeds)
+	features = extract_features(docs, seeds)[0]
+	clusters = kumar_cluster(features, docs, num_clusters)
+	return clusters
+	
+
+def test_splitting(docs):
+	print "\t".join(["Method", "Original_Num_Clusters", "Split_Num_Clusters", "Diff_Num_Clusters", "Original_Acc", 
+					"Split_Acc", "Diff_Acc", "Original_V-measure", "Split_V-measure", "Diff_V-measure"])
+	min_size = max(int(len(docs) * 0.005), 2)
+	for k in NUM_CLUSTERS:
+		num_seeds = 10
+		clusters = do_cluster(docs, num_seeds, k)
+		set_cluster_centers(clusters)
+		o_acc, o_v = get_acc_v_measure(clusters)
+		print "\t".join(["original", str(k), str(k), '0'] + 
+			map(lambda x: "%.3f" % x, [o_acc, o_acc, 0, o_v, o_v, 0]))
+		for dist in ['rf', 'euclidean']:
+			for _type in ['match', 'sim']:
+				sclusters = split_clusters(clusters, min_size, _type, dist)
+				acc, v = get_acc_v_measure(sclusters)
+				d_acc = acc - o_acc
+				d_v = v - o_v
+				k2 = len(sclusters)
+				print "\t".join(["%s_%s" % (_type, dist), str(k), str(k2), str(k2 - k)] + 
+					map(lambda x: "%.3f" % x, [o_acc, acc, d_acc, o_v, v, d_v]))
+
+
+def all_cluster(docs, num_subset, num_initial_clusters, num_seeds, min_pts, outdir):
+	try:
+		os.makedirs(outdir)
+	except:
+		print "Could not create dir: ", outdir
+	
+	# do the initial clustering
+	random.shuffle(docs)
+	subset = docs[:num_subset]
+	num_subset = len(subset)  # just in case num_subset > len(docs)
+	initial_clusters = do_cluster(subset, num_seeds, num_initial_clusters)
+
+	# metrics
+	print "*" * 30
+	print "Initial Clusters:"
+	print "*" * 30
+	print_cluster_analysis(initial_clusters)
+
+	set_cluster_centers(initial_clusters)
+	utils.save_obj(docs, os.path.join(outdir, "docs.pckl"))
+	utils.save_obj(subset, os.path.join(outdir, "subset.pckl"))
+	utils.save_obj(initial_clusters, os.path.join(outdir, "initial_clusters.pckl"))
+
+	# split the initial clusters
+	sclusters = split_clusters(initial_clusters, min_pts, 'match', 'rf')
+
+	# metrics
+	print "*" * 30
+	print "Split Clusters:"
+	print "*" * 30
+	print_cluster_analysis(sclusters)
+
+	set_cluster_centers(sclusters)
+	utils.save_obj(sclusters, os.path.join(outdir, "split_clusters.pckl"))
+
+
+	# get the features for final classification
+	centers = map(lambda _cluster: _cluster.center, sclusters)
+	features = extract_features(docs, centers)[0]
+	training_labels = np.zeros(num_subset, dtype=np.int16)
+	for x, _doc in enumerate(subset):
+		for y,  _cluster in enumerate(sclusters):
+			if _doc in _cluster.members:
+				training_labels[x] = y
+				break
+	training_features = features[:num_subset,:]
+
+	np.save(os.path.join(outdir, 'features.npy'), features)
+	np.save(os.path.join(outdir, 'training_features.npy'), training_features)
+	np.save(os.path.join(outdir, 'training_labels.npy'), training_labels)
+
+	# train classifier
+	rf = sklearn.ensemble.RandomForestClassifier(n_estimators=NUM_TREES, bootstrap=False, 
+												n_jobs=RF_THREADS)
+	rf.fit(training_features, training_labels)
+	utils.save_obj(rf, os.path.join(outdir, "rf.pckl"))
+
+	# do classification
+	assignments = rf.predict(features)
+
+	# create clusters
+	final_clusters = form_clusters(docs, assignments)
+	utils.save_obj(final_clusters, os.path.join(outdir, "final_clusters.pckl"))
+				
+	# metrics
+	print "*" * 30
+	print "Final Clusters:"
+	print "*" * 30
+	print_cluster_analysis(final_clusters)
+
+	# summary compare
+	for name, clusters in {"init": initial_clusters, "split": sclusters, "final": final_clusters}.iteritems():
+		acc, v = get_acc_v_measure(clusters)
+		k = len(clusters)
+		print "%s:\t%d\t%.3f\t%.3f" % (name, k, acc, v)
+
+
 class KumarCONFIRM(cluster.BaseCONFIRM):
 	
 	def __init__(self, docs, iterations=2, num_initial_seeds=10, num_seeds=10, cluster_range=(2,4), **kwargs):
@@ -264,247 +584,6 @@ class KumarCONFIRM(cluster.BaseCONFIRM):
 		print feature_mat
 		return feature_mat
 
-class FeatureExtractor(object):
-	
-	def __init__(self, docs):
-		self.docs = docs
-		random.shuffle(self.docs)
-
-		self.all_labels = map(lambda _doc: _doc.label, self.docs)
-		self.labels = list(set(self.all_labels))
-		self.mapping = {label: self.labels.index(label) for label in self.labels}
-		self.true_labels = map(lambda _doc: self.mapping[_doc.label], self.docs)
-
-	def extract_type(self, outdir, num_seeds, perc_types):
-		print
-		print "extract_type()"
-		print
-		try:
-			os.makedirs(outdir)
-		except:
-			pass
-
-		np.save(os.path.join(outdir, "labels.npy"), self.true_labels)
-
-		perc_types.sort()
-		num_types = len(self.labels)
-		num_types_to_try = list()
-		for perc_type in perc_types:
-			num = int(math.ceil(num_types * perc_type))
-			if num not in num_types_to_try:
-				num_types_to_try.append(num)
-
-		type_histogram = collections.Counter(self.all_labels)
-		biggest_types = map(lambda tup: tup[0], type_histogram.most_common(num_types))
-
-		docs_by_type = collections.defaultdict(list)
-		for _doc in self.docs:
-			docs_by_type[_doc.label].append(_doc)
-
-		print "num_types_to_try", num_types_to_try
-		print
-		for num in num_types_to_try:
-			print num
-			types = biggest_types[:num]
-			forms_per_type = num_seeds / num
-			extra = num_seeds % num
-
-			seeds = list()
-			for x, _type in enumerate(types):
-				num_to_sample = forms_per_type
-				if x < extra:
-					num_to_sample += 1
-				if num_to_sample > len(docs_by_type[_type]):
-					seeds += docs_by_type[_type]
-				else:
-					seeds += random.sample(docs_by_type[_type], num_to_sample)
-
-			#assert num_seeds == len(seeds)
-
-			mat = self._compute_features(seeds)[0]
-			np.save(os.path.join(outdir, "type_%d_%d.npy" % (num, num_seeds)), mat)
-
-	def extract_random(self, outdir, amounts):
-		print
-		print "extract_random()"
-		print
-		try:
-			os.makedirs(outdir)
-		except:
-			pass
-		np.save(os.path.join(outdir, "labels.npy"), self.true_labels)
-
-		amounts.sort()
-		max_amount = amounts[-1]
-		seeds = random.sample(self.docs, max_amount)
-		mat, end_posses = self._compute_features(seeds)
-
-		print
-		print "Saving matrices"
-		print
-		for amount in amounts:
-			print amount
-			end_pos = end_posses[amount]
-			sub_mat = mat[:,:end_pos]
-			np.save(os.path.join(outdir, "rand_%d.npy" % amount), sub_mat)
-
-	def _compute_features(self, seeds):
-		num_features = 0
-		_doc = self.docs[0]
-		vectors = list()
-		for seed in seeds:
-			vectors.append(seed.match_vector(_doc))
-		num_features = sum(map(len, vectors))
-		feature_mat = np.zeros( (len(self.docs), num_features) )
-		end_poses = list()
-		for x, _doc in enumerate(self.docs):
-			if x % 20 == 0:
-				print "\t%d/%d (%.2f%%) Documents Extracted" % (x, len(self.docs), 100. * x / len(self.docs))
-			offset = 0
-			for seed in seeds:
-				vector = seed.match_vector(_doc)
-				feature_mat[x,offset:offset + len(vector)] = vector
-				offset += len(vector)
-				end_poses.append(offset)
-		return feature_mat, end_poses
-		
-
-
-class BatchMaxCliqueKumarCONFIRM(KumarCONFIRM):
-
-	def __init__(self, docs, seeds_per_batch=2, batch_size=20, **kwargs):
-		super(KumarCONFIRM, self).__init__(docs, **kwargs)
-		self.seeds_per_batch = seeds_per_batch
-		self.batch_size = batch_size
-
-	def _choose_initial_seeds(self):
-		print "Choosing seeds"
-		seeds = list()
-		batch_num = 0
-		while len(seeds) < self.num_initial_seeds:
-			batch = self.docs[batch_num * self.batch_size: (batch_num + 1) * self.batch_size]
-			sim_mat = utils.pairwise(batch, 
-				lambda x, y: max(self.doc_similarity(x, y), self.doc_similarity(y, x)))
-
-			print
-			print "Doc Sim Mat"
-			utils.print_mat(utils.apply_mat(sim_mat, lambda x: "%3.2f" % x))
-			idxs = utils.find_best_clique(sim_mat, self.seeds_per_batch)
-			for idx in idxs:
-				_doc = batch[idx]
-				print "Adding %d %s" % (idx, _doc.label)
-				seeds.append(_doc)
-			batch_num += 1
-		print "Done"
-		return seeds
-
-class SemiSupervisedKumarCONFIRM(KumarCONFIRM):
-	
-	def __init__(self, docs, num_seeds=-1, num_per_seed=1, **kwargs):
-		super(SemiSupervisedKumarCONFIRM, self).__init__(docs, **kwargs)
-		self.num_per_seed = num_per_seed
-		self.num_seeds = num_seeds
-
-	def _choose_initial_seeds(self):
-		dseeds = collections.defaultdict(list)
-		num_labels = len(set(map(lambda _doc: _doc.label, self.docs)))
-		if self.num_seeds != -1:
-			self.num_per_seed = self.num_seeds / num_labels + 1 
-		for _doc in self.docs:
-			_doc._load_check()
-			label = _doc.label
-			if len(dseeds[label]) < self.num_per_seed:
-				dseeds[label].append(_doc)
-		seeds = list()
-		for x in xrange(self.num_per_seed):
-			for label in dseeds:
-				seeds.append(dseeds[label][x])
-		if self.num_seeds != -1:
-			seeds = seeds[:self.num_seeds]
-		return seeds
-		
-class RandomSeedsKumarCONFIRM(KumarCONFIRM):
-	
-	def _choose_initial_seeds(self):
-		return random.sample(self.docs, min(len(self.docs, self.num_initial_seeds)))
-
-
-#def compute(args):
-#	docs = args[0]
-#	seeds = args[1]
-#	start = args[2]
-#	finish = args[3]
-#	feature_mat = args[4]
-#
-#	# make copy of seeds so matching isn't thrown off
-#	seeds = map(lambda seed: seed.copy(seed._id), seeds)
-#	for x in xrange(start, finish):
-#		print "Doc", x
-#		offset = 0
-#		_doc = docs[x]
-#		_doc._load_check()
-#		for seed in seeds:
-#			vector = seed.match_vector(_doc)
-#			feature_mat[x,offset:offset + len(vector)] = vector
-#			offset += len(vector)
-#	
-#
-#class ParallelKumarCONFIRM(KumarCONFIRM):
-#	
-#	def __init__(self, docs, processes=2, **kwargs):
-#		super(ParallelKumarCONFIRM, self).__init__(docs, **kwargs)
-#		self.processes = processes
-#
-#	def _compute_features(self, seeds):
-#		num_features = 0
-#		_doc = self.docs[0]
-#		vectors = list()
-#		for seed in seeds:
-#			vectors.append(seed.match_vector(_doc))
-#		num_features = sum(map(len, vectors))
-#		pool = multiprocessing.Pool(self.processes)
-#
-#		feature_mat = np.zeros( (len(self.docs), num_features) )
-#		list_of_args = list()
-#		num_docs = len(self.docs) / self.processes
-#		for pid in xrange(self.processes):
-#			list_of_args.append( (self.docs, seeds, pid * num_docs, (pid + 1) * num_docs, feature_mat) )
-#		pool.map(compute, list_of_args, chunksize=1)
-#
-#		print feature_mat
-#		return feature_mat
-
-class FastSeedKumarCONFIRM(KumarCONFIRM):
-	'''
-	When forming seeds from the clustering results, uses only a sample of documents to
-		aggregate so that it goes fast
-	'''
-
-	def __init__(self, docs, min_docs=20, perc_docs=.1, **kwargs):
-		super(FastSeedKumarCONFIRM, self).__init__(docs, **kwargs)
-		self.min_docs = min_docs
-		self.perc_docs = perc_docs
-	
-	def _form_seeds(self):
-		seeds = list()
-		for _cluster in self.clusters:
-			if not _cluster.members:
-				continue
-			num_docs = int(len(_cluster.members) * self.perc_docs)
-			num_docs = max(num_docs, self.min_docs)
-			num_docs = min(num_docs, len(_cluster.members))
-			docs = random.sample(_cluster.members, num_docs)
-			seed = docs[0].copy()
-			for _doc in docs[1:]:
-				seed.aggregate(_doc)
-			seed.final_prune()
-			seeds.append(seed)
-		return seeds
-
-
-#class BestKumarCONFIRM(RandomSeedsKumarCONFIRM, FastSeedKumarCONFIRM):
-class BestKumarCONFIRM(KumarCONFIRM):
-	pass
 
 class PipelineCONFIRM(cluster.BaseCONFIRM):
 	

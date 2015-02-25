@@ -11,10 +11,11 @@ from constants import *
 
 class Cluster:
 	
-	def __init__(self, members, center, _id = None):
+	def __init__(self, members, center=None, _id = None):
 		self.members = members
 		self.center = center
-		self.label = self.center.label
+		if self.center:
+			self.label = self.center.label
 		self._id = _id
 
 	def set_label(self):

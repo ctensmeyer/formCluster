@@ -8,3 +8,9 @@ cluster/archive/*
 cluster/err/*
 cluster/output/*
 kumar/*.txt
+old_stuff/*
+analysis
+pics
+results
+.notes.txt.swp
+preprocessing/deskew

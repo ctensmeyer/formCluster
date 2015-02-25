@@ -168,7 +168,9 @@ class Document:
 			self.feature_set_names.append(name)
 			self.feature_name_map[name] = feature_set
 		else:
-			utils.advance_to_blank(f)
+			# this is the last feature set currently, so no point burning through the file
+			pass
+			#utils.advance_to_blank(f)
 
 		self.loaded = True
 		#except:

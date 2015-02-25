@@ -1,10 +1,8 @@
 #!/bin/bash
 
-num_threads=2
-#datasets="washpass"
-datasets="wales_20"
+num_threads=3
+datasets="wales_balanced"
 
-params="3"
-models="pipeline"
-t="1"
-nice parallel --gnu -j $num_threads ./cluster.sh {1} {2} {3} {4} 0 ::: $datasets ::: $params ::: $models ::: $t
+t="1 2 3"
+
+nice parallel --gnu -j $num_threads ./feature.sh {1} {2} ::: $datasets ::: $t

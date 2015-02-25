@@ -2,8 +2,8 @@
 import os
 import sys
 
-img_ext = ".jpg"
-expected_ext = [".xml", "_linesH.png", "_linesV.png"]
+img_ext = ".txt"
+expected_ext = [".jpg"]
 
 
 def main(indir):
