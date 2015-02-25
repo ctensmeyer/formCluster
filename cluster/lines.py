@@ -850,6 +850,7 @@ class LMatcher(LineMatcher):
 			line.truncate(self.size)
 			merged_lines.append(line)
 		sort_lines(merged_lines)
+		merged_lines = filter(lambda line: line.length > 1, merged_lines)
 		return merged_lines
 
 	def get_match_vector(self):

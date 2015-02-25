@@ -93,6 +93,13 @@ class Line(Feature):
 			return (self.pos[0], self.pos[1] + self.length)
 		else:
 			return (self.pos[0] + self.length, self.pos[1])
+		
+
+	#def end_pos(self):
+	#	if self.orien == Line.HORIZONTAL:
+	#		return (self.pos[0], self.pos[1] + self.length)
+	#	else:
+	#		return (self.pos[0] + self.length, self.pos[1])
 
 	def length_range(self, offset=0):
 		return (self.pos[1-self.orien] + offset, self.pos[1-self.orien] + self.length + offset)
@@ -121,6 +128,7 @@ class TextLine(Feature):
 		self.N = len(self.text)
 		self.members = collections.Counter()
 		self.members[self.text] += 1
+		self.set_end_pos()
 
 	def find_median(self):
 		most_common = self.members.most_common(2);
@@ -146,7 +154,7 @@ class TextLine(Feature):
 		self.text = self.find_median()
 		self.N = len(self.text)
 		self.count += other.count
-		# because we are taking the median string, the chars no longer matter
+		self.set_end_pos()
 
 	def aggregate_partial(self, prefix, suffix):
 		''' aggregate self with a prefix and a suffix text lines '''
@@ -161,6 +169,7 @@ class TextLine(Feature):
 		self.text = self.find_median()
 		self.N = len(self.text)
 		self.count += weights[1]
+		self.set_end_pos()
 
 	def aggregate_as_prefix(self, other):
 		''' self is a prefix of other '''
@@ -175,6 +184,7 @@ class TextLine(Feature):
 		self.text = self.find_median()
 		self.N = len(self.text)
 		self.count += weights[1]
+		self.set_end_pos()
 
 	def aggregate_as_suffix(self, other):
 		''' self is a suffix of other '''
@@ -189,12 +199,14 @@ class TextLine(Feature):
 		self.text = self.find_median()
 		self.N = len(self.text)
 		self.count += weights[1]
+		self.set_end_pos()
 
 	def copy(self):
 		cpy = TextLine(self.text, self.pos, self.size)
 		cpy.count = self.count
 		cpy.weight = self.weight
 		cpy.members = collections.Counter(self.members)
+		cpy.set_end_pos()
 		return cpy
 
 	def match_value(self):
@@ -210,8 +222,8 @@ class TextLine(Feature):
 	def __repr__(self):
 		return self.__str__()
 		
-	def end_pos(self):
-		return (self.pos[0] + self.size[0], self.pos[1])
+	def set_end_pos(self):
+		self.end_pos = (self.pos[0] + self.size[0], self.pos[1])
 
 	def bottom_right(self):
 		return (self.pos[0] + self.size[0], self.pos[1] + self.size[1])

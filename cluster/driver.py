@@ -1,4 +1,5 @@
 
+import collections
 import datetime
 import random
 import shutil
@@ -13,6 +14,8 @@ import utils
 import lines
 import doc
 
+
+_output_dir = "output/"
 aggregate_dir = "../data/subsets/wales_100/UK1911Census_EnglandWales_Household15Names_03_01"
 
 single_dir = "../data/subsets/wales_20/UK1911Census_EnglandWales_Household15Names_03_01"
@@ -201,8 +204,8 @@ def extract():
 	#num_type_seeds = 7 if dataset not in ['nist', 'wales_balanced'] else 50
 
 	extractor = ncluster.FeatureExtractor(docs)
-	extractor.extract_random(os.path.join(outdir, 'rand'), rand_amounts)
-	#extractor.extract_type(os.path.join(outdir, 'type'), num_type_seeds, type_percs)
+	#extractor.extract_random(os.path.join(outdir, 'rand'), rand_amounts)
+	extractor.extract_type(os.path.join(outdir, 'type'), num_type_seeds, type_percs)
 	
 
 def check_init():
@@ -369,7 +372,47 @@ def draw_all():
 		_doc.draw().save("output/docs/%s.png" % _doc._id)
 	
 
+def test_features_syn():
+	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
+	max_size = int(sys.argv[3])
+	num_combine = int(sys.argv[4])
+	min_size = int(sys.argv[5])
 
+	d = collections.defaultdict(list)
+	for _doc in docs:
+		d[_doc.label].append(_doc)
+	pure_clusters = d.values()
+	broken_clusters = list()
+	for x in xrange(10):
+		for _cluster in pure_clusters:
+			broken_clusters += [_cluster[i:i + max_size] for i in range(0, len(_cluster), max_size)]
+		combined_clusters = list()
+		while broken_clusters:
+			if len(broken_clusters) < num_combine:
+				clusters = list(broken_clusters)
+			else:
+				clusters = random.sample(broken_clusters, num_combine)
+			for _cluster in clusters:
+				broken_clusters.remove(_cluster)
+			combined_clusters.append(utils.flatten(clusters))
+
+		clusters = map(lambda combined_cluster: cluster.Cluster(combined_cluster), combined_clusters)
+		ncluster.test_features(clusters, min_size)
+
+def test_features():
+	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
+	random.shuffle(docs)
+	ncluster.test_splitting(docs)
+
+def all_cluster():
+	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
+	num_subset = int(sys.argv[3])
+	num_initial_clusters = int(sys.argv[4])
+	num_seeds = int(sys.argv[5])
+	min_pts = int(sys.argv[6])
+	outdir = os.path.join(_output_dir, str(datetime.datetime.now()).replace(' ', '_') + "_".join(sys.argv[1:]))
+	ncluster.all_cluster(docs, num_subset, num_initial_clusters, num_seeds, min_pts, outdir)
+	
 
 def main(arg):
 	if arg == "cluster":
@@ -390,6 +433,10 @@ def main(arg):
 		check_init()
 	if arg == "extract":
 		extract()
+	if arg == "feature":
+		test_features()
+	if arg == "all":
+		all_cluster()
 
 if __name__ == "__main__":
 	print "Start"
