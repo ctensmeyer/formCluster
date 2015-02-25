@@ -22,7 +22,7 @@ _num_histograms = 21
 
 # Random Forest
 _num_trees = 2000
-_rf_threads = 4
+_rf_threads = 7
 _perc_random_data = 1
 
 # Spectral Clustering
@@ -45,14 +45,14 @@ _stay_probs = [0, 0.1, 0.25, 0.5, 0.75, 0.9]
 def compute_structured_random_matrix(data_matrix, stay_prob=0.5):
 	print "Constructing Structured Random Training Set"
 
-	rand_shape = (int(data_matrix.shape[0] * SIZE_OF_RANDOM_DATA), data_matrix.shape[1])
+	rand_shape = (int(data_matrix.shape[0] * _perc_random_data), data_matrix.shape[1])
 	rand_mat = np.zeros(rand_shape)
 
 	# these are the indices of the rows we sample from
-	row_choices = xrange(data_matrix.shape[0])
+	row_choices = range(data_matrix.shape[0])
 
 	# column indices for both matrices
-	col_idxs = xrange(rand_mat.shape[1])
+	col_idxs = range(rand_mat.shape[1])
 	for row in xrange(rand_mat.shape[0]):
 
 		# pick a row idx from data_matrix
