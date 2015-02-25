@@ -3,15 +3,15 @@
 function dosamplecluster
 {
 	dataset=$1
-	path=~/formCluster/analysis/experiments/explore/sampling_scheme/datasets/
-	python samplecluster.py $path/$dataset/kumar_mats/$num $path/$dataset/data/kumar_results2.txt 40 > $path/$dataset/logs/kumar_log2.txt 
-	#python samplecluster.py $path/$dataset/rand_mats/$num $path/$dataset/data/rand_results.txt 40 > $path/$dataset/logs/rand_log.txt 
-	#python samplecluster.py $path/$dataset/type_mats/$num $path/$dataset/data/type_results.txt 40 > $path/$dataset/logs/type_log.txt 
+	kind=$2
+	path=~/formCluster/sampling_scheme/datasets/
+	python samplecluster.py $path/$dataset/${kind}_mats $path/$dataset/data/${kind}_results.txt 40 > $path/$dataset/logs/${kind}_log.txt 
 }
 
 export -f dosamplecluster
 
-datasets="wales_small"
+datasets="washpass padeaths_balanced padeaths_all wales_small wales_balanced"
+kinds="kumar rand type"
 
-nice parallel --gnu -j 5 dosamplecluster {1} ::: $datasets
+nice parallel --gnu -j 9 dosamplecluster {1} {2} ::: $datasets ::: $kinds
 
