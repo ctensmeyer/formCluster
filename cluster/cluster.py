@@ -1,5 +1,5 @@
 
-import network
+import network2
 import utils
 import doc
 
@@ -391,7 +391,7 @@ class WavgNetCONFIRM(RegionCONFIRM):
 	def _add_cluster(self, _doc, member=True):
 		cluster = super(WavgNetCONFIRM, self)._add_cluster(_doc, member)
 		weights = _doc.global_region_weights()
-		cluster.network = network.WeightedAverageNetwork(len(weights), weights, self.lr)
+		cluster.network = network2.WeightedAverageNetwork(len(weights), weights, self.lr)
 		return cluster
 
 	def cluster_doc_similarity(self, cluster, _doc):

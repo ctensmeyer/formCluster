@@ -3,7 +3,7 @@ import os
 import datetime
 import metric
 import cluster
-import network
+import network2
 import selector
 import numpy as np
 import scipy.spatial.distance
@@ -905,7 +905,7 @@ class PipelineCONFIRM(cluster.BaseCONFIRM):
 				else:
 					for x in xrange(len(weights)):
 						weights[x] += sim_vec[x]
-			_cluster.network = network.WeightedAverageNetwork(len(weights), weights, default_lr=0)
+			_cluster.network = network2.WeightedAverageNetwork(len(weights), weights, default_lr=0)
 
 	# another idea for this is to use not just the positive scores, but to use the negative ones
 	#  and use 1D logistic regression.  Of course that presupposes that all clusters are separate
