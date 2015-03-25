@@ -413,6 +413,18 @@ def all_cluster():
 	outdir = os.path.join(_output_dir, str(datetime.date.today()) + "_" + "_".join(sys.argv[1:]))
 	ncluster.all_cluster(docs, num_subset, num_initial_clusters, num_seeds, min_pts, outdir)
 
+def overall_experiment():
+	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
+	num_subset = len(docs)
+	#num_seeds = 50
+	num_seeds = 3
+	#initial_cluster_range = (2, 51)
+	initial_cluster_range = (2, 4)
+	#min_pts = 10
+	min_pts = 3
+	ncluster.overall(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
+	
+
 def main(arg):
 	if arg == "cluster":
 		cluster_known()
@@ -436,6 +448,8 @@ def main(arg):
 		test_features()
 	if arg == "all":
 		all_cluster()
+	if arg == "overall":
+		overall_experiment()
 
 if __name__ == "__main__":
 	print "Start"
