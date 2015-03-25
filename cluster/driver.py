@@ -416,12 +416,9 @@ def all_cluster():
 def overall_experiment():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
 	num_subset = len(docs)
-	#num_seeds = 50
-	num_seeds = 3
-	#initial_cluster_range = (2, 51)
-	initial_cluster_range = (2, 4)
-	#min_pts = 10
-	min_pts = 3
+	num_seeds = 50
+	initial_cluster_range = (2, 51)
+	min_pts = 10
 	ncluster.overall(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
 	
 
