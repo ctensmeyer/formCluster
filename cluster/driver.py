@@ -431,7 +431,7 @@ def subset_experiment():
 	if num_types != 2:
 		initial_cluster_range.append(num_types / 2)
 	initial_cluster_range.append(num_types)
-	initial_cluster_range.append(2 * num_types)
+	initial_cluster_range.append(int(1.5 * num_types))
 
 	possible_subsets = [100, 200, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
 	subsets = list()
