@@ -368,7 +368,7 @@ def separateClusters(output, minPts):
 
     std = np.std(forward)
     
-    fig = pyplot.figure(3)
+    #fig = pyplot.figure(3)
     #pyplot.clf()
     #pyplot.title("Derivative")
     
