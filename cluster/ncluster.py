@@ -498,58 +498,61 @@ def overall(docs, num_subset, num_seeds, num_initial_cluster_range, min_pts):
 	sim_matrix = compute_sim_mat(features, rf)
 
 	for num_initial_clusters in num_initial_cluster_range:
-		assignments = spectral_cluster(sim_matrix, num_initial_clusters)
-		initial_clusters = form_clusters(subset, assignments)
+		try:
+			assignments = spectral_cluster(sim_matrix, num_initial_clusters)
+			initial_clusters = form_clusters(subset, assignments)
 
-		print "*" * 30
-		print "Initial Clusters:"
-		print "*" * 30
-		print_cluster_analysis(initial_clusters)
+			print "*" * 30
+			print "Initial Clusters:"
+			print "*" * 30
+			print_cluster_analysis(initial_clusters)
 
-		set_cluster_centers(initial_clusters)
-		sclusters = split_clusters(initial_clusters, min_pts, 'match', 'rf')
+			set_cluster_centers(initial_clusters)
+			sclusters = split_clusters(initial_clusters, min_pts, 'match', 'rf')
 
-		print "*" * 30
-		print "Split Clusters:"
-		print "*" * 30
-		print_cluster_analysis(sclusters)
+			print "*" * 30
+			print "Split Clusters:"
+			print "*" * 30
+			print_cluster_analysis(sclusters)
 
-		set_cluster_centers(sclusters)
-		
-		# get the features for final classification
-		centers = map(lambda _cluster: _cluster.center, sclusters)
-		features = extract_features(docs, centers)[0]
-		training_labels = np.zeros(num_subset, dtype=np.int16)
-		for x, _doc in enumerate(subset):
-			for y,  _cluster in enumerate(sclusters):
-				if _doc in _cluster.members:
-					training_labels[x] = y
-					break
-		training_features = features[:num_subset,:]
+			set_cluster_centers(sclusters)
+			
+			# get the features for final classification
+			centers = map(lambda _cluster: _cluster.center, sclusters)
+			features = extract_features(docs, centers)[0]
+			training_labels = np.zeros(num_subset, dtype=np.int16)
+			for x, _doc in enumerate(subset):
+				for y,  _cluster in enumerate(sclusters):
+					if _doc in _cluster.members:
+						training_labels[x] = y
+						break
+			training_features = features[:num_subset,:]
 
-		# train classifier
-		rf = sklearn.ensemble.RandomForestClassifier(n_estimators=NUM_TREES, bootstrap=False, 
-													n_jobs=RF_THREADS)
-		rf.fit(training_features, training_labels)
+			# train classifier
+			rf = sklearn.ensemble.RandomForestClassifier(n_estimators=NUM_TREES, bootstrap=False, 
+														n_jobs=RF_THREADS)
+			rf.fit(training_features, training_labels)
 
-		# do classification
-		assignments = rf.predict(features)
+			# do classification
+			assignments = rf.predict(features)
 
-		# create clusters
-		final_clusters = form_clusters(docs, assignments)
-					
-		# metrics
-		print "*" * 30
-		print "Final Clusters:"
-		print "*" * 30
-		print_cluster_analysis(final_clusters, True)
+			# create clusters
+			final_clusters = form_clusters(docs, assignments)
+						
+			# metrics
+			print "*" * 30
+			print "Final Clusters:"
+			print "*" * 30
+			print_cluster_analysis(final_clusters, True)
 
-		# summary compare
-		for name, clusters in {"init": initial_clusters, "split": sclusters, "final": final_clusters}.iteritems():
-			acc, v = get_acc_v_measure(clusters)
-			k = len(clusters)
-			init_k = num_initial_clusters
-			print "%s\t%d\t%d\t%d\t%.4f\t%.4f" % (name, num_subset, k, init_k, acc, v)
+			# summary compare
+			for name, clusters in {"init": initial_clusters, "split": sclusters, "final": final_clusters}.iteritems():
+				acc, v = get_acc_v_measure(clusters)
+				k = len(clusters)
+				init_k = num_initial_clusters
+				print "%s\t%d\t%d\t%d\t%.4f\t%.4f" % (name, num_subset, k, init_k, acc, v)
+		except Exception:
+			print traceback.print_exc()	
 
 def all_cluster(docs, num_subset, num_initial_clusters, num_seeds, min_pts, outdir):
 	try:
