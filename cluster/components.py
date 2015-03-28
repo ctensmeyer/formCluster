@@ -144,6 +144,9 @@ class TextLine(Feature):
 
 	def aggregate(self, other):
 		self.members[other.text] += 1
+		if self.count + other.count == 0:
+			self.count = 1
+			other.count = 1
 		weights = [self.count, other.count]
 		x = utils.wavg([self.pos[0], other.pos[0]], weights)
 		y = utils.wavg([self.pos[1], other.pos[1]], weights)
