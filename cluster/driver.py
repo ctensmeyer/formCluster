@@ -443,6 +443,28 @@ def subset_experiment():
 		num_seeds = 50
 		min_pts = 30
 		ncluster.subset(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
+
+def subset_experiment2():
+	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
+
+	num_types = len(set(map(lambda _doc: _doc.label, docs)))
+	print "Num Types:", num_types
+	initial_cluster_range = list()
+	if num_types != 2:
+		initial_cluster_range.append(num_types / 2)
+	initial_cluster_range.append(num_types)
+	initial_cluster_range.append(int(1.5 * num_types))
+
+	possible_subsets = [int(sys.argv[3])]
+	subsets = list()
+	for s in possible_subsets:
+		if s < len(docs):
+			subsets.append(s)
+	subsets.append(len(docs))
+	for num_subset in subsets:
+		num_seeds = 50
+		min_pts = 30
+		ncluster.subset(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
 	
 
 def main(arg):
@@ -472,6 +494,8 @@ def main(arg):
 		overall_experiment()
 	if arg == "subset":
 		subset_experiment()
+	if arg == "subset2":
+		subset_experiment2()
 
 if __name__ == "__main__":
 	print "Start"
