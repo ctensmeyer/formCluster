@@ -417,12 +417,12 @@ def overall_experiment():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
 	num_types = len(set(map(lambda _doc: _doc.label, docs)))
 	num_subset = len(docs)
-	num_seeds = 5
+	num_seeds = 10
 	#initial_cluster_range = range(num_types / 2, int(1.5 * num_types))
-	initial_cluster_range = [4]
-	min_pts = 3
-	#ncluster.overall(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
-	ncluster.test_par(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
+	initial_cluster_range = [10]
+	min_pts = 5
+	ncluster.overall(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
+	#ncluster.test_par(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
 
 def test_par():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
@@ -467,7 +467,7 @@ def subset_experiment():
 	for num_subset in subsets:
 		num_seeds = 50
 		min_pts = 30
-		ncluster.subset(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
+		ncluster.overall(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
 
 def subset_experiment2():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
@@ -480,16 +480,11 @@ def subset_experiment2():
 	initial_cluster_range.append(num_types)
 	initial_cluster_range.append(int(1.5 * num_types))
 
-	possible_subsets = [int(sys.argv[3])]
-	subsets = list()
-	for s in possible_subsets:
-		if s < len(docs):
-			subsets.append(s)
-	#subsets.append(len(docs))
+	subsets = [int(sys.argv[3])]
 	for num_subset in subsets:
 		num_seeds = 50
 		min_pts = 30
-		ncluster.subset(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
+		ncluster.overall(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
 	
 
 def main(arg):
