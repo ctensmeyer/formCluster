@@ -52,7 +52,7 @@ USE_SURF = False
 # New Clustering constants
 NUM_TREES = 2000
 FUNCTION_NUM_FEATURES = lambda x: int(math.sqrt(x))
-RF_THREADS = 1
+THREADS = 1
 SIZE_OF_RANDOM_DATA = 1
 
 REMOVE_DUP_FEATURES = False
