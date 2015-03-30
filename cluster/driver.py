@@ -417,10 +417,35 @@ def overall_experiment():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
 	num_types = len(set(map(lambda _doc: _doc.label, docs)))
 	num_subset = len(docs)
-	num_seeds = 50
-	initial_cluster_range = range(num_types / 2, int(1.5 * num_types))
-	min_pts = 30
-	ncluster.overall(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
+	num_seeds = 5
+	#initial_cluster_range = range(num_types / 2, int(1.5 * num_types))
+	initial_cluster_range = [4]
+	min_pts = 3
+	#ncluster.overall(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
+	ncluster.test_par(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
+
+def test_par():
+	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
+	num_seeds = 5
+	seeds = random.sample(docs, num_seeds)
+
+	# parallel
+	start_time = time.time()
+	features_par = ncluster.extract_features_par(docs, seeds)[0]
+	end_time = time.time()
+	print "Parallel Time elapsed: ", datetime.timedelta(seconds=(end_time - start_time))
+
+	# serial
+	start_time = time.time()
+	features_ser = ncluster.extract_features(docs, seeds)[0]
+	end_time = time.time()
+	print "Serial Time elapsed: ", datetime.timedelta(seconds=(end_time - start_time))
+
+	for x in xrange(features_par.shape[0]):
+		for y in xrange(features_par.shape[1]):
+			if features_par[x,y] != features_ser[x,y]:
+				print x, y, features_par[x,y], features_ser[x,y]
+
 
 def subset_experiment():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
@@ -460,7 +485,7 @@ def subset_experiment2():
 	for s in possible_subsets:
 		if s < len(docs):
 			subsets.append(s)
-	subsets.append(len(docs))
+	#subsets.append(len(docs))
 	for num_subset in subsets:
 		num_seeds = 50
 		min_pts = 30
@@ -496,6 +521,8 @@ def main(arg):
 		subset_experiment()
 	if arg == "subset2":
 		subset_experiment2()
+	if arg == "testpar":
+		test_par()
 
 if __name__ == "__main__":
 	print "Start"
