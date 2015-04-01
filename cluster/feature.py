@@ -156,7 +156,7 @@ class TextLineFeatureSet(LineFeatureSet):
 			#fill = colors[idx % len(colors)] if colortext else "black"
 			fill = "black"
 			draw.text(line.pos, line.text, font=utils.get_font(line.text, line.size[0]), fill=fill)
-			draw.text( line.pos, "%.2f" % line.count, fill=TEXT_COUNT_COLOR)
+			#draw.text( line.pos, "%.2f" % line.count, fill=TEXT_COUNT_COLOR)
 
 	def _get_decay(self):
 		return TEXT_DECAY 
@@ -263,7 +263,7 @@ class GridLineFeatureSet(LineFeatureSet):
 			else:
 				draw.line( (utils.tup_int(line.pos), utils.tup_int( (line.pos[0], line.pos[1] + line.length) )) ,
 							width=int(line.thickness * 2), fill=VERT_COLOR)
-			draw.text( utils.tup_int(line.pos), "%.2f" % line.count, fill=GRID_LINE_COUNT_COLOR)
+			#draw.text( utils.tup_int(line.pos), "%.2f" % line.count, fill=GRID_LINE_COUNT_COLOR)
 
 	def _get_decay(self):
 		return LINE_DECAY 
