@@ -645,7 +645,6 @@ def run_par(docs, Ks, subsets, seeds, min_pts, init_only=False):
 		subset = docs[:size_subset]
 		for num_seeds in seeds:
 			try:
-				seeds = all_seeds[:num_seeds]
 				end_col = offsets[num_seeds]
 				feature_mat = largest_feature_mat[:size_subset,:end_col]
 
@@ -737,7 +736,6 @@ def run(docs, Ks, subsets, seeds, min_pts, init_only=False):
 		subset = docs[:size_subset]
 		for num_seeds in seeds:
 			try:
-				seeds = all_seeds[:num_seeds]
 				end_col = offsets[num_seeds]
 				feature_mat = largest_feature_mat[:size_subset,:end_col]
 
