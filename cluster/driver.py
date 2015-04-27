@@ -449,6 +449,15 @@ def test_par():
 				print x, y, features_par[x,y], features_ser[x,y]
 
 
+def test():
+	docs = doc.get_docs_nested(get_data_dir("wales_20"))
+	num_types = len(set(map(lambda _doc: _doc.label, docs)))
+	num_subset = len(docs)
+	num_seeds = 4
+	initial_cluster_range = [3, 4, 5]
+	min_pts = 2
+	ncluster.overall(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
+
 def subset_experiment():
 	docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
 
@@ -487,8 +496,75 @@ def subset_experiment2():
 		num_seeds = 50
 		min_pts = 30
 		ncluster.overall(docs, num_subset, num_seeds, initial_cluster_range, min_pts)
-	
+
 def run():
+	try:
+		# sys.argv[3] is the number of threads
+		Ks = map(int, sys.argv[4].split(","))
+		subsets = map(int, sys.argv[5].split(","))
+		seeds = map(int, sys.argv[6].split(","))
+		docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
+		
+	except:
+		print "python driver.py run dataset #threads Ks subsets seeds"
+		return
+
+	Ks.sort()
+	subsets.sort()
+	seeds.sort()
+	filtered = filter(lambda x: x < len(docs), subsets)
+	if len(filtered) < len(subsets):
+		filtered.append(len(docs))
+		subsets = filtered
+
+	ncluster.run_no_split(docs, Ks, subsets, seeds)
+
+def auto():
+	try:
+		# sys.argv[3] is the number of threads
+		Ks = map(int, sys.argv[4].split(","))
+		subsets = map(int, sys.argv[5].split(","))
+		seeds = map(int, sys.argv[6].split(","))
+		docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
+		
+	except:
+		print "python driver.py auto dataset #threads Ks subsets seeds"
+		return
+
+	Ks.sort()
+	subsets.sort()
+	seeds.sort()
+	filtered = filter(lambda x: x < len(docs), subsets)
+	if len(filtered) < len(subsets):
+		filtered.append(len(docs))
+		subsets = filtered
+
+	ncluster.run_auto_minpts(docs, Ks, subsets, seeds)
+
+def type():
+	try:
+		# sys.argv[3] is the number of threads
+		Ks = map(int, sys.argv[4].split(","))
+		subsets = map(int, sys.argv[5].split(","))
+		seeds = map(int, sys.argv[6].split(","))
+		types = map(int, sys.argv[7].split(","))
+		docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
+		
+	except:
+		print "python driver.py type dataset #threads Ks subsets seeds types"
+		return
+
+	Ks.sort()
+	subsets.sort()
+	seeds.sort()
+	filtered = filter(lambda x: x < len(docs), subsets)
+	if len(filtered) < len(subsets):
+		filtered.append(len(docs))
+		subsets = filtered
+
+	ncluster.run_type(docs, Ks, subsets, seeds, types)
+	
+def run_old():
 	try:
 		# sys.argv[3] is the number of threads
 		Ks = map(int, sys.argv[4].split(","))
@@ -558,6 +634,10 @@ def main(arg):
 		run()
 	if arg == "extract":
 		extract()
+	if arg == "auto":
+		auto()
+	if arg == "type":
+		type()
 
 if __name__ == "__main__":
 	print "Start"
