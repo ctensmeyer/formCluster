@@ -14,6 +14,7 @@ import utils
 import lines
 import doc
 from constants import *
+import numpy as np
 
 
 _output_dir = "output/"
@@ -519,6 +520,27 @@ def run():
 		ncluster.run(docs, Ks, subsets, seeds, min_pts, init_only)
 	
 
+def extract():
+	try:
+		# sys.argv[3] is the number of threads
+		num_seeds = int(sys.argv[4])
+		feature_file = sys.argv[5]
+		manifest_file = sys.argv[6]
+		docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
+	except:
+		print "python driver.py extract dataset #threads num_seeds feature_file manifest_file"
+		return
+
+	seeds = random.sample(docs, min(num_seeds, len(docs)))
+	feature_mat = ncluster.extract_features_par(docs, seeds)
+	np.save(feature_file, feature_mat)
+	out = open(manifest_file, 'w')
+	for _doc in docs:
+		out.write("%s\n" % _doc.source_file)
+
+	out.close()
+	
+
 def main(arg):
 	if arg == "cluster":
 		cluster_known()
@@ -534,6 +556,8 @@ def main(arg):
 		draw_all()
 	if arg == "run":
 		run()
+	if arg == "extract":
+		extract()
 
 if __name__ == "__main__":
 	print "Start"
