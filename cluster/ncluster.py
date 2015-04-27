@@ -315,6 +315,21 @@ def split_cluster(_cluster, dist_mat, min_size):
 
 	return clusters
 
+def split_cluster_auto(_cluster, dist_mat):
+	'''
+	Splits a cluster using Logan's OPTICS
+		Returns a list of resulting clusters (perhaps just the original)
+	'''
+	min_size = max(30, len(_cluster.members) / 10)
+	reachabilities = selector.OPTICS(dist_mat, min_size)
+	indices = selector.separateClusters(reachabilities, min_size)
+
+	# comes back as selector.dataPoint classes
+	indices = map(lambda l: map(lambda dp: dp._id, l), indices)
+	clusters = form_clusters_alt(_cluster.members, indices)
+
+	return clusters
+
 def kumar_cluster(data_matrix, instances, num_clusters):
 	'''
 	data_matrix is a numpy matrix with one row for each instance's features
@@ -626,6 +641,12 @@ def print_summary(clusters, label, k, size_subset, num_seeds, mpts):
 	num_clusters = len(clusters)
 
 	print "%s\t%d\t%d\t%d\t%d\t%d\t%.4f\t%.4f" % (label, k, num_clusters, size_subset, num_seeds, mpts, acc, v)
+
+def print_summary2(clusters, label, k, size_subset, num_seeds, mpts, num_types):
+	acc, v = get_acc_v_measure(clusters)
+	num_clusters = len(clusters)
+
+	print "%s\t%d\t%d\t%d\t%d\t%d\t%.4f\t%.4f\t%d" % (label, k, num_clusters, size_subset, num_seeds, mpts, acc, v, num_types)
 	
 def run_par(docs, Ks, subsets, seeds, min_pts, init_only=False):
 	'''
@@ -679,6 +700,7 @@ def run_par(docs, Ks, subsets, seeds, min_pts, init_only=False):
 								training_labels = np.zeros(size_subset, dtype=np.int16)
 								cluster_ids = map(lambda _cluster: map(lambda _doc: _doc._id, _cluster.members), sclusters)
 								for x, _doc in enumerate(subset):
+									print "Training Label for doc:", x
 									for y, ids in enumerate(cluster_ids):
 										if _doc._id in ids:
 											training_labels[x] = y
@@ -805,3 +827,244 @@ def run(docs, Ks, subsets, seeds, min_pts, init_only=False):
 				print traceback.print_exc()	
 
 					
+def run_no_split(docs, Ks, subsets, seeds):
+	'''
+	Runs all specified combinations of parameters and logs the output.
+	This is the serial version that performs no splitting.
+	'''
+	random.shuffle(docs)
+	largest_subset_size = subsets[-1]
+	largest_num_seeds = seeds[-1]
+
+	# this ties together all of the experiments
+	largest_subset = docs[:largest_subset_size]
+	all_seeds = random.sample(largest_subset, largest_num_seeds)
+	largest_feature_mat, offsets = extract_features(largest_subset, all_seeds)
+
+	for size_subset in subsets:
+		subset = docs[:size_subset]
+		for num_seeds in seeds:
+			try:
+				end_col = offsets[num_seeds]
+				feature_mat = largest_feature_mat[:size_subset,:end_col]
+
+				random_matrix = compute_random_matrix(feature_mat)
+				rf = train_random_forest(feature_mat, random_matrix)
+				sim_matrix = compute_sim_mat(feature_mat, rf)
+
+				for k in Ks:
+					try:
+						assignments = spectral_cluster(sim_matrix, k)
+						initial_clusters = form_clusters(subset, assignments)
+
+						print "%s\n%s\n%s" % ("*" * 30, "Initial Clusters:", "*" * 30)
+						print_cluster_analysis(initial_clusters)
+						print_summary(initial_clusters, "init_no_split", k, size_subset, num_seeds, -1)
+
+						set_cluster_centers(initial_clusters)
+								
+						# get the features for final classification
+						prototypes = map(lambda _cluster: _cluster.center, initial_clusters)
+						features = extract_features(docs, prototypes)[0]
+						training_labels = np.zeros(size_subset, dtype=np.int16)
+						for x, _doc in enumerate(subset):
+							for y,  _cluster in enumerate(initial_clusters):
+								if _doc in _cluster.members:
+									training_labels[x] = y
+									break
+						training_features = features[:size_subset,:]
+
+						# final rf clustering
+						rf = sklearn.ensemble.RandomForestClassifier(n_estimators=NUM_TREES, bootstrap=False, n_jobs=THREADS)
+						rf.fit(training_features, training_labels)
+						assignments = rf.predict(features)
+						final_rf_clusters = form_clusters(docs, assignments)
+
+						# final logistic
+						lr = sklearn.linear_model.LogisticRegression(penalty='l1')
+						lr.fit(training_features, training_labels)
+						assignments = lr.predict(features)
+						final_lr_clusters = form_clusters(docs, assignments)
+
+						print "%s\n%s: %d\n%s" % ("*" * 30, "Final RF Clusters", -1, "*" * 30)
+						print_cluster_analysis(final_rf_clusters)
+						print "%s\n%s: %d\n%s" % ("*" * 30, "Final LR Clusters", -1, "*" * 30)
+						print_cluster_analysis(final_lr_clusters)
+						print_summary(final_rf_clusters, "fin_rf_no_split", k, size_subset, num_seeds, -1)
+						print_summary(final_lr_clusters, "fin_lr_no_split", k, size_subset, num_seeds, -1)
+					except:
+						print "Error occured k", (k, size_subset, num_seeds)
+						print traceback.print_exc()	
+			except:
+				print "Error occured num_seeds", ('?', size_subset, num_seeds)
+				print traceback.print_exc()	
+
+					
+def run_auto_minpts(docs, Ks, subsets, seeds):
+	'''
+	Runs all specified combinations of parameters and logs the output.
+	This is the serial version.
+	'''
+	random.shuffle(docs)
+	largest_subset_size = subsets[-1]
+	largest_num_seeds = seeds[-1]
+
+	# this ties together all of the experiments
+	largest_subset = docs[:largest_subset_size]
+	all_seeds = random.sample(largest_subset, largest_num_seeds)
+	largest_feature_mat, offsets = extract_features(largest_subset, all_seeds)
+
+	for size_subset in subsets:
+		subset = docs[:size_subset]
+		for num_seeds in seeds:
+			try:
+				end_col = offsets[num_seeds]
+				feature_mat = largest_feature_mat[:size_subset,:end_col]
+
+				random_matrix = compute_random_matrix(feature_mat)
+				rf = train_random_forest(feature_mat, random_matrix)
+				sim_matrix = compute_sim_mat(feature_mat, rf)
+
+				for k in Ks:
+					try:
+						assignments = spectral_cluster(sim_matrix, k)
+						initial_clusters = form_clusters(subset, assignments)
+
+						print "%s\n%s\n%s" % ("*" * 30, "Initial Clusters:", "*" * 30)
+						print_cluster_analysis(initial_clusters)
+						print_summary(initial_clusters, "init", k, size_subset, num_seeds, -2)
+
+						set_cluster_centers(initial_clusters)
+						dist_mats = cluster_dist_mats(initial_clusters)
+						sclusters = utils.flatten(map(lambda _cluster, dist_mat: split_cluster_auto(_cluster, dist_mat), initial_clusters, dist_mats))
+						print "%s\n%s: %d\n%s" % ("*" * 30, "Split Clusters", -2, "*" * 30)
+						print_cluster_analysis(sclusters)
+						set_cluster_centers(sclusters)
+						
+						# get the features for final classification
+						prototypes = map(lambda _cluster: _cluster.center, sclusters)
+						features = extract_features(docs, prototypes)[0]
+						training_labels = np.zeros(size_subset, dtype=np.int16)
+						for x, _doc in enumerate(subset):
+							for y,  _cluster in enumerate(sclusters):
+								if _doc in _cluster.members:
+									training_labels[x] = y
+									break
+						training_features = features[:size_subset,:]
+
+						# final rf clustering
+						rf = sklearn.ensemble.RandomForestClassifier(n_estimators=NUM_TREES, bootstrap=False, n_jobs=THREADS)
+						rf.fit(training_features, training_labels)
+						assignments = rf.predict(features)
+						final_rf_clusters = form_clusters(docs, assignments)
+
+						#final logistic
+						lr = sklearn.linear_model.LogisticRegression(penalty='l1')
+						lr.fit(training_features, training_labels)
+						assignments = lr.predict(features)
+						final_lr_clusters = form_clusters(docs, assignments)
+
+						print "%s\n%s: %d\n%s" % ("*" * 30, "Final RF Clusters", -2, "*" * 30)
+						print_cluster_analysis(final_rf_clusters)
+						print "%s\n%s: %d\n%s" % ("*" * 30, "Final LR Clusters", -2, "*" * 30)
+						print_cluster_analysis(final_lr_clusters)
+						print_summary(sclusters, "split", k, size_subset, num_seeds, -2)
+						print_summary(final_rf_clusters, "fin_rf", k, size_subset, num_seeds, -2)
+						print_summary(final_lr_clusters, "fin_lr", k, size_subset, num_seeds, -2)
+					except:
+						print "Error occured k", (k, size_subset, num_seeds)
+						print traceback.print_exc()	
+			except:
+				print "Error occured num_seeds", ('?', size_subset, num_seeds)
+				print traceback.print_exc()	
+
+def run_type(docs, Ks, subsets, seeds, types):
+	print types
+	random.shuffle(docs)
+
+	for size_subset in subsets:
+		subset = docs[:size_subset]
+		sorted_docs = list()
+		for _doc in docs:
+			for sublist in sorted_docs:
+				if sublist[0].label == _doc.label:
+					sublist.append(_doc)
+					break
+			else:
+				sorted_docs.append([_doc])
+		sorted_docs.sort(key=len, reverse=True)
+		for sublist in sorted_docs:
+			random.shuffle(sublist)
+
+		print "Num sublists:", len(sorted_docs)
+		for num_seeds in seeds:
+			for num_types in types:
+				try:
+					# choose the seeds
+					lseeds = list()
+					idx = 0
+					while len(lseeds) < num_seeds:
+						type_idx = idx % num_types
+						sublist = sorted_docs[type_idx]
+						sublist_idx = idx / num_types
+						if len(sublist) > sublist_idx:
+							lseeds.append(sublist[sublist_idx])
+						idx += 1
+
+					feature_mat = extract_features(subset, lseeds)[0]
+					random_matrix = compute_random_matrix(feature_mat)
+					rf = train_random_forest(feature_mat, random_matrix)
+					sim_matrix = compute_sim_mat(feature_mat, rf)
+
+					for k in Ks:
+						try:
+							assignments = spectral_cluster(sim_matrix, k)
+							initial_clusters = form_clusters(subset, assignments)
+
+							print "%s\n%s\n%s" % ("*" * 30, "Initial Clusters:", "*" * 30)
+							print_cluster_analysis(initial_clusters)
+							print_summary2(initial_clusters, "init_type", k, size_subset, num_seeds, -2, num_types)
+
+							set_cluster_centers(initial_clusters)
+							dist_mats = cluster_dist_mats(initial_clusters)
+							sclusters = utils.flatten(map(lambda _cluster, dist_mat: split_cluster_auto(_cluster, dist_mat), initial_clusters, dist_mats))
+							print "%s\n%s: %d\n%s" % ("*" * 30, "Split Clusters", -2, "*" * 30)
+							print_cluster_analysis(sclusters)
+							set_cluster_centers(sclusters)
+							
+							# get the features for final classification
+							prototypes = map(lambda _cluster: _cluster.center, sclusters)
+							features = extract_features(docs, prototypes)[0]
+							training_labels = np.zeros(size_subset, dtype=np.int16)
+							for x, _doc in enumerate(subset):
+								for y,  _cluster in enumerate(sclusters):
+									if _doc in _cluster.members:
+										training_labels[x] = y
+										break
+							training_features = features[:size_subset,:]
+
+							# final rf clustering
+							rf = sklearn.ensemble.RandomForestClassifier(n_estimators=NUM_TREES, bootstrap=False, n_jobs=THREADS)
+							rf.fit(training_features, training_labels)
+							assignments = rf.predict(features)
+							final_rf_clusters = form_clusters(docs, assignments)
+
+							#final logistic
+							lr = sklearn.linear_model.LogisticRegression(penalty='l1')
+							lr.fit(training_features, training_labels)
+							assignments = lr.predict(features)
+							final_lr_clusters = form_clusters(docs, assignments)
+
+							print "%s\n%s: %d\n%s" % ("*" * 30, "Final RF Clusters", -2, "*" * 30)
+							print_cluster_analysis(final_rf_clusters)
+							print "%s\n%s: %d\n%s" % ("*" * 30, "Final LR Clusters", -2, "*" * 30)
+							print_cluster_analysis(final_lr_clusters)
+							print_summary2(sclusters, "split_type", k, size_subset, num_seeds, -2, num_types)
+							print_summary2(final_rf_clusters, "fin_rf_type", k, size_subset, num_seeds, -2, num_types)
+							print_summary2(final_lr_clusters, "fin_lr_type", k, size_subset, num_seeds, -2, num_types)
+						except:
+							print "Error occured k", (k, size_subset, num_seeds)
+							print traceback.print_exc()	
+				except:
+					print "Error occured num_seeds", ('?', size_subset, num_seeds)
+					print traceback.print_exc()	
