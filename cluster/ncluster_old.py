@@ -23,6 +23,53 @@ from constants import *
 class MockCenter:
 	pass
 
+def remove_duplicate_features(data_matrix, diff=0.01):
+	to_remove = list()
+	for col in xrange(data_matrix.shape[1]):
+		if col in to_remove:
+			continue
+		for col2 in xrange(col + 1, data_matrix.shape[1]):
+			if col2 in to_remove:
+				continue
+			dist = scipy.spatial.distance.cityblock(data_matrix[:,col], data_matrix[:,col2])  
+			norm_dist = dist / float(data_matrix.shape[0])
+			#print "%d, %d: %.3f, %.3f" % (col, col2, dist, norm_dist)
+			if norm_dist < diff:
+				to_remove.append(col2)
+	#print "Removing %d/%d features" % (len(to_remove), data_matrix.shape[1])
+	return np.delete(data_matrix, to_remove, axis=1)
+
+
+def compute_structured_random_matrix(data_matrix, stay_prob=0.5):
+	#print "Constructing Structured Random Training Set"
+
+	rand_shape = (int(data_matrix.shape[0] * SIZE_OF_RANDOM_DATA), data_matrix.shape[1])
+	rand_mat = np.zeros(rand_shape)
+
+	# these are the indices of the rows we sample from
+	row_choices = xrange(data_matrix.shape[0])
+
+	# column indices for both matrices
+	col_idxs = xrange(rand_mat.shape[1])
+	for row in xrange(rand_mat.shape[0]):
+
+		# pick a row idx from data_matrix
+		sampled_row = random.choice(row_choices)
+
+		# always fill in the columns in random order
+		random.shuffle(col_idxs)
+		for col in col_idxs:
+			
+			# fill in the value using the corresponding column of the sampled row
+			rand_mat[row, col] = data_matrix[sampled_row, col]
+
+			# retain the same sampled row for the next column with prob $stay_prob
+			if random.random() > stay_prob:
+				sampled_row = random.choice(row_choices)
+
+	#print "Done\n"
+	return rand_mat
+
 
 def compute_random_matrix(data_matrix):
 	#print "Constructing Random Training Set"
@@ -123,6 +170,13 @@ def set_cluster_centers(clusters):
 	for _cluster in clusters:
 		set_cluster_center(_cluster)
 
+# seems to make copies of all of the doc objects...
+def set_cluster_centers_par(clusters):
+	pool = multiprocessing.Pool(processes=THREADS)
+	clusters = filter(lambda c: len(c.members), clusters)
+	centers = pool.map(set_cluster_center, clusters, chunksize=1)
+	for center, _cluster in zip(centers, clusters):
+		_cluster.center = center
 
 # Note that there are many ways we could do this
 def cluster_dist_mat(_cluster, feature_type='match', dist_metric='euclidean'):
@@ -226,6 +280,27 @@ def split_clusters_par(clusters, dist_mats, min_size):
 	split_clusters = pool.map(_split_clusters_par_helper, args, chunksize=1)
 	return utils.flatten(split_clusters)
 
+def split_cluster_old(_cluster, min_size, feature_type='match', dist_metric='euclidean'):
+	'''
+	Splits a cluster using Logan's OPTICS
+		Returns a list of resulting clusters (perhaps just the original)
+	'''
+	if not _cluster.center:
+		set_cluster_center(_cluster)
+
+	dist_mat = cluster_dist_mat(_cluster, feature_type, dist_metric)
+	reachabilities = selector.OPTICS(dist_mat, min_size)
+	indices = selector.separateClusters(reachabilities, min_size)
+
+	# comes back as selector.dataPoint classes
+	indices = map(lambda l: map(lambda dp: dp._id, l), indices)
+	#if len(indices) == 1:
+	#	return [_cluster]
+	#print indices
+	clusters = form_clusters_alt(_cluster.members, indices)
+
+	return clusters
+	
 def split_cluster(_cluster, dist_mat, min_size):
 	'''
 	Splits a cluster using Logan's OPTICS
@@ -441,6 +516,18 @@ def get_acc_v_measure(clusters):
 	return acc, v
 	
 
+def test_features(clusters, min_size):
+	#print "Original Clusters"
+	#print_cluster_analysis(clusters)
+	set_cluster_centers(clusters)
+	for dist in ['rf', 'euclidean']:
+		for _type in ['match', 'sim']:
+			sclusters = split_clusters(clusters, min_size, _type, dist)
+			acc, v = get_acc_v_measure(sclusters)
+			print "%s_%s\t%d\t%.lf\t%.3f" % (_type, dist, len(sclusters), acc, v)
+			#print_cluster_analysis(sclusters)
+
+
 def do_cluster(docs, num_seeds, num_clusters):
 	seeds = random.sample(docs, num_seeds)
 	features = extract_features(docs, seeds)[0]
@@ -470,13 +557,86 @@ def test_splitting(docs):
 					map(lambda x: "%.3f" % x, [o_acc, acc, d_acc, o_v, v, d_v]))
 
 
+def overall_par(docs, num_subset, num_seeds, num_initial_cluster_range, min_pts):
+
+	# do the initial clustering
+	random.shuffle(docs)
+	subset = docs[:num_subset]
+	num_subset = len(subset)  # just in case num_subset > len(docs)
+
+	# create the feature vectors
+	seeds = random.sample(subset, num_seeds)
+	features = extract_features_par(subset, seeds)[0]
+
+	# kumar similarity matrix
+	random_matrix = compute_random_matrix(features)
+	rf = train_random_forest(features, random_matrix)
+	sim_matrix = compute_sim_mat(features, rf)
+
+	for num_initial_clusters in num_initial_cluster_range:
+		try:
+			assignments = spectral_cluster(sim_matrix, num_initial_clusters)
+			initial_clusters = form_clusters(subset, assignments)
+
+			print "*" * 30
+			print "Initial Clusters:"
+			print "*" * 30
+			print_cluster_analysis(initial_clusters)
+
+			set_cluster_centers_par(initial_clusters)
+
+			#sclusters = split_clusters(initial_clusters, min_pts, 'match', 'rf')
+			sclusters = split_clusters_par(initial_clusters, min_pts, 'match', 'rf')
+
+			print "*" * 30
+			print "Split Clusters:"
+			print "*" * 30
+			print_cluster_analysis(sclusters)
+
+			#set_cluster_centers(sclusters)
+			set_cluster_centers_par(sclusters)
+			
+			# get the features for final classification
+			centers = map(lambda _cluster: _cluster.center, sclusters)
+			features = extract_features_par(docs, centers)[0]
+			training_labels = np.zeros(num_subset, dtype=np.int16)
+			cluster_ids = map(lambda _cluster: map(lambda _doc: _doc._id, _cluster.members), sclusters)
+			for x, _doc in enumerate(subset):
+				for y, ids in enumerate(cluster_ids):
+					if _doc._id in ids:
+						training_labels[x] = y
+						break
+				else:
+					print "training_label not found"
+			training_features = features[:num_subset,:]
+
+			# train classifier
+			rf = sklearn.ensemble.RandomForestClassifier(n_estimators=NUM_TREES, bootstrap=False, 
+														n_jobs=THREADS)
+			rf.fit(training_features, training_labels)
+
+			# do classification
+			assignments = rf.predict(features)
+
+			# create clusters
+			final_clusters = form_clusters(docs, assignments)
+						
+			# metrics
+			print "*" * 30
+			print "Final Clusters:"
+			print "*" * 30
+			print_cluster_analysis(final_clusters, True)
+
+			# summary compare
+			for name, clusters in {"init": initial_clusters, "split": sclusters, "final": final_clusters}.iteritems():
+				acc, v = get_acc_v_measure(clusters)
+				k = len(clusters)
+				init_k = num_initial_clusters
+				print "%s\t%d\t%d\t%d\t%.4f\t%.4f" % (name, num_subset, k, init_k, acc, v)
+		except Exception:
+			print traceback.print_exc()	
+
 def print_summary(clusters, label, k, size_subset, num_seeds, mpts):
-	acc, v = get_acc_v_measure(clusters)
-	num_clusters = len(clusters)
-
-	print "%s\t%d\t%d\t%d\t%d\t%d\t%.4f\t%.4f" % (label, k, num_clusters, size_subset, num_seeds, mpts, acc, v)
-
-def print_summary3(clusters, label, k, size_subset, num_seeds, args):
 	acc, v = get_acc_v_measure(clusters)
 	num_clusters = len(clusters)
 
@@ -488,6 +648,96 @@ def print_summary2(clusters, label, k, size_subset, num_seeds, mpts, num_types):
 
 	print "%s\t%d\t%d\t%d\t%d\t%d\t%.4f\t%.4f\t%d" % (label, k, num_clusters, size_subset, num_seeds, mpts, acc, v, num_types)
 	
+def run_par(docs, Ks, subsets, seeds, min_pts, init_only=False):
+	'''
+	Runs all specified combinations of parameters and logs the output.
+	This is the serial version.
+	'''
+	random.shuffle(docs)
+	largest_subset_size = subsets[-1]
+	largest_num_seeds = seeds[-1]
+
+	# this ties together all of the experiments
+	largest_subset = docs[:largest_subset_size]
+	all_seeds = random.sample(largest_subset, largest_num_seeds)
+	largest_feature_mat, offsets = extract_features_par(largest_subset, all_seeds)
+
+	for size_subset in subsets:
+		subset = docs[:size_subset]
+		for num_seeds in seeds:
+			try:
+				end_col = offsets[num_seeds]
+				feature_mat = largest_feature_mat[:size_subset,:end_col]
+
+				random_matrix = compute_random_matrix(feature_mat)
+				rf = train_random_forest(feature_mat, random_matrix)
+				sim_matrix = compute_sim_mat(feature_mat, rf)
+
+				for k in Ks:
+					try:
+						assignments = spectral_cluster(sim_matrix, k)
+						initial_clusters = form_clusters(subset, assignments)
+
+						print "%s\n%s\n%s" % ("*" * 30, "Initial Clusters:", "*" * 30)
+						print_cluster_analysis(initial_clusters)
+						print_summary(initial_clusters, "init", k, size_subset, num_seeds, 0)
+
+						if init_only:
+							continue
+
+						set_cluster_centers_par(initial_clusters)
+						dist_mats = cluster_dist_mats_par(initial_clusters)
+						for mpts in min_pts:
+							try:
+								sclusters = split_clusters_par(initial_clusters, dist_mats, mpts)
+								print "%s\n%s: %d\n%s" % ("*" * 30, "Split Clusters", mpts, "*" * 30)
+								print_cluster_analysis(sclusters)
+								set_cluster_centers_par(sclusters)
+								
+								# get the features for final classification
+								prototypes = map(lambda _cluster: _cluster.center, sclusters)
+								features = extract_features_par(docs, prototypes)[0]
+								training_labels = np.zeros(size_subset, dtype=np.int16)
+								cluster_ids = map(lambda _cluster: map(lambda _doc: _doc._id, _cluster.members), sclusters)
+								for x, _doc in enumerate(subset):
+									print "Training Label for doc:", x
+									for y, ids in enumerate(cluster_ids):
+										if _doc._id in ids:
+											training_labels[x] = y
+											break
+									else:
+										print "training_label not found"
+								training_features = features[:size_subset,:]
+
+								# final rf clustering
+								rf = sklearn.ensemble.RandomForestClassifier(n_estimators=NUM_TREES, bootstrap=False, n_jobs=THREADS)
+								rf.fit(training_features, training_labels)
+								assignments = rf.predict(features)
+								final_rf_clusters = form_clusters(docs, assignments)
+
+								#final logistic
+								lr = sklearn.linear_model.LogisticRegression(penalty='l1')
+								lr.fit(training_features, training_labels)
+								assignments = lr.predict(features)
+								final_lr_clusters = form_clusters(docs, assignments)
+
+								print "%s\n%s: %d\n%s" % ("*" * 30, "Final RF Clusters", mpts, "*" * 30)
+								print_cluster_analysis(final_rf_clusters)
+								print "%s\n%s: %d\n%s" % ("*" * 30, "Final LR Clusters", mpts, "*" * 30)
+								print_cluster_analysis(final_lr_clusters)
+								print_summary(sclusters, "split", k, size_subset, num_seeds, mpts)
+								print_summary(final_rf_clusters, "fin_rf", k, size_subset, num_seeds, mpts)
+								print_summary(final_lr_clusters, "fin_lr", k, size_subset, num_seeds, mpts)
+							except:
+								print "Error occured min_pts", (k, size_subset, num_seeds, mpts)
+								print traceback.print_exc()	
+					except:
+						print "Error occured k", (k, size_subset, num_seeds, '?')
+						print traceback.print_exc()	
+			except:
+				print "Error occured num_seeds", ('?', size_subset, num_seeds, '?')
+				print traceback.print_exc()	
+
 					
 
 def run(docs, Ks, subsets, seeds, min_pts, init_only=False):
@@ -818,122 +1068,3 @@ def run_type(docs, Ks, subsets, seeds, types):
 				except:
 					print "Error occured num_seeds", ('?', size_subset, num_seeds)
 					print traceback.print_exc()	
-
-def sort_by_type(docs):
-	docs_by_type = list()
-	for _doc in docs:
-		for sublist in docs_by_type:
-			if sublist[0].label == _doc.label:
-				sublist.append(_doc)
-				break
-		else:
-			docs_by_type.append([_doc])
-	docs_by_type.sort(key=len, reverse=True)
-	return docs_by_type
-	
-def get_random_exemplars(docs, num_exemplars):
-	largest_num_exemplars = max(num_exemplars)
-	all_exemplars = docs[:largest_num_exemplars]
-	exemplar_index = { (num_e, 0): range(num_e) for num_e in num_exemplars }
-	return all_exemplars, exemplar_index
-
-
-def get_oracle_exemplars(docs, num_exemplars, num_types):
-	all_exemplars = list()
-	exemplar_index = dict()
-
-	docs_by_type = sort_by_type(docs)
-	num_total_types = len(docs_by_type)
-	for num_e in num_exemplars:
-		for num_t in num_types:
-			cur_exemplars = list()
-			num_each = num_e / num_t
-			num_extra = num_e % num_t
-
-			# grab exemplars for single execution of algorithm
-			for type_idx in num_t:
-				num_from_type = num_each
-				if (type_idx < num_extra):
-					num_from_type += 1
-				cur_exemplars += docs_by_type[type_idx][:num_from_type]
-
-			assert(len(cur_exemplars) == num_e)
-
-			# add unique cur_exemplars to global list of exemplars
-			for exemplar in cur_exemplars:
-				if exemplar not in all_exemplars:
-					all_exemplars.append(exemplar)
-
-			# create index into global list for cur_exemplars
-			cur_exemplar_index = list()
-			for exemplar in cur_exemplars:
-				idx = all_exemplars.index(exemplar)
-				assert(idx >= 0)
-				cur_exemplar_index.append(idx)
-			exemplar_index[(num_e, num_t)] = cur_exemplar_index
-
-	return all_examplars, exemplar_index
-	
-	
-
-def get_exemplars(docs, num_exemplars, num_types):
-	if not num_types:
-		return get_random_exemplars(docs, num_exemplars)
-	else:
-		return get_oracle_exemplars(docs, num_exemplars, num_types)
-
-def calculate_feature_col_indices(index, offsets):
-	cols = list()
-	for idx in index:
-		start = offsets[idx]
-		stop = offsets[idx+1]
-		cols += range(start,stop)
-	cols.sort()
-	return cols
-
-
-def confirm(docs, Ks, subset_sizes, num_exemplars, num_types, args):
-	largest_subset_size = max(subset_sizes)
-	largest_subset = docs[:largest_subset_size]
-
-	# all_exemplars is a list of unique exemplars used across all specified parameter settings
-	# of num_exemplars and num_types.  This allows feature extraction to be done once to save
-	# redundant computation between experiments.
-	# exemplar_index is a dictionary whose entry (num_e, num_t) is a list of indices into
-	# all_exemplars.  When random exemplars are used, $num_t = 0 as a sentinel value
-	all_exemplars, exemplar_index = get_exemplars(largest_subset, num_exemplars, num_types)
-
-	# precompute features for all docs in a subset with all exemplars used
-	all_feature_mat, exemplar_offsets = extract_features(largest_subset, all_exemplars)
-
-	for num_e, num_t in exemplar_index.keys():
-		
-		# select the features corresponding to the correct exemplars for the current
-		# parameter setting
-		cur_exemplar_index = exemplar_index[(num_e, num_t)]
-		cols = calculate_feature_col_indices(cur_exemplar_index, exemplar_offsets)
-		feature_mat_cols = all_feature_mat[:,cols]
-		for subset_size in subset_sizes:
-
-			# select the correct subset of the data for initial clustering
-			feature_mat = feature_mat_cols[:subset_size,:]
-
-			# precompute similarity matrix for subset.  To be used for every K
-			random_matrix = compute_random_matrix(feature_mat)
-			rf = train_random_forest(feature_mat, random_matrix)
-			sim_matrix = compute_sim_mat(feature_mat, rf)
-
-			for K in Ks:
-				# Initial clustering
-				assignments = spectral_cluster(sim_matrix, k)
-				initial_clusters = form_clusters(subset, assignments)
-
-				# Analyze Initial clusters
-				print "%s\n%s\n%s" % ("*" * 30, "Initial Clusters:", "*" * 30)
-				print_cluster_analysis(initial_clusters)
-				print_summary3(initial_clusters, "init", K, subset_size, num_e, num_t, args)
-				
-			
-
-
-

@@ -563,37 +563,6 @@ def type():
 
 	ncluster.run_type(docs, Ks, subsets, seeds, types)
 	
-def run_old():
-	try:
-		# sys.argv[3] is the number of threads
-		Ks = map(int, sys.argv[4].split(","))
-		subsets = map(int, sys.argv[5].split(","))
-		seeds = map(int, sys.argv[6].split(","))
-		min_pts = map(int, sys.argv[7].split(","))
-		docs = doc.get_docs_nested(get_data_dir(sys.argv[2]))
-		
-		try:
-			init_only = int(sys.argv[8])
-		except:
-			init_only = 0
-	except:
-		print "python driver.py run dataset #threads Ks subsets seeds min_pts [init_only]"
-		return
-
-	Ks.sort()
-	subsets.sort()
-	seeds.sort()
-	min_pts.sort()
-	filtered = filter(lambda x: x < len(docs), subsets)
-	if len(filtered) < len(subsets):
-		filtered.append(len(docs))
-		subsets = filtered
-
-	if THREADS > 1:
-		ncluster.run_par(docs, Ks, subsets, seeds, min_pts, init_only)
-	else:
-		ncluster.run(docs, Ks, subsets, seeds, min_pts, init_only)
-	
 
 def main(arg):
 	if arg == "cluster":
