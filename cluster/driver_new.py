@@ -56,10 +56,9 @@ def parse_args():
 	parser.add_argument('--no-refine', default=False, action='store_true',
 			help='Skip the cluster refinement step')
 
-	group = parser.add_mutually_exclusive_group(required=False)
-	group.add_argument('--text-only', type=str, default='',
+	parser.add_argument('--text-only', default=False, action='store_true',
 			help='Only use Text page elements')
-	group.add_argument('--rule-only', type=str, default='',
+	parser.add_argument('--rule-only', default=False, action='store_true',
 			help='Only use Rule Line page elements')
 
 	group = parser.add_argument_group()

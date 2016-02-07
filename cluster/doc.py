@@ -293,12 +293,19 @@ class Document:
 		for feature_set1, feature_set2 in zip(self.feature_sets, other.feature_sets):
 			feature_set1.push_away(feature_set2)
 
-	def match_vector(self, other):
+	def match_vector(self, other, feature_type):
 		self._load_check()
 		other._load_check()
 		vectors = list()
-		for feature_set1, feature_set2 in zip(self.feature_sets, other.feature_sets):
-			vectors.append(feature_set1.match_vector(feature_set2))
+		if feature_type == 'all':
+			for feature_set1, feature_set2 in zip(self.feature_sets, other.feature_sets):
+				vectors.append(feature_set1.match_vector(feature_set2))
+		elif feature_type == 'text':
+			vectors.append(self.feature_name_map['text'].match_vector(other.feature_name_map['text']))
+		elif feature_type == 'rule':
+			vectors.append(self.feature_name_map['horz'].match_vector(other.feature_name_map['horz']))
+			vectors.append(self.feature_name_map['vert'].match_vector(other.feature_name_map['vert']))
+			
 		return utils.flatten(vectors)
 
 	def draw(self, colortext=False):
