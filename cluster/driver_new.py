@@ -31,6 +31,8 @@ def get_data_dir(descrip):
 		return "../data/paper/PADeaths"
 	if descrip.startswith("padeaths_balanced"):
 		return "../data/paper/PADeaths-Balanced"
+	if descrip.startswith("test"):
+		return "../data/subsets/wales_20"
 
 def parse_args():
 	parser = argparse.ArgumentParser(description='CONFIRM')
@@ -47,7 +49,10 @@ def parse_args():
 	group.add_argument('-t', '--num-types', type=str, default='2',
 			help='comma separated list of number of oracle types for exemplar selection')
 	group.add_argument('-r', '--rand-exemplars', default=False, action='store_true',
-			help='comma separated list of number of oracle types for exemplar selection')
+			help='use randomly sampled exemplars')
+
+	parser.add_argument('--exemplar-file', type=str, default='',
+			help='file containing possible exemplars one per line in order')
 
 	parser.add_argument('--euclidean', default=False, action='store_true',
 			help='Use Euclidean distance between feature vectors for Spectral Clustering')
@@ -60,12 +65,15 @@ def parse_args():
 			help='Only use Text page elements')
 	parser.add_argument('--rule-only', default=False, action='store_true',
 			help='Only use Rule Line page elements')
+	parser.add_argument('--no-all', default=False, action='store_true',
+			help='Do not run with all-features')
 
 	group = parser.add_argument_group()
 	group.add_argument('--no-auto-minpts', default=False, action='store_true',
 			help='Do not set min_pts adaptively for OPTICS cluster refinement')
 	group.add_argument('--minpts', type=int, default=30,
-			help='min_pts for OPTICS cluster refinement.  Min value unless --no-auto-minpts is set.')
+			help='min_pts for OPTICS cluster refinement.  If auto-minpts is enabled, ' +
+				'this is a lower-bound on the value used')
 	group.add_argument('--minpts-perc', type=float, default=0.1,
 			help='For adaptive min_pts, multiplier for the cluster size')
 
@@ -93,7 +101,7 @@ def process_args(args):
 	smallest_subset = min(subset_sizes)
 
 	Ks = filter(lambda x: x >= 2 and x <= smallest_subset, Ks)
-	num_exemplars = filter(lambda x: x >= 2 and x <= smallest_subset, num_exemplars)
+	num_exemplars = filter(lambda x: x >= 1 and x <= smallest_subset, num_exemplars)
 
 	return docs, Ks, subset_sizes, num_exemplars, num_types
 
